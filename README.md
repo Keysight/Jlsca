@@ -67,7 +67,8 @@ In short this is what happens when you run the above command:
 
 `Sca.go()` sets up a "params" object with all the attack parameters, and then calls function `Sca.sca()` with that parameter object and a trace set. Function Sca.getParameters() called by Sca.go() looks at the filename of trace set and automatically configures a parameter object of the correct type and default parameter values if it can. The used parameters will be printed on the console. You can tweak and change most behavior by changing the parameters and not the underlying code. I recommend you copy go() to myahhack() and tweak it as described in the next section. There are some examples in sca.jl, see the Examples section.
 
-# Attack parameters
+# Hacking stuff
+## Attack parameters
 
 There are three supported attacks: AesSboxAttack(), AesMCAttack() and DesSboxAttack(), defined in attackaes-core.jl and attackdes-core.jl. For example, the following creates a forward AES128 attack attack on all 8 bits of the intermediate state with CPA:
 
@@ -116,7 +117,7 @@ params.analysis.basisModel = basisModelSingleBits
 ```
 Big fat disclaimer: currently LRA only supports only a 9 bit model, even if you do a AES MC attack! I need to understand some more about this attack, since choosing a 33 bit basis model results in non-invertible matrices (and a crash).
 
-# Passing attack phase data
+## Passing attack phase data
 
 To attack inner rounds you need to use key material you recovered earlier. Jlsca does all this automagically by default. For example, AES192 consists of two separate attacks. If you want to attack AES192 you can tell Jlsca to do both phases sequentially without user interaction by setting the attack parameter:
 ```
@@ -134,7 +135,7 @@ params.phases = [PHASE2]
 params.phaseInput = Nullable(hex2bytes("00112233445566778899aabbccddeeff")))
 ```
 
-# Passing attack phase data from Inspector
+## Passing attack phase data from Inspector
 
 If you run the Jlsca Inspector module, you'll have to paste this data (only the hex string) into a GUI text field yourself since I'm to lazy to parse the Jlsca output and feed it back into the module.
 
@@ -174,7 +175,7 @@ addDataPass(trs, x -> x[1:16])
 ```
 Once you push a sample or data pass on the stack of passes, you can pop the last one you added by calling popSamplePass() or popDataPass().
 
-# Conditional averaging and potential other post processors
+## Conditional averaging and potential other post processors
 
 Conditional averaging [1] is implemented as a trace post processor that is configured in the "trs" object as follows:
 ```
@@ -184,12 +185,12 @@ For AES, there are max 256 averages per key byte offset. For DES SBOX out there 
 
 The data passes that are configured with addDataPass determine the data on which conditional averaging operates: for AES this is simply the input or the output. For DES it is not since the input or output data gets bit picked from all over the place before it is recombined with a key, and therefore we cannot simply average on individual input bytes. See function round1 in attackdes-core.jl, for example, to see how data is preprocessed before being fed into the conditional averager.
 
-# Examples
+## Examples
 
 Function `wb()` in `sca.jl` implements the [leakage models](https://eprint.iacr.org/2013/794.pdf) to attack 	Dual AES implementations
 Function `hammer()` in `sca.jl` can be used as a starting point for running many CPAs on many memory dumps extracted from whiteboxes.
 
-# Test runs
+## Test runs
 
 If you hack shit and you want to verify stuff is still working, you can run all the files that end in "tests.jl". These files take no arguments and throw an exception if a test fails.
 
