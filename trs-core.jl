@@ -139,10 +139,13 @@ function readAllTraces(trs::Trace, traceOffset=start(trs), traceLength=length(tr
     try
       (data, sample) = trs[idx]
     catch e
-      @printf("Ex: %s\n", string(e))
-      @printf("EOF after reading %d traces ..\n", readCount)
-      eof = true
-      break
+      if isa(e, EOFError)
+        @printf("EOF after reading %d traces ..\n", readCount)
+        eof = true
+        break
+      else
+        throw(e)
+      end
     end
 
     # next trace if a pass ditched this trace

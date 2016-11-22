@@ -247,3 +247,63 @@ function writeToTraces(filename, data::Matrix, samples::Matrix)
   close(fd)
 
 end
+
+# writes a Traces object to an Inspector traceset file
+function writeToTraces(filename, trs::Trace, start::Int=1, endd::Int=(length(trs)-start+1))
+  (data,samples) = trs[1]
+  dataSpace = length(data)
+  nrSamples = length(samples)
+  numberOfTraces = length(trs)
+
+  sampleCoding = Union
+  if eltype(samples) == UInt8
+    sampleCoding = CodingByte
+  elseif eltype(samples) == UInt16 || eltype(samples) == Int16
+    sampleCoding = CodingShort
+  elseif eltype(samples) == UInt32
+    sampleCoding = CodingInt
+  elseif eltype(samples) == Float32
+    sampleCoding = CodingFloat
+  else
+    @printf("[x] Not suppoerpeopsodpsofd sample type %s\n", string(eltype(samples)))
+    return
+  end
+
+  fd = open(filename, "w")
+
+  write(fd, convert(UInt8, TitleSpace))
+  write(fd, convert(UInt8, TitleSpaceLength))
+  write(fd, htol(convert(UInt8, 0)))
+
+  write(fd, convert(UInt8, SampleCoding))
+  write(fd, convert(UInt8, SampleCodingLength))
+  write(fd, htol(convert(UInt8, sampleCoding)))
+
+  write(fd, convert(UInt8, DataSpace))
+  write(fd, convert(UInt8, DataSpaceLength))
+  write(fd, htol(convert(UInt16, dataSpace)))
+
+  write(fd, convert(UInt8, NumberOfSamplesPerTrace))
+  write(fd, convert(UInt8, NumberOfSamplesPerTraceLength))
+  write(fd, htol(convert(UInt32, nrSamples)))
+
+  write(fd, convert(UInt8, NumberOfTraces))
+  write(fd, convert(UInt8, NumberOfTracesLength))
+  write(fd, htol(convert(UInt32, endd-start+1)))
+
+  write(fd, convert(UInt8, TraceBlock))
+  write(fd, convert(UInt8, 0))
+
+  for i in start:endd
+    write(fd, trs[i][1])
+
+    if eltype(samples) == UInt8
+      write(fd, trs[i][2])
+    else
+      write(fd, htol(reinterpret(UInt8, trs[i][2])))
+    end
+  end
+
+  close(fd)
+
+end

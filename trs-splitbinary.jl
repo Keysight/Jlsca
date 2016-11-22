@@ -4,12 +4,12 @@
 
 export SplitBinary,readTrace,parseSamplesFilename
 
-# split binary has the data and samples in different files, similar to how Daredevil reads its data. Since there is not metadata in these files, the meta data is encoded in and read from the file names.
+# split binary has the data and samples in 2 different files, similar to how Daredevil reads its data and samples. Since there is not metadata in these files, the meta data is encoded in and read from the file names.
 type SplitBinary <: Trace
-  numberOfTraces::Nullable{Int}
-  dataSpace
-  sampleType
-  numberOfSamplesPerTrace
+  numberOfTraces::Int
+  dataSpace::Int
+  sampleType::Type
+  numberOfSamplesPerTrace::Int
   samplesFileDescriptor
   dataFileDescriptor
   passes
@@ -21,28 +21,65 @@ type SplitBinary <: Trace
   tracesReturned
   prevIdx
 
-  function SplitBinary(dataFname, samplesFn)
-    (numberOfSamplesPerTrace, sampleType, numberOfTraces1) = parseSamplesFilename(samplesFn)
-    (dataSpace, dataType, numberOfTraces2) = parseDataFilename(dataFname)
-    if numberOfTraces1 != numberOfTraces2
-      throw(ErrorException())
+  function SplitBinary(dataFn, samplesFn)
+    (sampleSpace, sampleType, numberOfTracesSamples) = parseFilename(samplesFn)
+    (dataSpace, dataType, numberOfTracesData) = parseFilename(dataFn)
+    if isnull(sampleSpace) && isnull(numberOfTracesSamples) == nothing
+      throw(ErrorException(@sprintf("Need either number of samples or number of traces in file name %s", samplesFn)))
     end
-    SplitBinary(dataFname, dataSpace, samplesFn, numberOfSamplesPerTrace, sampleType, numberOfTraces1)
+    if isnull(dataSpace) && isnull(numberOfTracesData)
+      throw(ErrorException(@sprintf("Need either number of data samples or number of traces in file name %s", dataFn)))
+    end
+    samplesFileDescriptor = open(samplesFn, "r")
+    bytesInSamplesFile = stat(samplesFileDescriptor).size
+    close(samplesFileDescriptor)
+
+    dataFileDescriptor = open(dataFn, "r")
+    bytesInDataFile = stat(dataFileDescriptor).size
+    close(dataFileDescriptor)
+
+    if dataType != UInt8
+      throw(ErrorException("Only UInt8 support for data"))
+    end
+
+    if !isnull(sampleSpace) &&  !isnull(numberOfTracesSamples)
+      (bytesInSamplesFile >= get(sampleSpace) * sizeof(sampleType)) || throw(ErrorException("Sample file too small"))
+    end
+
+    if isnull(sampleSpace)
+      sampleSpace = Nullable(div(div(bytesInSamplesFile, get(numberOfTracesSamples)), sizeof(sampleType)))
+    end
+
+    if isnull(numberOfTracesSamples)
+      numberOfTracesSamples = Nullable(div(bytesInSamplesFile, get(sampleSpace) * sizeof(sampleType)))
+    end
+
+    if isnull(dataSpace)
+      dataSpace = Nullable(div(div(bytesInDataFile, get(numberOfTracesData)), sizeof(dataType)))
+    end
+
+    if isnull(numberOfTracesData)
+      numberOfTracesData = Nullable(div(div(bytesInDataFile, get(dataSpace)), sizeof(dataType)))
+    end
+
+    if get(numberOfTracesSamples) != get(numberOfTracesData)
+      throw(ErrorException(@sprintf("Different #traces in samples %d versus data %d", get(numberOfTracesSamples), get(numberOfTracesData))))
+    end
+
+    SplitBinary(dataFn, get(dataSpace), samplesFn::String, get(sampleSpace), sampleType, get(numberOfTracesSamples))
   end
 
-  function SplitBinary(dataFname, dataSpace, samplesFn, numberOfSamplesPerTrace, sampleType, nrtraces)
-    numberOfTraces = Nullable(nrtraces)
-    # sampleType = UInt8
+  function SplitBinary(dataFname::String, dataSpace::Int, samplesFn::String, numberOfSamplesPerTrace, sampleType, nrtraces)
     samplesFileDescriptor = open(samplesFn, "r")
     dataFileDescriptor = open(dataFname, "r")
-    new(numberOfTraces, dataSpace, sampleType, numberOfSamplesPerTrace, samplesFileDescriptor, dataFileDescriptor, [], [], Union, nothing, Union, Union, 0, 0)
+
+    new(nrtraces, dataSpace, sampleType, numberOfSamplesPerTrace, samplesFileDescriptor, dataFileDescriptor, [], [], Union, nothing, Union, Union, 0, 0)
   end
 end
 
-# don't support reading stuff from pipes, since then there is no file name and no meta data and it's a pain.
 pipe(trs::SplitBinary) = false
 
-length(trs::SplitBinary) = isnull(trs.numberOfTraces) ? typemax(Int) : get(trs.numberOfTraces)
+length(trs::SplitBinary) = trs.numberOfTraces
 
 # read a single trace from the data and samples files
 function readTrace(trs::SplitBinary, idx)
@@ -67,6 +104,7 @@ function readTrace(trs::SplitBinary, idx)
     trs.prevIdx = idx
 
     if length(data) == 0 && length(trace) == 0
+      # @printf("wuuuut!\n")
       throw(EOFError())
     end
 
@@ -77,39 +115,35 @@ function readTrace(trs::SplitBinary, idx)
       end
     end
 
-    # @printf("data: %s\n", bytes2hex(data))
-    # @printf("samples: %s\n", bytes2hex(trace))
     # @printf("length(data) %d, length(samples) %d\n", length(data), length(trace))
 
     return (data, trace)
 end
 
-# parses #samples, type of samples, #traces from a file name (for example samples_1792_b_500.bin)
-function parseSamplesFilename(fname::String)
-  m = match(r"_([0-9]+)_([bfsi]{1})_([0-9]+)", fname)
+# parses #samples, type of samples, #traces from a file name (for example samples_Float64_64s_55t.bin, samples_Float64_64s.bin, samples_Float64_32t.bin)
+function parseFilename(fname::String)
+  regex = r"(Int64|UInt64|Int32|UInt32|Float64|Float32|Int16|UInt16|Int8|UInt8)?(_[0-9]+s)?(_[0-9]+t)?\.bin"
+  m = match(regex, fname)
   if m != nothing
-    if m[2] == "f"
-      t = Float32
-    elseif m[2] == "b"
-      t = UInt8
-    elseif m[3] == "s"
-      t = UInt16
-    elseif m[4] == "i"
-      t = UInt32
+    myType_s,numberOfSamplesPerTrace_s,numberOfTraces_s = m.captures
+    if numberOfSamplesPerTrace_s != nothing
+      numberOfSamples = Nullable(parse(numberOfSamplesPerTrace_s[2:end-1]))
+    else
+      numberOfSamples = Nullable{Int}()
     end
-    return (parse(m[1]), t, parse(m[3]))
+    if numberOfTraces_s != nothing
+      numberOfTraces = Nullable(parse(numberOfTraces_s[2:end-1]))
+    else
+      numberOfTraces = Nullable{Int}()
+    end
+    if myType_s != nothing
+      myType =  eval(parse(myType_s))
+    else
+      myType = UInt8
+    end
+  else
+    throw(ErrorException(@sprintf("File name %s doesn't match %s", fname, regex)))
   end
-end
 
-# parses #data elements, type of data elements, #traces from a file name (for example data_32_b_500.bin)
-function parseDataFilename(fname::String)
-  m = match(r"_([0-9]+)_([bfsi]{1})_([0-9]+)", fname)
-  if m != nothing
-    if m[2] == "b"
-      t = UInt8
-    elseif m[3] == "s"
-      t = UInt16
-    end
-    return (parse(m[1]), t, parse(m[3]))
-  end
+  return numberOfSamples,myType,numberOfTraces
 end
