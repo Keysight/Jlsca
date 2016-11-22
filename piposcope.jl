@@ -433,5 +433,5 @@ function hellopinata()
 end
 
 # main or hellopinata is called here
-# @time scope = main()
-@time scope = hellopinata()
+@time scope = main()
+# @time scope = hellopinata()
