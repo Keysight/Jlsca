@@ -1,15 +1,16 @@
 # What is it?
 
-Jlsca is a toolbox in Julia to do side channel attacks. It supports:
+Jlsca is a toolbox in Julia to do the computational part (DPA) of a side channel attack. It supports:
 
 * Conditional averaging
-* Correlation power analysis (CPA) and Linear regression analysis (LRA)
+* Correlation power analysis (CPA) and non-profiled Linear regression analysis (LRA)
 * AES128/192/256 enc/dec, backward/forward S-box attacks
 * AES128 enc/dec chosen input MixColumn attack
 * DES/TDES1/TDES2/TDES3 enc/dec, backward/forward attack
 * Known key analysis + key rank evolution CSV output
 * Inspector trace set input
 * Split sample and data raw binary (Daredevil) input
+* I've been playing with a Picoscope, and there is an example in `piposcope.jl` that does (a quite fast, if I may say so myself) acquisition on Riscure's Pinata board using the scope's rapid block mode. Check the file header of `piposcope.jl` for more information.
 
 # Why would I want it?
 
@@ -18,7 +19,7 @@ It runs standalone or inside Riscure's Inspector as a module, so you would want 
 * You don't have Inspector but you want to do DPA or understand how it works.
 
 * You have Inspector but you want to play with features that are currently (4.10) not in Inspector, like:
-	* [LRA](https://eprint.iacr.org/2013/794.pdf)
+	* [non-profiled LRA](https://eprint.iacr.org/2013/794.pdf)
  	* [Conditional averaging](https://eprint.iacr.org/2013/794.pdf)
 
 # Who wrote it?
@@ -97,7 +98,7 @@ Since we're configuring a forward attack, we need to tell Jlsca what the offset 
 ```
 params.dataOffset = 1
 ```
-This means that the input data is the start of the trace data: Julia offets are 1-based!! If you'd rather run the attack backward, and the trace data is located after the input, you'd type this:
+This means that the input data is the start of the trace data: Julia offets are 1-based!! If you'd rather run the attack backward, and the output data is located after the input, you'd type this:
 ```
 params.direction = BACKWARD
 params.dataOffset = 17
@@ -177,7 +178,7 @@ Once you push a sample or data pass on the stack of passes, you can pop the last
 
 ## Conditional averaging and potential other post processors
 
-Conditional averaging [1] is implemented as a trace post processor that is configured in the "trs" object as follows:
+Conditional averaging [Conditional averaging](https://eprint.iacr.org/2013/794.pdf) is implemented as a trace post processor that is configured in the "trs" object as follows:
 ```
 setPostProcessor(trs, CondAvg, getNumberOfAverages(params))
 ```
