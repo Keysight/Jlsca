@@ -265,15 +265,16 @@ function hammer()
 
     @printf("file: %s\n", entries[i])
 
-    if iszeros(samplesfilename)
-      @printf("removed %s\n", samplesfilename)
-      continue
-    end
+    # if iszeros(samplesfilename)
+    #   @printf("removed %s\n", samplesfilename)
+    #   continue
+    # end
 
     # create Trace instance
     # trs = SplitBinary(datafilename, 8, samplesfilename, 288, 16)
     trs = SplitBinary(datafilename, samplesfilename)
-    (numberOfSamplesPerTrace, sampleType, numberOfTraces1) = parseSamplesFilename(samplesfilename)
+    # (numberOfSamplesPerTrace, sampleType, numberOfTraces1) = Trs.parseFilename(samplesfilename)
+    numberOfSamplesPerTrace  = length(trs[1][2])
 
     blocks = div(numberOfSamplesPerTrace-1, maxSamples)
 
@@ -310,11 +311,11 @@ function hammer()
             (scoresAndOffsets, numberOfTraces2, numberOfSamples, dataWidth, keyOffsets, knownKey) = statusData
             scoresfile = @sprintf("%s_%d.txt", samplesfilename, b)
 
-            # open(x -> printScores(scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2, numberOfSamples, (+), knownKey, false,  5, x), scoresfile, "w")
+            open(x -> printScores(scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2, numberOfSamples, (+), knownKey, false,  5, x), scoresfile, "w")
 
-            @profile printScores(scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2, numberOfSamples, (+), knownKey, false,  5)
+            # printScores(scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2, numberOfSamples, (+), knownKey, false,  5)
 
-            Profile.print(maxdepth=8)
+            # Profile.print(maxdepth=8)
 
 
             if !isnull(params.outputkka) && !isnull(params.knownKey)
@@ -342,6 +343,217 @@ function hammer()
     end
   end
 end
+
+function mccees()
+  if length(ARGS) < 2
+    @printf("no input trace\n")
+  end
+
+  FFTW.set_num_threads(Sys.CPU_CORES)
+
+  params = AesSboxAttack()
+  # params.xor = true
+  params.mode = CIPHER
+  params.direction = FORWARD
+  params.dataOffset = 1
+  params.analysis = DPA()
+  # params.analysis.leakageFunctions = [hw]
+  params.analysis.leakageFunctions = [(x -> (x .>> i) & 1) for i in 0:7]
+  params.keyByteOffsets = [1]
+
+  # params = AesSboxAttack()
+  # params.mode = CIPHER
+  # # params.xor = true
+  # params.direction = BACKWARD
+  # params.dataOffset = 17
+  # params.analysis = DPA()
+  # # params.analysis.leakageFunctions = [hw]
+  # params.analysis.leakageFunctions = [(x -> (x .>> i) & 1) for i in 0:7]
+  # params.keyByteOffsets = [1]
+  #
+  # params = AesMCAttack()
+  # # params.xor = true
+  # params.mode = CIPHER
+  # params.direction = FORWARD
+  # params.dataOffset = 1
+  # params.analysis = DPA()
+  # params.analysis.leakageFunctions = [(x -> (x .>> i) & 1) for i in 0:31]
+
+
+  params.knownKey = Nullable(hex2bytes("cafebabedeadbeef0001020304050607"))
+
+  # create Trace instance
+  # trs = SplitBinary("pipo_data_32s.bin","pipo_samples_Int16_3300s.bin")
+  trs = InspectorTrace("mc.trs")
+  len = 100000
+  # bit expand
+  # addSamplePass(trs, tobits)
+
+  # select only samples we need
+  # addSamplePass(trs, (x -> x[1:2000]))
+
+  # align
+  maxShift = 1000
+  referenceOffset = 1447
+  reference = trs[1][2][referenceOffset:referenceOffset+60]
+  corvalMin = 0.4
+  # addSamplePass(trs, x -> ((shift,corval) = correlationAlign(x, reference, referenceOffset, maxShift); corval > corvalMin ? circshift(x, shift) : nothing))
+  reference0mean = reference - mean(reference)
+  reversereference0mean = reverse(reference0mean)
+  square_sum_x2 = sqrt(sum(reference0mean .^ 2))
+  window = max(1, referenceOffset - maxShift):(min(referenceOffset + maxShift + length(reference), length(trs[1][2])))
+  sums_y = zeros(Float64, length(window)+1)
+  sums_y2 = zeros(Float64, length(window)+1)
+  np = Ref{Base.DFT.FFTW.rFFTWPlan}()
+  addSamplePass(trs, x -> ((shift,corval) = @profile correlationAlign2(x, reference0mean, reversereference0mean, referenceOffset, maxShift, window, square_sum_x2, sums_y, sums_y2, np); corval > corvalMin ? circshift(x, shift) : nothing))
+
+  # absolute
+  addSamplePass(trs, abs)
+
+  # conditional averaging
+  setPostProcessor(trs, CondAvg, getNumberOfAverages(params))
+
+  ret = sca(trs, params, 1, len)
+  Profile.print(maxdepth=9)
+
+end
+
+function correlationAlign(samples::Vector, reference::Vector, referenceOffset::Int, maxShift::Int)
+  align::Int = 0
+  maxCorr::Float64 = 0
+  window = max(1, referenceOffset - maxShift):(min(referenceOffset + maxShift + length(reference), length(samples)) - length(reference) + 1)
+  # @printf("window: %s\n", string(window))
+  for o in window
+    e = o + length(reference) - 1
+    corr = cor(samples[o:e], reference)
+    if corr > maxCorr
+      maxCorr = corr
+      align = o
+    end
+  end
+
+  ret = (referenceOffset-align,maxCorr)
+  # @printf("%s\n", ret)
+  return ret
+end
+
+function blerpconv{T<:Base.LinAlg.BlasFloat}(u::StridedVector{T}, v::StridedVector{T}, np::Ref{Base.DFT.FFTW.rFFTWPlan})
+    nu = length(u)
+    nv = length(v)
+    n = nu + nv - 1
+    np2 = n > 1024 ? nextprod([2,3,5], n) : nextpow2(n)
+    upad = [u; zeros(T, np2 - nu)]
+    vpad = [v; zeros(T, np2 - nv)]
+    if T <: Real
+      # p = plan_rfft(upad)
+      # y = irfft((p*upad).*(p*vpad), np2)
+      if !isdefined(np, :x)
+        @printf("once!\n")
+        np.x = plan_rfft(upad, flags=FFTW.PRESERVE_INPUT)
+      end
+      p = np.x
+      y = irfft((p*upad).*(p*vpad), np2)
+    else
+        p = plan_fft!(upad)
+        y = ifft!((p*upad).*(p*vpad))
+    end
+    return y[1:n]
+end
+
+
+function correlationAlign2(samples::Vector, reference0mean::Vector, reversereference0mean::Vector, referenceOffset::Int, maxShift::Int, window::Range, square_sum_x2::Float64, sums_y::Vector{Float64}, sums_y2::Vector{Float64}, np::Ref{Base.DFT.FFTW.rFFTWPlan})
+  align::Int = 0
+  maxCorr::Float64 = 0
+  # window = max(1, referenceOffset - maxShift):(min(referenceOffset + maxShift + length(reference), length(samples)))
+  # @printf("window: %s\n", window)
+
+  # reference0mean = reference - mean(reference)
+  # square_sum_x2 = sqrt(sum(reference0mean .^ 2))
+  # sums_y = zeros(Float64, length(window)+1)
+  # sums_y2 = zeros(Float64, length(window)+1)
+
+  # cv = blerpconv(float(samples[window]), reversereference0mean, np)
+  cv = blerpconv(reversereference0mean, float(samples[window]), np)
+  n = length(reference0mean)
+
+  # @printf("cv: %s\n", string(cv))
+  # cv = cv[n:(end-n+1)]
+  # @printf("cv stripped: %s\n", string(cv))
+
+  idx = 2
+  for i in window
+    s::Float64 = samples[i]
+    sums_y[idx] = sums_y[idx-1] + s
+    sums_y2[idx] =  sums_y2[idx-1] + (s ^ 2)
+    idx += 1
+  end
+
+  # @printf("sums_y %s\n", string(sums_y))
+  # @printf("sums_y2 %s\n", string(sums_y2))
+
+  for i in 1:(length(window)-length(reference0mean)+1)
+    sum_x_y = cv[n+i-1]
+    sum_y2 = sums_y2[i+n] - sums_y2[i]
+    sum_y = sums_y[i+n] - sums_y[i]
+    # @printf("sum_x_y %s, square_sum_x2 %s, sum_y2 %s, sum_y %s\n", string(sum_x_y), string(square_sum_x2), string(sum_y2), string(sum_y))
+    argh = sum_y2 - (sum_y ^ 2)/n
+    r::Float64 = sum_x_y / (square_sum_x2 * sqrt(argh))
+    # @printf("r: %s\n", string(r))
+    if r > maxCorr
+      maxCorr = r
+      align = window[i]
+    end
+  end
+
+  ret = (referenceOffset-align,maxCorr)
+  # @printf("%s\n", ret)
+  return ret
+end
+
+# function correlationAlignThreaded(samples::Vector, reference::Vector, referenceOffset::Int, maxShift::Int)
+#   align::Int = 0
+#   maxCorr::Float64 = 0
+#   window = max(1, referenceOffset - maxShift):(min(referenceOffset + maxShift + length(reference), length(samples)) - length(reference) + 1)
+#   maxCorrs = zeros(Float64, Threads.nthreads())
+#   aligns = zeros(Int, Threads.nthreads())
+#   # @printf("window: %s\n", string(window))
+#   for o in window
+#     tid = Thread.threadid()
+#     e = o + length(reference) - 1
+#     corr = cor(samples[o:e], reference)
+#     if corr > maxCorrs[tid]
+#       maxCorrs[tid] = corr
+#       aligns[tid] = o
+#     end
+#   end
+#
+#   ret = (referenceOffset-align,maxCorr)
+#   # @printf("%s\n", ret)
+#   return ret
+# end
+
+function applyAlign(samples::Vector, alignments::Vector{Tuple{Int,Float64}}, minCorval::Float64, idxptr::Ref{Int}, len::Int)
+  idx = idxptr.x
+  idxptr.x += 1
+  if idxptr.x == len + 1
+    idxptr.x = 1
+  end
+  shift,corval = alignments[idx]
+  if corval > minCorval
+    return circshift(samples,shift)
+  end
+  @printf("dropping idx %d %s\n", idx, string(alignments[idx]))
+end
+
+function storeAlign(samples::Vector, alignFn::Function, alignments::Vector{Tuple{Int,Float64}}, idx::Ref{Int}, len::Int)
+  alignments[idx.x] = alignFn(samples)
+  idx.x += 1
+  if idx.x == len + 1
+    idx.x = 1
+  end
+  return samples
+end
+
 
 # end of module
 end
