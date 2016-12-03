@@ -1,4 +1,4 @@
-# Authors: Cees-Bart Breunesse, Ilya Kizhvatov 
+# Authors: Cees-Bart Breunesse, Ilya Kizhvatov
 
 module Dpa
 export dpa
@@ -46,16 +46,5 @@ function dpa(data::Matrix, samples::Matrix, keyByteOffsets::Vector{Int}, interme
 
   return C
 end
-
-# DPA on vectors of data and samples used for the conditional averaging case. In conditionally averaged data/samples each key chunk offset has a sample average for each possible key chunk value. The correlation matrix returned by this function is the same format as DPA on matrices.
-function dpa(data::Vector{Matrix}, samples::Vector{Matrix}, keyByteOffsets::Vector{Int}, intermediateFun::Function, leakageFuns::Vector{Function}, statistic=cor, kcVals=collect(UInt8, 0:255), H_type=UInt8, HL_type=UInt8)
-
-  length(data) == length(samples) == length(keyByteOffsets) || throw(DimensionMismatch())
-
-  C = mapreduce(x-> dpa(x[1], x[2], [x[3]], intermediateFun, leakageFuns, statistic, kcVals, H_type, HL_type), hcat, zip(data,samples, keyByteOffsets))
-
-  return C
-end
-
 
 end

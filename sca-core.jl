@@ -4,7 +4,6 @@
 
 using Dpa
 using Lra
-using Conditional
 using Trs
 
 export Attack,Analysis,LRA,DPA
@@ -87,33 +86,55 @@ function analysis(params::Attack, phase::Enum, trs::Trace, firstTrace::Int, numb
       end
 
       # read traces
-      (data, samples, eof) = readAllTraces(trs, offset, min(stepSize, numberOfTraces - offset + 1))
+      (data, samples, eof) = @time readAllTraces(trs, offset, min(stepSize, numberOfTraces - offset + 1))
 
       if data == nothing || samples == nothing
         scores = nothing
         break
       end
 
+      scoresAndOffsets = nothing
+
       if isa(samples[1], Array)
-          sampleshapes = map(x -> size(x), samples)
-          datashape = map(x -> size(x), data)
+          length(samples) == length(keyByteOffsets) || throw(ErrorException("attack implementation broken"))
+
+          for l in 1:length(keyByteOffsets)
+            @printf("%s on samples shape %s and data shape %s\n", string(typeof(params.analysis).name.name), size(samples[l]), size(data[l]))
+
+            # run the attack
+            (C, nrKeyBytes, nrLeakageFunctions, nrKbVals) = attack(params.analysis, data[l], samples[l], [keyByteOffsets[l]], targetFunction, targetFunctionType, kbVals)
+
+            # nop the nans
+            C[isnan(C)] = 0
+
+            if scoresAndOffsets == nothing
+              scoresAndOffsets = allocateScoresAndOffsets(nrLeakageFunctions, length(kbVals), length(keyByteOffsets))
+            end
+
+            # get the scores for all leakage functions
+            getScoresAndOffsets!(scoresAndOffsets, C, 1, l, nrLeakageFunctions, params.analysis.postProcess, nrKbVals)
+          end
       else
-          sampleshapes = size(samples)
-          datashape = size(data)
+        @printf("%s on samples shape %s and data shape %s\n", string(typeof(params.analysis).name.name), size(samples), size(data))
+
+        # run the attack
+        (C, nrKeyBytes, nrLeakageFunctions, nrKbVals) = attack(params.analysis, data, samples, keyByteOffsets, targetFunction, targetFunctionType, kbVals)
+
+        # nop the nans
+        C[isnan(C)] = 0
+
+        if scoresAndOffsets == nothing
+          scoresAndOffsets = allocateScoresAndOffsets(nrLeakageFunctions, length(kbVals), length(keyByteOffsets))
+        end
+
+        for l in 1:length(keyByteOffsets)
+          # get the scores for all leakage functions
+          getScoresAndOffsets!(scoresAndOffsets, C, l, l, nrLeakageFunctions, params.analysis.postProcess, nrKbVals)
+        end
       end
-      @printf("%s on samples shape %s and data shape %s\n", string(typeof(params.analysis).name.name), string(sampleshapes), string(datashape))
-
-      # run the attack
-      (C, nrKeyBytes, nrLeakageFunctions, nrKbVals) = attack(params.analysis, data, samples, keyByteOffsets, targetFunction, targetFunctionType, kbVals)
-
-      # nop the nans
-      C[isnan(C)] = 0
-
-      # get the scores for all leakage functions
-      scoresAndOffsets = getScoresAndOffsets(C, nrKeyBytes, nrLeakageFunctions, params.analysis.postProcess, nrKbVals)
 
       # let somebody do something with the scores for these traces
-      produce(INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs), size(C)[1], nrKeyBytes, keyByteOffsets, !isnull(params.knownKey) ? getCorrectRoundKeyMaterial(params, phase) : Nullable()))
+      produce(INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs), size(C)[1], length(keyByteOffsets), keyByteOffsets, !isnull(params.knownKey) ? getCorrectRoundKeyMaterial(params, phase) : Nullable()))
     end
 
     # reset the state of trace post processor (conditional averager)
