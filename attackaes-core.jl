@@ -273,7 +273,7 @@ function getCorrectRoundKeyMaterial(params::AesAttack, phase::Phase)
     roundkey = w[end-off+1-rklength:end-off]
   end
 
-  if phase == PHASE2
+  if isa(params, AesSboxAttack) && phase == PHASE2
     if (mode == CIPHER && direction == BACKWARD) || (mode == INVCIPHER && direction == FORWARD) || (mode == EQINVCIPHER && direction == FORWARD)
       for i in 1:div(rklength,4)
         roundkey[(i-1)*4+1:i*4] = Aes.InvMixColumn(roundkey[(i-1)*4+1:i*4])
