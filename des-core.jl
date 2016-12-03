@@ -180,7 +180,7 @@ function KeyExpansionBackwards(rk1::BitVector, rk2::BitVector)
 end
 
 function KeyExpansionBackwards(rk1::BitVector, rk1Round::Int, rk2::BitVector, rk2Round::Int)
-	(length(rk1) == 48 && length(rk2) == 48 && rk1 != rk2) || throw(DimensionMismatch("wrong key size"))
+	(length(rk1) == 48 && length(rk2) == 48) || throw(DimensionMismatch("wrong key size"))
 
 	startround = max(rk1Round, rk2Round)
 	nextround = min(rk1Round, rk2Round)
