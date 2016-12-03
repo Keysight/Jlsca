@@ -5,7 +5,6 @@
 using Base.Test
 
 include("des.jl")
-include("conditional.jl")
 include("dpa.jl")
 include("lra.jl")
 include("trs.jl")
@@ -14,7 +13,7 @@ include("sca-scoring.jl")
 include("sca-leakages.jl")
 include("attackdes-core.jl")
 
-function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysis)
+function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysis, onetest::Bool=false)
     tracedir = "destraces"
     filenames = readdir(tracedir)
     # leakageFunctions = [bit7]
@@ -27,7 +26,8 @@ function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         @printf("file: %s\n", fullfilename)
 
         params = getParameters(fullfilename, direction)
-        params.analysis.leakageFunctions = [hw]
+        params.analysis = analysis
+        # params.analysis.leakageFunctions = [hw]
         # create Trace instance
         @time trs = InspectorTrace(fullfilename)
 
@@ -43,11 +43,21 @@ function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         key = sca(trs,params,1, 200)
 
         @test(key == get(params.knownKey))
+
+        if onetest
+          break
+        end
     end
 end
 
-@time testDesTraces(true, BACKWARD, DPA())
+x = DPA()
+x.leakageFunctions = [hw]
+
+@time testDesTraces(true, BACKWARD, x)
 @time testDesTraces(true, FORWARD, DPA())
 @time testDesTraces(false, BACKWARD, DPA())
 @time testDesTraces(false, FORWARD, DPA())
-# @time testDesTraces(true, FORWARD, LRA())
+
+x = LRA()
+x.basisModel = x -> basisModelSingleBits(x, 4)
+@time testDesTraces(true, FORWARD, x, true)
