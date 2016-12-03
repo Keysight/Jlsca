@@ -5,7 +5,6 @@
 using Base.Test
 
 include("aes.jl")
-include("conditional.jl")
 include("dpa.jl")
 include("lra.jl")
 include("trs.jl")
@@ -14,7 +13,7 @@ include("sca-scoring.jl")
 include("sca-leakages.jl")
 include("attackaes-core.jl")
 
-function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysis)
+function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysis, onetest::Bool)
     tracedir = "aestraces"
     filenames = readdir(tracedir)
     leakageFunctions = [hw]
@@ -51,6 +50,10 @@ function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         key = sca(trs,params,1, 200)
 
         @test(key == get(params.knownKey))
+
+        if onetest
+          break
+        end
     end
 end
 
@@ -58,4 +61,4 @@ end
 @time testAesTraces(true, FORWARD, DPA())
 @time testAesTraces(false, BACKWARD, DPA())
 @time testAesTraces(false, FORWARD, DPA())
-# @time testAesTraces(true, FORWARD, LRA())
+@time testAesTraces(true, FORWARD, LRA(), true)
