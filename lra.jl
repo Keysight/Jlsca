@@ -5,16 +5,6 @@
 module Lra
 export lra
 
-# LRA for conditionally averaged input
-function lra(data::Vector{Matrix}, samples::Vector{Matrix}, keyByteOffsets::Vector{Int}, intermediateFunction::Function, basisFunction::Function, keyChunkValues=collect(UInt8, 0:255))
-
-  length(data) == length(samples) || throw(DimensionMismatch())
-
-  C = mapreduce(x-> lra(x[1], x[2], [x[3]], intermediateFunction, basisFunction, keyChunkValues), hcat, zip(data,samples,keyByteOffsets))
-
-  return C
-end
-
 # LRA for normal Matrix input
 function lra(data::Matrix, samples::Matrix, keyByteOffsets::Vector{Int}, intermediateFunction::Function, basisFunction::Function, keyChunkValues=collect(UInt8, 0:255))
     (rs,cs) = size(samples)
