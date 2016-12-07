@@ -456,6 +456,7 @@ function scatask(trs::Trace, params::AesSboxAttack, firstTrace=1, numberOfTraces
 
   if notAllKeyBytes
     # not enough key bytes to continue
+    produce(FINISHED, nothing)
     return
   end
 

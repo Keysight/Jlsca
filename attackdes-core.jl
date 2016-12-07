@@ -30,8 +30,9 @@ type DesSboxAttack <: DesAttack
   outputkka::Nullable{AbstractString}
 
   function DesSboxAttack()
-    leakageFunctions = [bit0, bit1, bit2, bit3, bit4]
-    return new(DES, true, FORWARD, 1, collect(1:8), Nullable(), DPA(), Nullable(), ROUNDOUT, false, [], Nullable(), Nullable())
+    dpa = DPA()
+    dpa.leakageFunctions = [bit0, bit1, bit2, bit3, bit4]
+    return new(DES, true, FORWARD, 1, collect(1:8), Nullable(), dpa, Nullable(), ROUNDOUT, false, [], Nullable(), Nullable())
   end
 end
 
@@ -307,7 +308,7 @@ function scatask(trs::Trace, params::DesSboxAttack, firstTrace=1, numberOfTraces
   popDataPass(trs)
 
   if length(params.keyByteOffsets) < 8
-    # not enough key bytes to continue
+    produce(FINISHED, nothing)
     return
   end
 
