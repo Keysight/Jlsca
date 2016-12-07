@@ -100,6 +100,11 @@ function analysis(params::Attack, phase::Enum, trs::Trace, firstTrace::Int, numb
 
           for l in 1:length(keyByteOffsets)
             @printf("%s on samples shape %s and data shape %s\n", string(typeof(params.analysis).name.name), size(samples[l]), size(data[l]))
+            if size(samples[l])[2] == 0
+              @printf("no samples!\n")
+              scores = nothing
+              continue
+            end
 
             # run the attack
             (C, nrKeyBytes, nrLeakageFunctions, nrKbVals) = attack(params.analysis, data[l], samples[l], [keyByteOffsets[l]], targetFunction, targetFunctionType, kbVals)
@@ -116,6 +121,11 @@ function analysis(params::Attack, phase::Enum, trs::Trace, firstTrace::Int, numb
           end
       else
         @printf("%s on samples shape %s and data shape %s\n", string(typeof(params.analysis).name.name), size(samples), size(data))
+        if size(samples)[2] == 0
+          @printf("no samples!\n")
+          scores = nothing
+          break
+        end
 
         # run the attack
         (C, nrKeyBytes, nrLeakageFunctions, nrKbVals) = attack(params.analysis, data, samples, keyByteOffsets, targetFunction, targetFunctionType, kbVals)
@@ -133,15 +143,21 @@ function analysis(params::Attack, phase::Enum, trs::Trace, firstTrace::Int, numb
         end
       end
 
-      # let somebody do something with the scores for these traces
-      produce(INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs), size(C)[1], length(keyByteOffsets), keyByteOffsets, !isnull(params.knownKey) ? getCorrectRoundKeyMaterial(params, phase) : Nullable()))
+      if scoresAndOffsets != nothing
+        # let somebody do something with the scores for these traces
+        produce(INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs), size(C)[1], length(keyByteOffsets), keyByteOffsets, !isnull(params.knownKey) ? getCorrectRoundKeyMaterial(params, phase) : Nullable()))
+      end
     end
 
     # reset the state of trace post processor (conditional averager)
     reset(trs)
 
-    # return the final combined scores to scatask
-    scores = getCombinedScores(scoresAndOffsets)
+    if scoresAndOffsets != nothing
+      # return the final combined scores to scatask
+      scores = getCombinedScores(scoresAndOffsets)
+    else
+      throw(ErrorException("no samples"))
+    end
 
     return scores
 end
@@ -170,7 +186,13 @@ function sca(trs::Trace, params::Attack, firstTrace=1, numberOfTraces=length(trs
     truncate(kkaFilename)
   end
 
+  finished = false
+
   for phase in params.phases
+    if finished
+      break
+    end
+
     @printf("\nphase: %s\n\n", phase)
 
     # function scatask is overloaded for the params type
@@ -181,10 +203,13 @@ function sca(trs::Trace, params::Attack, firstTrace=1, numberOfTraces=length(trs
       # iterate through whatever scatask is producing
       for (status, statusData) in t
         if status == FINISHED
+          finished = true
           key = statusData
-          @printf("recovered key: %s\n", bytes2hex(key))
-          if !isnull(params.knownKey)
-            @printf("knownkey match: %s\n", string(key == get(params.knownKey)))
+          if key != nothing
+            @printf("recovered key: %s\n", bytes2hex(key))
+            if !isnull(params.knownKey)
+              @printf("knownkey match: %s\n", string(key == get(params.knownKey)))
+            end
           end
         elseif status == INTERMEDIATESCORES
           (scoresAndOffsets, numberOfTraces2, numberOfSamples, dataWidth, keyOffsets, knownKey) = statusData
