@@ -2,9 +2,12 @@
 #
 # Author: Cees-Bart Breunesse
 
-export InspectorTrace,readTrace,writeToTraces
+export InspectorTrace,readData,readSamples,writeToTraces
 
-# Inspector trace implementation
+using Base.get
+import Base.close
+
+# Inspector trace set implementation
 type InspectorTrace <: Trace
   titleSpace
   numberOfTraces::Nullable{Int}
@@ -22,11 +25,22 @@ type InspectorTrace <: Trace
   bgtask
   tracesReturned
   filename
-  prevIdx
+  filePosition
+  writeable::Bool
+  lengthPosition::Int
 
-  function InspectorTrace(filename)
-    (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor) = readInspectorTrsHeader(filename)
-    new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, nothing, Union, Union, 0, filename, 0)
+  # to open an existing file
+  function InspectorTrace(filename::String)
+    (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, fileDescriptor) = readInspectorTrsHeader(filename)
+    new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, nothing, Union, Union, 0, filename, traceBlockPosition, false, lengthPosition)
+  end
+
+  # to create a new one
+  function InspectorTrace(filename::String, dataSpace::Int, sampleType::Type, numberOfSamplesPerTrace::Int)
+    !isfile(filename) || throw(ErrorException("file exists!"))
+
+    (titleSpace, traceBlockPosition, lengthPosition, fileDescriptor) = writeInspectorTrsHeader(filename, dataSpace, sampleType, numberOfSamplesPerTrace)
+    new(titleSpace, Nullable(0), dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, nothing, Union, Union, 0, filename, traceBlockPosition, true, lengthPosition)
   end
 end
 
@@ -74,6 +88,7 @@ function readInspectorTrsHeader(filename)
       sampleType = UInt8
       numberOfSamplesPerTrace = 0
       traceBlockPosition = 0
+      lengthPosition = 0
 
       if verbose
         if seekable
@@ -103,6 +118,7 @@ function readInspectorTrsHeader(filename)
         elseif tag == TitleSpace && length == TitleSpaceLength
           titleSpace = read(f, UInt8)
         elseif tag == NumberOfTraces && length == NumberOfTracesLength
+          lengthPosition = position(f)
           numberOfTraces = Nullable(ltoh(read(f, UInt32)))
         elseif tag == DataSpace && length == DataSpaceLength
           dataSpace = ltoh(read(f, UInt16))
@@ -117,7 +133,7 @@ function readInspectorTrsHeader(filename)
             sampleType = UInt32
             sampleSpace = 4
           elseif sampleCoding == CodingShort
-            sampleType = UInt16
+            sampleType = Int16
             sampleSpace = 2
           elseif sampleCoding == CodingByte
             sampleType = UInt8
@@ -139,7 +155,7 @@ function readInspectorTrsHeader(filename)
         @printf("#data:    %d\n", dataSpace)
         @printf("type:     %s\n", string(sampleType))
       end
-      return (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, f)
+      return (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, f)
 
   catch e
       close(f)
@@ -147,73 +163,139 @@ function readInspectorTrsHeader(filename)
   end
 end
 
-# read a single trace from an Inspector trace set
-function readTrace(trs::InspectorTrace, idx)
-    f = trs.fileDescriptor
-    dataSpace = trs.dataSpace
-    numberOfSamplesPerTrace = trs.numberOfSamplesPerTrace
-    sampleSpace = trs.sampleSpace
-    titleSpace = trs.titleSpace
-    traceBlockPosition = trs.traceBlockPosition
-    sampleType = trs.sampleType
-
-    (data, trace) = (nothing, nothing)
-
-    if !(trs.prevIdx + 1 == idx)
-      # this is going to throw an exception when reading from stdin
-      seek(f, traceBlockPosition + (idx-1) * (titleSpace + dataSpace + numberOfSamplesPerTrace * sampleSpace))
+function close(trs::InspectorTrace)
+  if trs.writeable
+    seek(trs.fileDescriptor, trs.lengthPosition)
+    write(trs.fileDescriptor, htol(convert(UInt32, length(trs))))
+    if verbose
+      @printf("Wrote %d traces in %s\n", length(trs), trs.filename)
     end
-
-    title = read(f, titleSpace)
-    data = read(f, dataSpace)
-    trace = read(f, numberOfSamplesPerTrace * sampleSpace)
-
-    trs.prevIdx = idx
-
-    if length(data) == 0 && length(trace) == 0
-      throw(EOFError())
-    end
-
-    if sampleType != UInt8
-      trace = reinterpret(sampleType, trace)
-      if ltoh(ENDIAN_BOM) != ENDIAN_BOM
-        trace = map(ltoh, trace)
-      end
-    end
-
-    return (data, trace)
-end
-
-# writes a Matrix of data and samples to an Inspector file, only used for creating simulation traces at the moment
-function writeToTraces(filename, data::Matrix, samples::Matrix)
-  (numberOfTraces, nrSamples) = size(samples)
-  (bla, dataSpace) = size(data)
-
-  if bla != numberOfTraces
-    @printf("[x] data rows %d != sample rows %d\n", bla, numberOfTraces)
-    return
   end
 
+  close(trs.fileDescriptor)
+end
+
+calcFilePositionForIdx(trs::InspectorTrace, idx::Int) = trs.traceBlockPosition + (idx-1) * (trs.titleSpace + trs.dataSpace + trs.numberOfSamplesPerTrace * trs.sampleSpace)
+
+# read data for a single trace from an Inspector trace set
+function readData(trs::InspectorTrace, idx)
+  position = calcFilePositionForIdx(trs, idx)
+
+  if trs.filePosition != position
+    # this is going to throw an exception when reading from stdin
+    seek(trs.fileDescriptor, position)
+    trs.filePosition = position
+  end
+
+  skip(trs.fileDescriptor, trs.titleSpace)
+  data = read(trs.fileDescriptor, trs.dataSpace)
+  trs.filePosition += trs.dataSpace
+
+  return data
+end
+
+# write data for a single trace from an Inspector trace set
+function writeData(trs::InspectorTrace, idx, data::Vector{UInt8})
+  trs.dataSpace == length(data) || throw(ErrorException(@sprintf("wrong data length %d, expecting %d", length(data), trs.dataSpace)))
+  position = calcFilePositionForIdx(trs, idx)
+
+  if trs.filePosition != position
+    # this is going to throw an exception when reading from stdin
+    seek(trs.fileDescriptor, position)
+    trs.filePosition = position
+  end
+
+  skip(trs.fileDescriptor, trs.titleSpace)
+  write(trs.fileDescriptor, data)
+  trs.filePosition += trs.dataSpace
+
+  return data
+end
+
+# read samples for a single tracec from an Inspector trace set
+function readSamples(trs::InspectorTrace, idx)
+  position = calcFilePositionForIdx(trs, idx)
+  position += trs.titleSpace
+  position += trs.dataSpace
+
+  if trs.filePosition != position
+    # this is going to throw an exception when reading from stdin
+    seek(trs.fileDescriptor, position)
+    trs.filePosition = position
+  end
+
+  samples = read(trs.fileDescriptor, trs.numberOfSamplesPerTrace * trs.sampleSpace)
+  trs.filePosition += trs.numberOfSamplesPerTrace * trs.sampleSpace
+
+  if trs.sampleType != UInt8
+    samples = reinterpret(trs.sampleType, samples)
+    if ltoh(ENDIAN_BOM) != ENDIAN_BOM
+      samples = map(ltoh, samples)
+    end
+  end
+
+  return samples
+end
+
+# write samples for a single trace into an Inspector trace set
+function writeSamples(trs::InspectorTrace, idx, samples::Vector)
+  trs.numberOfSamplesPerTrace == length(samples) || throw(ErrorException(@sprintf("wrong samples length %d, expecting %d", length(samples), trs.numberOfSamplesPerTrace)))
+  trs.sampleType == eltype(samples) || throw(ErrorException(@sprintf("wrong samples type %s, expecting %s", eltype(samples), trs.sampleType)))
+
+  position = calcFilePositionForIdx(trs, idx)
+  position += trs.titleSpace
+  position += trs.dataSpace
+
+  if trs.filePosition != position
+    # this is going to throw an exception when reading from stdin
+    seek(trs.fileDescriptor, position)
+    trs.filePosition = position
+  end
+
+  if trs.sampleType != UInt8
+    if ltoh(ENDIAN_BOM) != ENDIAN_BOM
+      samples = map(htol, samples)
+    end
+    samples = reinterpret(UInt8, samples)
+  end
+
+  write(trs.fileDescriptor, samples)
+  trs.filePosition += trs.numberOfSamplesPerTrace * trs.sampleSpace
+  trs.numberOfTraces = Nullable(max(idx, get(trs.numberOfTraces)))
+
+  return samples
+end
+
+function writeInspectorTrsHeader(filename::String, dataSpace::Int, sampleType::Type, numberOfSamplesPerTrace::Int)
+
   sampleCoding = Union
-  if eltype(samples) == UInt8
+  if sampleType == UInt8
     sampleCoding = CodingByte
-  elseif eltype(samples) == UInt16
+  elseif sampleType == Int16
     sampleCoding = CodingShort
-  elseif eltype(samples) == UInt32
+  elseif sampleType == UInt32
     sampleCoding = CodingInt
-  elseif eltype(samples) == Float32
+  elseif sampleType == Float32
     sampleCoding = CodingFloat
   else
     @printf("[x] Not suppoerpeopsodpsofd sample type %s\n", string(eltype(samples)))
     return
   end
 
+  if verbose
+    @printf("Creating Inspector trs file %s\n", filename)
+    @printf("#samples: %d\n", numberOfSamplesPerTrace)
+    @printf("#data:    %d\n", dataSpace)
+    @printf("type:     %s\n", string(sampleType))
+  end
 
-  fd = open(filename, "w")
+  fd = open(filename, "w+")
+
+  titleSpace = 0
 
   write(fd, convert(UInt8, TitleSpace))
   write(fd, convert(UInt8, TitleSpaceLength))
-  write(fd, htol(convert(UInt8, 0)))
+  write(fd, htol(convert(UInt8, titleSpace)))
 
   write(fd, convert(UInt8, SampleCoding))
   write(fd, convert(UInt8, SampleCodingLength))
@@ -225,85 +307,16 @@ function writeToTraces(filename, data::Matrix, samples::Matrix)
 
   write(fd, convert(UInt8, NumberOfSamplesPerTrace))
   write(fd, convert(UInt8, NumberOfSamplesPerTraceLength))
-  write(fd, htol(convert(UInt32, nrSamples)))
+  write(fd, htol(convert(UInt32, numberOfSamplesPerTrace)))
 
   write(fd, convert(UInt8, NumberOfTraces))
   write(fd, convert(UInt8, NumberOfTracesLength))
-  write(fd, htol(convert(UInt32, numberOfTraces)))
+  lengthPosition = position(fd)
+  write(fd, htol(convert(UInt32, 0)))
 
   write(fd, convert(UInt8, TraceBlock))
   write(fd, convert(UInt8, 0))
+  traceBlockPosition = position(fd)
 
-  for i in 1:numberOfTraces
-    write(fd, data[i,:])
-
-    if eltype(samples) == UInt8
-      write(fd, samples[i,:])
-    else
-      write(fd, htol(reinterpret(UInt8, samples[i,:])))
-    end
-  end
-
-  close(fd)
-
-end
-
-# writes a Traces object to an Inspector traceset file
-function writeToTraces(filename, trs::Trace, start::Int=1, endd::Int=(length(trs)-start+1))
-  (data,samples) = trs[1]
-  dataSpace = length(data)
-  nrSamples = length(samples)
-  numberOfTraces = length(trs)
-
-  sampleCoding = Union
-  if eltype(samples) == UInt8
-    sampleCoding = CodingByte
-  elseif eltype(samples) == UInt16 || eltype(samples) == Int16
-    sampleCoding = CodingShort
-  elseif eltype(samples) == UInt32
-    sampleCoding = CodingInt
-  elseif eltype(samples) == Float32
-    sampleCoding = CodingFloat
-  else
-    @printf("[x] Not suppoerpeopsodpsofd sample type %s\n", string(eltype(samples)))
-    return
-  end
-
-  fd = open(filename, "w")
-
-  write(fd, convert(UInt8, TitleSpace))
-  write(fd, convert(UInt8, TitleSpaceLength))
-  write(fd, htol(convert(UInt8, 0)))
-
-  write(fd, convert(UInt8, SampleCoding))
-  write(fd, convert(UInt8, SampleCodingLength))
-  write(fd, htol(convert(UInt8, sampleCoding)))
-
-  write(fd, convert(UInt8, DataSpace))
-  write(fd, convert(UInt8, DataSpaceLength))
-  write(fd, htol(convert(UInt16, dataSpace)))
-
-  write(fd, convert(UInt8, NumberOfSamplesPerTrace))
-  write(fd, convert(UInt8, NumberOfSamplesPerTraceLength))
-  write(fd, htol(convert(UInt32, nrSamples)))
-
-  write(fd, convert(UInt8, NumberOfTraces))
-  write(fd, convert(UInt8, NumberOfTracesLength))
-  write(fd, htol(convert(UInt32, endd-start+1)))
-
-  write(fd, convert(UInt8, TraceBlock))
-  write(fd, convert(UInt8, 0))
-
-  for i in start:endd
-    write(fd, trs[i][1])
-
-    if eltype(samples) == UInt8
-      write(fd, trs[i][2])
-    else
-      write(fd, htol(reinterpret(UInt8, trs[i][2])))
-    end
-  end
-
-  close(fd)
-
+  return (titleSpace, traceBlockPosition, lengthPosition, fd)
 end

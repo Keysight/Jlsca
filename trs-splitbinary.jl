@@ -2,7 +2,7 @@
 #
 # Author: Cees-Bart Breunesse
 
-export SplitBinary,readTrace,parseSamplesFilename
+export SplitBinary,readData,readSamples,parseSamplesFilename
 
 # split binary has the data and samples in 2 different files, similar to how Daredevil reads its data and samples. Since there is not metadata in these files, the meta data is encoded in and read from the file names.
 type SplitBinary <: Trace
@@ -19,7 +19,8 @@ type SplitBinary <: Trace
   postProcInstance
   bgtask
   tracesReturned
-  prevIdx
+  samplesPosition
+  dataPosition
 
   function SplitBinary(dataFn, samplesFn)
     (sampleSpace, sampleType, numberOfTracesSamples) = parseFilename(samplesFn)
@@ -69,11 +70,11 @@ type SplitBinary <: Trace
     SplitBinary(dataFn, get(dataSpace), samplesFn::String, get(sampleSpace), sampleType, get(numberOfTracesSamples))
   end
 
-  function SplitBinary(dataFname::String, dataSpace::Int, samplesFn::String, numberOfSamplesPerTrace, sampleType, nrtraces)
-    samplesFileDescriptor = open(samplesFn, "r")
-    dataFileDescriptor = open(dataFname, "r")
+  function SplitBinary(dataFname::String, dataSpace::Int, samplesFn::String, numberOfSamplesPerTrace, sampleType, nrtraces, write::Bool=false)
+    samplesFileDescriptor = open(samplesFn, write ? "w+" : "r")
+    dataFileDescriptor = open(dataFname, write ? "w+" :"r")
 
-    new(nrtraces, dataSpace, sampleType, numberOfSamplesPerTrace, samplesFileDescriptor, dataFileDescriptor, [], [], Union, nothing, Union, Union, 0, 0)
+    new(nrtraces, dataSpace, sampleType, numberOfSamplesPerTrace, samplesFileDescriptor, dataFileDescriptor, [], [], Union, nothing, Union, Union, 0, 0, 0)
   end
 end
 
@@ -81,43 +82,70 @@ pipe(trs::SplitBinary) = false
 
 length(trs::SplitBinary) = trs.numberOfTraces
 
-# read a single trace from the data and samples files
-function readTrace(trs::SplitBinary, idx)
-    # @printf("reading idx %d\n", idx)
-    sf = trs.samplesFileDescriptor
-    df = trs.dataFileDescriptor
-    dataSpace = trs.dataSpace
-    numberOfSamplesPerTrace = trs.numberOfSamplesPerTrace
-    sampleType = trs.sampleType
+function readData(trs::SplitBinary, idx)
+  if trs.dataPosition != (idx-1) * trs.dataSpace
+    seek(trs.dataFileDescriptor, (idx-1) * trs.dataSpace)
+  end
 
-    (data, trace) = (nothing, nothing)
+  trs.dataPosition += trs.dataSpace
 
-    if !(trs.prevIdx + 1 == idx)
-      # this is going to throw an exception when reading from stdin
-      seek(sf, (idx-1) * (numberOfSamplesPerTrace * sizeof(sampleType)))
-      seek(df, (idx-1) * (dataSpace))
+  return read(trs.dataFileDescriptor, trs.dataSpace)
+end
+
+function writeData(trs::SplitBinary, idx, data::Vector{UInt8})
+  trs.dataSpace == length(data) || throw(ErrorException(@sprintf("wrong data length %d, expecting %d", length(data), trs.dataSpace)))
+
+  if trs.dataPosition != (idx-1) * trs.dataSpace
+    seek(trs.dataFileDescriptor, (idx-1) * trs.dataSpace)
+  end
+
+  trs.dataPosition += trs.dataSpace
+
+  write(trs.dataFileDescriptor, data)
+end
+
+function readSamples(trs::SplitBinary, idx)
+  bytesinsamples = trs.numberOfSamplesPerTrace * sizeof(trs.sampleType)
+  position = (idx-1) * bytesinsamples
+  if trs.samplesPosition != position
+    seek(trs.samplesFileDescriptor, position)
+  end
+
+  trs.samplesPosition += bytesinsamples
+
+  samples = read(trs.samplesFileDescriptor, bytesinsamples)
+
+  if trs.sampleType != UInt8
+    samples = reinterpret(trs.sampleType, samples)
+    if ltoh(ENDIAN_BOM) != ENDIAN_BOM
+      samples = map(ltoh, samples)
     end
+  end
 
-    trace = read(sf, numberOfSamplesPerTrace * sizeof(sampleType))
-    data = read(df, dataSpace)
+  return samples
+end
 
-    trs.prevIdx = idx
+function writeSamples(trs::SplitBinary, idx::Int, samples::Vector)
+  trs.numberOfSamplesPerTrace == length(samples) || throw(ErrorException(@sprintf("wrong samples length %d, expecting %d", length(samples), trs.numberOfSamplesPerTrace)))
+  trs.sampleType == eltype(samples) || throw(ErrorException(@sprintf("wrong samples type %s, expecting %s", eltype(samples), trs.sampleType)))
 
-    if length(data) == 0 && length(trace) == 0
-      # @printf("wuuuut!\n")
-      throw(EOFError())
+  bytesinsamples = trs.numberOfSamplesPerTrace * sizeof(trs.sampleType)
+  position = (idx-1) * bytesinsamples
+  if trs.samplesPosition != position
+    seek(trs.samplesFileDescriptor, position)
+  end
+
+  trs.samplesPosition += bytesinsamples
+
+
+  if trs.sampleType != UInt8
+    if ltoh(ENDIAN_BOM) != ENDIAN_BOM
+      samples = map(htol, samples)
     end
+    samples = reinterpret(UInt8, samples)
+  end
 
-    if sampleType != UInt8
-      trace = reinterpret(sampleType, trace)
-      if ltoh(ENDIAN_BOM) != ENDIAN_BOM
-        trace = map(ltoh, trace)
-      end
-    end
-
-    # @printf("length(data) %d, length(samples) %d\n", length(data), length(trace))
-
-    return (data, trace)
+  write(trs.samplesFileDescriptor, samples)
 end
 
 # parses #samples, type of samples, #traces from a file name (for example samples_Float64_64s_55t.bin, samples_Float64_64s.bin, samples_Float64_32t.bin)
@@ -146,4 +174,9 @@ function parseFilename(fname::String)
   end
 
   return numberOfSamples,myType,numberOfTraces
+end
+
+function close(trs::SplitBinary)
+  close(trs.samplesFileDescriptor)
+  close(trs.dataFileDescriptor)
 end
