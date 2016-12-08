@@ -4,16 +4,14 @@
 
 abstract Trace
 
-import Base.length, Base.getindex
-import Conditional.add
-import Conditional.get
+import Base.length, Base.getindex, Base.setindex!
 import Base.reset
 using ProgressMeter
 import Base.start, Base.done, Base.next
 
 
 export Trace,readAllTraces,addSamplePass,popSamplePass,addDataPass,setPostProcessor,popDataPass,hasPostProcessor,reset,getCounter
-export start,done,next,endof
+export start,done,next,endof,setindex!
 
 # overloading these to implement an iterator
 start(trs::Trace) = 1
@@ -23,43 +21,37 @@ endof(trs::Trace) = length(trs)
 
 # gets a single trace from a list of traces, runs all the data and sample passes, adds it through the post processor, and returns the result
 function getindex(trs::Trace, idx)
-  (data, trace) = readTrace(trs, idx)
+  data = readData(trs, idx)
+  samples = nothing
 
-   # run all the passes over the trace
-  for fn in trs.passes
-    trace = fn(trace)
-    if trace == nothing
-      (data,trace) = (nothing,nothing)
+  # run all the passes over the data
+  for fn in trs.dataPasses
+    data = fn(data)
+    if data == nothing
+      (data, trace) = (nothing,nothing)
       break
     end
   end
 
-  if trace != nothing
-    # run all the passes over the data
-    for fn in trs.dataPasses
-      data = fn(data)
-      if data == nothing
-        (data, trace) = (nothing,nothing)
-        break
-      end
+  if data != nothing
+    samples = readSamples(trs, idx)
+    # run all the passes over the trace
+    for fn in trs.passes
+     samples = fn(samples)
+     if samples == nothing
+       (data,samples) = (nothing,nothing)
+       break
+     end
     end
   end
 
-  # add it to post processing (i.e conditional averaging) if present
-  if data != nothing && trace != nothing && trs.postProcType != Union
-    if trs.postProcInstance == Union
-      if trs.postProcArguments != nothing
-        # trs.postProcInstance = call(trs.postProcType, length(data), length(trace), trs.postProcArguments)
-        trs.postProcInstance = trs.postProcType(length(data), length(trace), trs.postProcArguments)
-      else
-        # trs.postProcInstance = call(trs.postProcType, length(data), length(trace))
-        trs.postProcInstance = trs.postProcType(length(data), length(trace))
-      end
-    end
-    add(trs.postProcInstance, data, trace)
-  end
+  return (data, samples)
+end
 
-  return (data, trace)
+function setindex!(trs::Trace, t::Tuple{Vector,Vector}, idx::Int)
+  (data, samples) = t
+  writeData(trs, idx, data)
+  writeSamples(trs, idx, samples)
 end
 
 
@@ -111,7 +103,7 @@ function getCounter(trs::Trace)
 end
 
 # set a post processor that aggregates all data and samples: think conditional averaging.
-function setPostProcessor(trs::Trace, x, args=nothing)
+function setPostProcessor(trs::Trace, x, args...)
   trs.postProcType = x
   trs.postProcArguments = args
 end
@@ -125,11 +117,11 @@ end
 function readAllTraces(trs::Trace, traceOffset=start(trs), traceLength=length(trs))
   numberOfTraces = length(trs)
   readCount = 0
-  samples = nothing
-  datas = nothing
+  allSamples = nothing
+  allData = nothing
   once = true
   eof = false
-  local data, sample, dataLength, sampleLength
+  local data, samples, dataLength, sampleLength
 
   if !pipe(trs)
     progress = Progress(traceLength-1, 1, "Reading traces.. ")
@@ -137,48 +129,65 @@ function readAllTraces(trs::Trace, traceOffset=start(trs), traceLength=length(tr
 
   for idx in traceOffset:(traceOffset + traceLength - 1)
     try
-      (data, sample) = trs[idx]
+      (data, samples) = trs[idx]
     catch e
       if isa(e, EOFError)
         @printf("EOF after reading %d traces ..\n", readCount)
         eof = true
         break
       else
-        throw(e)
+        rethrow(e)
       end
     end
 
     # next trace if a pass ditched this trace
-    if data == nothing || sample == nothing
+    if data == nothing || samples == nothing
       continue
     end
 
+    # add it to post processing (i.e conditional averaging) if present
+    if trs.postProcType != Union
+      if trs.postProcInstance == Union
+        if trs.postProcArguments != nothing
+          trs.postProcInstance = trs.postProcType(length(data), length(samples), trs.postProcArguments...)
+        else
+          trs.postProcInstance = trs.postProcType(length(data), length(samples))
+        end
+      end
+      add(trs.postProcInstance, data, samples, idx)
+    end
 
     if once && verbose
       once = false
       @printf("Input traces (after %d data and %d sample passes):\n", length(trs.dataPasses), length(trs.passes))
       if !pipe(trs)
-        @printf("traces:    %d:%d\n", traceOffset, traceOffset+traceLength-1)
+        @printf("traces:      %d:%d\n", traceOffset, traceOffset+traceLength-1)
       end
-      @printf("#samples:  %d\n", length(sample))
-      @printf("#data:     %d\n", length(data))
-      @printf("post proc: %s\n", trs.postProcType == Union ? "none" : string(trs.postProcType))
+      @printf("#samples:    %d\n", length(samples))
+      @printf("sample type: %s\n", eltype(samples))
+      @printf("#data bytes: %d\n", length(data))
+      @printf("post proc:   %s\n", trs.postProcType == Union ? "no" : string(trs.postProcType))
       @printf("\n")
     end
 
     if trs.postProcType == Union
       # no post processor
 
-      if samples == nothing || datas == nothing
+      if allSamples == nothing || allData == nothing
           # first time, so allocate
-          sampleLength = length(sample)
+          sampleLength = length(samples)
           dataLength = length(data)
-          samples = Vector{eltype(sample)}(sampleLength * traceLength)
-          datas = Vector{eltype(data)}(dataLength * traceLength)
+          if isa(samples, BitVector)
+            # bit vectors are 8 times better than Vectors of bools since bit vectors are packed
+            allSamples = BitVector(sampleLength * traceLength)
+          else
+            allSamples = Vector{eltype(samples)}(sampleLength * traceLength)
+          end
+          allData = Vector{eltype(data)}(dataLength * traceLength)
       end
 
-      samples[readCount*sampleLength+1:readCount*sampleLength+sampleLength] = sample
-      datas[readCount*dataLength+1:readCount*dataLength+dataLength] = data
+      allSamples[readCount*sampleLength+1:readCount*sampleLength+sampleLength] = samples
+      allData[readCount*dataLength+1:readCount*dataLength+dataLength] = data
     end
 
     # valid trace, bump read counter
@@ -193,16 +202,15 @@ function readAllTraces(trs::Trace, traceOffset=start(trs), traceLength=length(tr
 
   if trs.postProcType != Union
     # return the post processing result
-    (datas, samples) = get(trs.postProcInstance)
-    return (datas, samples, eof)
+    (allData, allSamples) = get(trs.postProcInstance)
   else
     # resize & reshape that shit depending on the readCount
-    resize!(datas, (dataLength*readCount))
-    resize!(samples, (sampleLength*readCount))
+    resize!(allData, (dataLength*readCount))
+    resize!(allSamples, (sampleLength*readCount))
 
-    datas = reshape(datas, (dataLength, readCount))'
-    samples = reshape(samples, (sampleLength, readCount))'
-
-    return (datas,samples, eof)
+    allData = reshape(allData, (dataLength, readCount))'
+    allSamples = reshape(allSamples, (sampleLength, readCount))'
   end
+
+  return (allData, allSamples, eof)
 end
