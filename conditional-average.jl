@@ -3,11 +3,11 @@
 # Authors: Cees-Bart Breunesse, Ilya Kizhvatov
 # Implements technique described in "Behind the Scene of Side Channel Attacks", Asiacrypt 2013 (see docs/cond_avg.pdf)
 
-export CondAvg,add,get
+export CondAvg
 
 import Base.get
 
-type CondAvg
+type CondAvg <: Cond
   averages::Vector{Vector{Vector{Float64}}}
   counters::Matrix{UInt64}
   globcounter::Int
