@@ -37,7 +37,7 @@ type InspectorTrace <: Trace
 
   # to create a new one
   function InspectorTrace(filename::String, dataSpace::Int, sampleType::Type, numberOfSamplesPerTrace::Int)
-    !isfile(filename) || throw(ErrorException("file exists!"))
+    !isfile(filename) || throw(ErrorException(@sprintf("file %s exists!", filename)))
 
     (titleSpace, traceBlockPosition, lengthPosition, fileDescriptor) = writeInspectorTrsHeader(filename, dataSpace, sampleType, numberOfSamplesPerTrace)
     new(titleSpace, Nullable(0), dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, nothing, Union, Union, 0, filename, traceBlockPosition, true, lengthPosition)
