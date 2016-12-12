@@ -3,19 +3,28 @@
 # Author: Cees-Bart Breunesse
 
 include("aes.jl")
-include("conditional.jl")
 include("trs.jl")
 include("sca-leakages.jl")
 
 using Trs
 using Aes
 
-const random = true
+const random = false
 const nrOfTraces = 500
-const extrasamples = 0
-testvec128 = hex2bytes("000102030405060708090a0b0c0d0e0f")
-testvec192 = hex2bytes("000102030405060708090a0b0c0d0e0f1011121314151617")
-testvec256 = hex2bytes("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+# random per trace
+const prenoise = 100
+# random per trace set
+const postnoise = 100
+
+if random
+  testvec128 = hex2bytes("000102030405060708090a0b0c0d0e0f")
+  testvec192 = hex2bytes("000102030405060708090a0b0c0d0e0f1011121314151617")
+  testvec256 = hex2bytes("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+else
+  testvec128 = [UInt8(rand(0:255)) for i in 1:16]
+  testvec192 = [UInt8(rand(0:255)) for i in 1:24]
+  testvec256 = [UInt8(rand(0:255)) for i in 1:32]
+end
 
 function leak!(buf, str, state)
     # don't leak the actual key schedule
@@ -30,13 +39,7 @@ function leak!(buf, str, state)
 end
 
 function simulateCipher128()
-    if random
-        key = [UInt8(rand(0:255)) for i in 1:16]
-    else
-        key = testvec128
-    end
-
-    simulate(nrOfTraces, key, Cipher)
+    simulate(nrOfTraces, testvec128, Cipher)
 end
 
 function inputgenMC()
@@ -45,114 +48,47 @@ function inputgenMC()
 end
 
 function simulateCipher128MC()
-    if random
-        key = [UInt8(rand(0:255)) for i in 1:16]
-    else
-        key = testvec128
-    end
-
-    simulate(nrOfTraces, key, Cipher, inputgenMC, "mc")
+    simulate(nrOfTraces, testvec128, Cipher, inputgenMC, "mc")
 end
 
 function simulateInvCipher128MC()
-    if random
-        key = [UInt8(rand(0:255)) for i in 1:16]
-    else
-        key = testvec128
-    end
-
-    simulate(nrOfTraces, key, InvCipher, inputgenMC, "mc")
+    simulate(nrOfTraces, testvec128, InvCipher, inputgenMC, "mc")
 end
 
 function simulateEqInvCipher128MC()
-    if random
-        key = [UInt8(rand(0:255)) for i in 1:16]
-    else
-        key = testvec128
-    end
-
-    simulate(nrOfTraces, key, EqInvCipher, inputgenMC, "mc")
+    simulate(nrOfTraces, testvec128, EqInvCipher, inputgenMC, "mc")
 end
 
 function simulateCipher192()
-    if random
-        key = [UInt8(rand(0:255)) for i in 1:24]
-    else
-        key = testvec192
-    end
-
-    simulate(nrOfTraces, key, Cipher)
+    simulate(nrOfTraces, testvec192, Cipher)
 end
 
 function simulateCipher256()
-    if random
-        key = [UInt8(rand(0:255)) for i in 1:32]
-    else
-        key = testvec256
-    end
-
-    simulate(nrOfTraces, key, Cipher)
+    simulate(nrOfTraces, testvec256, Cipher)
 end
 
 function simulateInvCipher128()
-    if random
-        key = [UInt8(rand(0:255)) for i in 1:16]
-    else
-        key = testvec128
-    end
-
-    simulate(nrOfTraces, key, InvCipher)
+    simulate(nrOfTraces, testvec128, InvCipher)
 end
 
 function simulateInvCipher192()
-    if random
-        key = [UInt8(rand(0:255)) for i in 1:24]
-    else
-        key = testvec192
-    end
-
-    simulate(nrOfTraces, key, InvCipher)
+    simulate(nrOfTraces, testvec192, InvCipher)
 end
 
-
 function simulateInvCipher256()
-    if random
-        key = [UInt8(rand(0:255)) for i in 1:32]
-    else
-        key = testvec256
-    end
-
-    simulate(nrOfTraces, key, InvCipher)
+    simulate(nrOfTraces, testvec256, InvCipher)
 end
 
 function simulateEqInvCipher128()
-    if random
-        key = [UInt8(rand(0:255)) for i in 1:16]
-    else
-        key = testvec128
-    end
-
-    simulate(nrOfTraces, key, EqInvCipher)
+    simulate(nrOfTraces, testvec128, EqInvCipher)
 end
 
 function simulateEqInvCipher192()
-    if random
-        key = [UInt8(rand(0:255)) for i in 1:24]
-    else
-        key = testvec192
-    end
-
-    simulate(nrOfTraces, key, EqInvCipher)
+    simulate(nrOfTraces, testvec192, EqInvCipher)
 end
 
 function simulateEqInvCipher256()
-    if random
-        key = [UInt8(rand(0:255)) for i in 1:32]
-    else
-        key = testvec256
-    end
-
-    simulate(nrOfTraces, key, EqInvCipher)
+    simulate(nrOfTraces, testvec256, EqInvCipher)
 end
 
 function simulate(nrOfTraces, key, cipher, inputgen=() -> [UInt8(rand(0:255)) for i in 1:16], mc="sb")
@@ -171,31 +107,6 @@ function simulate(nrOfTraces, key, cipher, inputgen=() -> [UInt8(rand(0:255)) fo
     samples = Union
     data = Union
 
-    for i in 1:nrOfTraces
-        input = inputgen()
-        # input = hex2bytes(replace(" 00112233445566778899aabbccddeeff", " ", ""))
-        # input = hex2bytes(replace("8ea2b7ca516745bfeafc49904b496089 ", " ", ""))
-
-        output = cipher(input, w, (x,y)->leak!(samplesBuf,x,y))
-
-        if nrOfSamples == 0
-            nrOfSamples = position(samplesBuf) + extrasamples
-            samples = zeros(UInt8, (nrOfTraces, nrOfSamples))
-            data = zeros(UInt8, (nrOfTraces, 32))
-        else
-            # sanity check
-            if position(samplesBuf) != nrOfSamples - extrasamples
-                @printf("WOWOOWOOOO!!! Cipher returns non-constant #samples/run\n")
-                return
-            end
-        end
-
-        samples[i,:] = [takebuf_array(samplesBuf); [UInt8(rand(0:255)) for i in 1:extrasamples]]
-        data[i,1:16] = input
-        data[i,17:32] = output
-
-    end
-
     if cipher == Cipher
         mode = "ciph"
     elseif cipher == InvCipher
@@ -204,7 +115,32 @@ function simulate(nrOfTraces, key, cipher, inputgen=() -> [UInt8(rand(0:255)) fo
         mode = "eqinvciph"
     end
 
-    writeToTraces(@sprintf("aes%d_%s_%s_%s.trs", kl*8, mc, mode, bytes2hex(key)), data, samples)
+    local trs
+
+    for i in 1:nrOfTraces
+        input = inputgen()
+        rng = MersenneTwister(1)
+				write(samplesBuf, [UInt8(rand(0:255)) for i in 1:prenoise])
+        output = cipher(input, w, (x,y)->leak!(samplesBuf,x,y))
+        write(samplesBuf, [UInt8(rand(rng, 0:255)) for i in 1:postnoise])
+
+        if nrOfSamples == 0
+            nrOfSamples = position(samplesBuf)
+            filename = @sprintf("aes%d_%s_%s_%s.trs", kl*8, mc, mode, bytes2hex(key))
+            trs = InspectorTrace(filename, 32, UInt8, nrOfSamples)
+        else
+            # sanity check
+            if position(samplesBuf) != nrOfSamples
+                @printf("WOWOOWOOOO!!! Cipher returns non-constant #samples/run\n")
+                return
+            end
+        end
+
+        trs[i] = ([input;output], takebuf_array(samplesBuf))
+
+    end
+
+    close(trs)
 end
 
 simulateCipher128MC()
