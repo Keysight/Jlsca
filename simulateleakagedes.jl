@@ -2,16 +2,35 @@
 #
 # Author: Cees-Bart Breunesse
 
+# creates 123DES enc/dec simulation traces
+#
+# edit the constants to change how the traces are generated
+# go to function calls at the bottom of this file to change which traces are generated
+
 include("des.jl")
-include("conditional.jl")
 include("trs.jl")
 include("sca-leakages.jl")
 
 using Trs
 using Des
 
-const random = true
-testkey = hex2bytes("0001020304050607")
+# random key or static testkey
+const random = false
+# random per trace
+const prenoise = 100
+# random per trace set
+const postnoise = 100
+const nrOfTraces = 64
+
+if random
+	testkey = map(x -> x & 0xfe, hex2bytes("0011223344556677"))
+	testkey16 = map(x -> x & 0xfe, hex2bytes("00112233445566778899aabbccddeeff"))
+	testkey24 = map(x -> x & 0xfe, hex2bytes("00112233445566778899aabbccddeeffdeadbeefcafecee5"))
+else
+	testkey = [UInt8(rand(0:255)) & 0xfe for i in 1:8]
+	testkey16 = [UInt8(rand(0:255)) & 0xfe for i in 1:16]
+	testkey24 = [UInt8(rand(0:255)) & 0xfe for i in 1:24]
+end
 
 function leak!(buf, str, state)
 	if isa(state, BitVector)
@@ -60,28 +79,7 @@ function simulate(nrOfTraces, expkey, key, cipher, encrypt, inputgen=() -> [UInt
     samples = Union
     data = Union
 
-    for i in 1:nrOfTraces
-        input = inputgen()
-        output = cipher(input, expkey, encrypt, (x,y)->leak!(samplesBuf,x,y))
-
-        if nrOfSamples == 0
-            nrOfSamples = position(samplesBuf)
-            samples = zeros(UInt8, (nrOfTraces, nrOfSamples))
-            data = zeros(UInt8, (nrOfTraces, 16))
-        else
-            # sanity check
-            if position(samplesBuf) != nrOfSamples
-                @printf("WOWOOWOOOO!!! Cipher returns non-constant #samples/run\n")
-                return
-            end
-        end
-
-        samples[i,:] = takebuf_array(samplesBuf)
-        data[i,1:8] = input
-        data[i,9:16] = output
-    end
-
-    if encrypt
+		if encrypt
         mode = "enc"
     else
         mode = "dec"
@@ -93,98 +91,66 @@ function simulate(nrOfTraces, expkey, key, cipher, encrypt, inputgen=() -> [UInt
         ciphstr = @sprintf("tdes%d", div(length(key),8))
     end
 
-    writeToTraces(@sprintf("%s_%s_%s.trs", ciphstr, mode, bytes2hex(key)), data, samples)
+		local trs
+
+    for i in 1:nrOfTraces
+				rng = MersenneTwister(1)
+				write(samplesBuf, [UInt8(rand(0:255)) for i in 1:prenoise])
+        input = inputgen()
+        output = cipher(input, expkey, encrypt, (x,y)->leak!(samplesBuf,x,y))
+				write(samplesBuf, [UInt8(rand(rng, 0:255)) for i in 1:postnoise])
+
+        if nrOfSamples == 0
+            nrOfSamples = position(samplesBuf)
+						filename = @sprintf("%s_%s_%s.trs", ciphstr, mode, bytes2hex(key))
+						trs = InspectorTrace(filename, 16, UInt8, nrOfSamples)
+        else
+            # sanity check
+            if position(samplesBuf) != nrOfSamples
+                @printf("WOWOOWOOOO!!! Cipher returns non-constant #samples/run\n")
+                return
+            end
+        end
+
+				trs[i] = ([input;output], takebuf_array(samplesBuf))
+    end
+
+		close(trs)
 end
 
 function simulateCipher()
-    nrOfTraces = 500
-    if random
-        key = [UInt8(rand(0:255))&0xfe for i in 1:8]
-    else
-        key = testkey
-    end
-
-    simulate(nrOfTraces, deskeyexpansion(key), key, des, true)
+    simulate(nrOfTraces, deskeyexpansion(testkey), testkey, des, true)
 end
 
 function simulateInvCipher()
-    nrOfTraces = 500
-    if random
-        key = [UInt8(rand(0:255))&0xfe for i in 1:8]
-    else
-        key = testkey
-    end
-
-    simulate(nrOfTraces, deskeyexpansion(key), key, des, false)
+	simulate(nrOfTraces, deskeyexpansion(testkey), testkey, des, false)
 end
 
 
 function simulateTDES1enc()
-    nrOfTraces = 500
-    if random
-        key = [UInt8(rand(0:255))&0xfe for i in 1:8]
-    else
-        key = testkey
-    end
-
-    simulate(nrOfTraces, tdes3keyexpansion(key), key, tdes3, true)
+  simulate(nrOfTraces, tdes3keyexpansion(testkey), testkey, tdes3, true)
 end
 
 function simulateTDES1dec()
-    nrOfTraces = 500
-    if random
-        key = [UInt8(rand(0:255))&0xfe for i in 1:8]
-    else
-        key = testkey
-    end
-
-    simulate(nrOfTraces, tdes3keyexpansion(key), key, tdes3, false)
+    simulate(nrOfTraces, tdes3keyexpansion(testkey), testkey, tdes3, false)
 end
 
 
 function simulateTDES2enc()
-    nrOfTraces = 500
-    if random
-        key = [UInt8(rand(0:255))&0xfe for i in 1:16]
-    else
-        key = testkey
-    end
-
-    simulate(nrOfTraces, tdes3keyexpansion(key), key, tdes3, true)
+    simulate(nrOfTraces, tdes3keyexpansion(testkey16), testkey16, tdes3, true)
 end
 
 function simulateTDES2dec()
-    nrOfTraces = 500
-    if random
-        key = [UInt8(rand(0:255))&0xfe for i in 1:16]
-    else
-        key = testkey
-    end
-
-    simulate(nrOfTraces, tdes3keyexpansion(key), key, tdes3, false)
+    simulate(nrOfTraces, tdes3keyexpansion(testkey16), testkey16, tdes3, false)
 end
 
 
 function simulateTDES3enc()
-    nrOfTraces = 500
-    if random
-        key = [UInt8(rand(0:255))&0xfe for i in 1:24]
-    else
-        key = testkey
-    end
-
-    simulate(nrOfTraces, tdes3keyexpansion(key), key, tdes3, true)
+    simulate(nrOfTraces, tdes3keyexpansion(testkey24), testkey24, tdes3, true)
 end
 
 function simulateTDES3dec()
-    nrOfTraces = 500
-    if random
-        key = [UInt8(rand(0:255))&0xfe for i in 1:24]
-    else
-        key = testkey
-    end
-
-    simulate(nrOfTraces, tdes3keyexpansion(key), key, tdes3, false)
+    simulate(nrOfTraces, tdes3keyexpansion(testkey24), testkey24, tdes3, false)
 end
 
 simulateCipher()
