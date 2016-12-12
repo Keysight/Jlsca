@@ -13,7 +13,7 @@ include("sca-scoring.jl")
 include("sca-leakages.jl")
 include("attackaes-core.jl")
 
-function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysis, onetest::Bool)
+function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysis, onetest::Bool=false)
     tracedir = "aestraces"
     filenames = readdir(tracedir)
     leakageFunctions = [hw]
