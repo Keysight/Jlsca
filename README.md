@@ -3,6 +3,7 @@
 Jlsca is a toolbox in Julia to do the computational part (DPA) of a side channel attack. It supports:
 
 * Conditional averaging
+* Conditional sample reduction
 * Correlation power analysis (CPA) and non-profiled Linear regression analysis (LRA)
 * AES128/192/256 enc/dec, backward/forward S-box attacks
 * AES128 enc/dec chosen input MixColumn attack
@@ -21,6 +22,7 @@ It runs standalone or inside Riscure's Inspector as a module, so you would want 
 * You have Inspector but you want to play with features that are currently (4.10) not in Inspector, like:
 	* [non-profiled LRA](https://eprint.iacr.org/2013/794.pdf)
  	* [Conditional averaging](https://eprint.iacr.org/2013/794.pdf)
+	* Conditional sample reduction for attacking whiteboxes (see conditional-bitwisereduction.jl for what that means)
 
 # Who wrote it?
 
