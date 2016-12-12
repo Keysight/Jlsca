@@ -1,5 +1,5 @@
-module Conditional
+export Cond,add,get
 
-include("conditional-average.jl")
+abstract Cond
 
-end
+add(c::Cond, data::Vector, samples::Vector, idx::Int) = add(c, data, samples)
