@@ -62,10 +62,11 @@ const CodingShort = 0x02
 const CodingInt = 0x04
 const CodingFloat = 0x14
 
-# debugging
-const verbose = true
-
 pipe(trs::InspectorTrace) = isa(trs.fileDescriptor, Base.PipeEndpoint)
+
+# hack
+import Base.skip
+skip(fd::Base.PipeEndpoint, x::Integer) = read(fd, x)
 
 length(trs::InspectorTrace) = isnull(trs.numberOfTraces) ? typemax(Int) : get(trs.numberOfTraces)
 
@@ -90,13 +91,13 @@ function readInspectorTrsHeader(filename)
       traceBlockPosition = 0
       lengthPosition = 0
 
-      if verbose
-        if seekable
-          @printf("Opening Inspector trs file %s ..\n", filename)
-        else
-          @printf("Opening Inspector trs from stdin ..\n")
-        end
-      end
+      # if verbose
+      #   if seekable
+      #     @printf("Opening Inspector trs file %s ..\n", filename)
+      #   else
+      #     @printf("Opening Inspector trs from stdin ..\n")
+      #   end
+      # end
 
       while !done
         tag = read(f, UInt8)
@@ -118,7 +119,11 @@ function readInspectorTrsHeader(filename)
         elseif tag == TitleSpace && length == TitleSpaceLength
           titleSpace = read(f, UInt8)
         elseif tag == NumberOfTraces && length == NumberOfTracesLength
-          lengthPosition = position(f)
+          if seekable
+            lengthPosition = position(f)
+          else
+            lengthPosition = -1
+          end
           numberOfTraces = Nullable(ltoh(read(f, UInt32)))
         elseif tag == DataSpace && length == DataSpaceLength
           dataSpace = ltoh(read(f, UInt16))
@@ -140,23 +145,16 @@ function readInspectorTrsHeader(filename)
             sampleSpace = 1
           end
         else
-          if verbose
+          # if verbose
             println("[x] Skipping unknown tag $tag with length $length")
-          end
+          # end
           read(f, length)
         end
       end
 
-      if verbose
-        if !isnull(numberOfTraces)
-          @printf("#traces:  %d\n", get(numberOfTraces))
-        end
-        @printf("#samples: %d\n", numberOfSamplesPerTrace)
-        @printf("#data:    %d\n", dataSpace)
-        @printf("type:     %s\n", string(sampleType))
-      end
-      return (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, f)
+      @printf("Opened %s, #traces %s, #samples %d (%s), #data %d\n", filename, isnull(numberOfTraces) ? "unknown" : @sprintf("%d", get(numberOfTraces)), numberOfSamplesPerTrace, sampleType, dataSpace)
 
+      return (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, f)
   catch e
       close(f)
       rethrow(e)
@@ -189,6 +187,7 @@ function readData(trs::InspectorTrace, idx)
 
   skip(trs.fileDescriptor, trs.titleSpace)
   data = read(trs.fileDescriptor, trs.dataSpace)
+  length(data) == trs.dataSpace || throw(EOFError())
   trs.filePosition += trs.dataSpace
 
   return data

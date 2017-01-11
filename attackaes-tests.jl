@@ -44,7 +44,7 @@ function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         end
 
         if conditional
-            setPostProcessor(trs, CondAvg, getNumberOfAverages(params))
+          setPostProcessor(trs, CondAvg, length(params.keyByteOffsets), getNumberOfCandidates(params))
         end
 
         key = sca(trs,params,1, 200)

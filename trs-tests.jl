@@ -74,6 +74,38 @@ function testSplitBinary()
   rm(dataFilename)
 end
 
+function testInspectorMM()
+  dataSpace = 7
+  sampleType = UInt8
+  numberOfSamplesPerTrace = 29
+  numberOfTraces = 11
+  traceFilename = createTmpFile("bob.trs")
+
+  allSamples = reshape([rand(sampleType) for i in 1:(numberOfSamplesPerTrace*numberOfTraces)], (numberOfTraces,  numberOfSamplesPerTrace))
+  allData = reshape([rand(UInt8) for i in 1:(dataSpace*numberOfTraces)], (numberOfTraces, dataSpace))
+
+  trs = InspectorTrace(traceFilename, dataSpace, sampleType, numberOfSamplesPerTrace)
+
+  for i in 1:numberOfTraces
+    trs[i] = (allData[i,:], allSamples[i,:])
+    @test trs[i] == (allData[i,:], allSamples[i,:])
+  end
+
+  close(trs)
+
+  trs2 = InspectorTraceMM(traceFilename)
+
+  @test length(trs2) == numberOfTraces
+
+  for i in 1:numberOfTraces
+    @test trs2[i] == (allData[i,:], allSamples[i,:])
+  end
+
+  close(trs2)
+
+  rm(traceFilename)end
+
 
 testInspectorTrace()
 testSplitBinary()
+testInspectorMM()

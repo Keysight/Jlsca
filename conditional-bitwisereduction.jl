@@ -16,79 +16,139 @@
 # - bitwise conditional reduction reduces the #traces and #samples
 #
 # This approach does not work on ciphers that use widening encodings or random masks.
-export CondReduce
+export CondReduce,tobits
 
 using ProgressMeter
 
 type CondReduce <: Cond
-  indexes::Vector{Vector{Int}}
-  mask::Vector{BitVector}
-  counters::Array{Int,2}
+  mask::Dict{Int,BitVector}
+  traceIdx::Dict{Int,Dict{Int,Int}}
   globcounter::Int
+  numberOfAverages::Int
+  numberOfCandidates::Int
+  worksplit::WorkSplit
+  range::Range
   trs::Trace
 
-  function CondReduce(dataColumns, sampleLength, nrOfAverages, trs::Trace)
-    # a vector of vectors with vectors is fugly but much faster than a Matrix because these vectors are independent
-    indexes = Vector{Vector{Int}}(dataColumns)
-    mask = Vector{BitVector}(dataColumns)
-    for i in 1:dataColumns
-        indexes[i] = Vector{Int}(nrOfAverages)
-        mask[i] = trues(sampleLength)
-    end
-    counters = zeros(Int, (dataColumns, nrOfAverages))
+  function CondReduce(numberOfAverages::Int, numberOfCandidates::Int, trs::Trace)
+    mask = Dict{Int,BitVector}()
+    traceIdx = Dict{Int,Dict{Int,Int}}()
+    worksplit = WorkSplit(numberOfAverages, numberOfCandidates)
+    range = getWorkerRange(worksplit)
+    @printf("Conditional bitwise sample reduction, handling data range %s\n", range)
 
-    @printf("Conditional bit reduction for max %d averages of %d samples per data offset\n", nrOfAverages, sampleLength)
-    new(indexes, mask, counters, 0, trs)
+    new(mask, traceIdx, 0, numberOfAverages, numberOfCandidates, worksplit, range, trs)
   end
 end
 
-
 # only works on samples of BitVector type, do addSamplePass(trs, tobits)
 # to create this input efficiently!
-function add(c::CondReduce, datav::Vector, sample::BitVector, idx::Int)
-  for d in eachindex(datav)
-      data = datav[d]
+function add(c::CondReduce, trs::Trace, traceIdx::Int)
+  data::AbstractVector = getData(trs, traceIdx)
+  samples = Nullable{Vector{trs.sampleType}}()
 
-      if c.counters[d, data+1] == 0
-        c.indexes[d][data + 1] = idx
-        c.counters[d, data+1] = 1
-      else
-        c.counters[d, data+1] += 1
-        currmask = c.mask[d]
-        idxes = find(currmask)
-        maskidxes = idxes[find(c.trs[c.indexes[d][data + 1]][2][idxes] $ sample[idxes])]
-        currmask[maskidxes] .= false
-      end
+  if length(data) == 0
+    return
+  end
+
+  for idx in eachindex(data)
+    val = data[idx]
+
+    if !(toVal(c.worksplit, Int(idx), Int(val)) in c.range)
+      continue
+    end
+
+    if isnull(samples)
+     samples = Nullable(getSamples(trs, traceIdx))
+     if length(get(samples)) == 0
+       return
+     end
+    end
+
+    if !haskey(c.mask, idx)
+      c.mask[idx] = trues(length(get(samples)))
+      c.traceIdx[idx] = Dict{Int,Int}()
+    end
+
+    if !haskey(c.traceIdx[idx], val)
+      c.traceIdx[idx][val] = traceIdx
+    end
+
+    currmask = c.mask[idx]
+    idxes = find(currmask)
+    maskidxes = idxes[find(trs[c.traceIdx[idx][val]][2][idxes] $ get(samples)[idxes])]
+    currmask[maskidxes] .= false
   end
 
   c.globcounter += 1
 end
 
+function merge(this::CondReduce, other::CondReduce)
+  for (idx,dictofavgs) in other.traceIdx
+    if !haskey(this.traceIdx, idx)
+      this.traceIdx[idx] = dictofavgs
+    else
+      for (val, avg) in dictofavgs
+        if val in keys(this.traceIdx[idx])
+          throw(ErrorException("fixme"))
+        else
+          this.traceIdx[idx][val] = avg
+        end
+      end
+    end
+  end
+
+  for (idx,msk) in other.mask
+    if !haskey(this.mask, idx)
+      this.mask[idx] = msk
+    else
+      this.mask[idx] &= msk
+    end
+  end
+end
+
 function get(c::CondReduce)
+  if nprocs() > 1
+    for worker in workers()
+      if worker == c.worksplit.worker
+        continue
+      else
+        other = @fetchfrom worker Main.trs.postProcInstance
+        merge(c, other)
+      end
+    end
+  end
+
   datas = Matrix[]
   reducedsamples = Matrix[]
 
-  if size(c.counters)[2] <= 2^8
+  maxVal = 0
+  for k in keys(c.traceIdx)
+    maxVal = max(maxVal, findmax(keys(c.traceIdx[k]))[1])
+  end
+
+  if maxVal <= 2^8
     dataType = UInt8
-  elseif size(c.counters)[2] <= 2^16
+  elseif maxVal <= 2^16
     dataType = UInt16
   else
     throw(Exception("Unsupported and not recommended ;)"))
   end
 
-  for i in 1:size(c.counters)[1]
-    dataSnap = find(c.counters[i,:])
-    idxes = find(c.mask[i])
-    @printf("input %d: #columns from %d -> %d after conditional bitwise reduction\n", i, length(c.mask[i]), length(idxes))
+  for k in sort(collect(keys(c.traceIdx)))
+    dataSnap = collect(dataType, keys(c.traceIdx[k]))
+    idxes = find(c.mask[k])
     sampleSnap = BitArray{2}(length(dataSnap), length(idxes))
+
     for j in 1:length(dataSnap)
-        sampleSnap[j,:] = c.trs[c.indexes[i][dataSnap[j]]][2][idxes]
+      trsIndex = c.traceIdx[k][dataSnap[j]]
+      samples = getSamples(c.trs, trsIndex)
+      sampleSnap[j,:] = samples[idxes]
     end
-    dataSnap = dataSnap .- 1
+
     dataSnap = reshape(convert(Array{dataType,1}, dataSnap), length(dataSnap),1)
     push!(datas, dataSnap)
     push!(reducedsamples, sampleSnap)
-    @printf("\n")
   end
 
   @printf("\nReduced %d input traces, %s data type\n", c.globcounter, string(dataType))
@@ -96,6 +156,23 @@ function get(c::CondReduce)
   return (datas,reducedsamples)
 end
 
-function getCounter(c::CondReduce)
+function getGlobCounter(c::CondReduce)
   return c.globcounter
+end
+
+function tobits(x::Vector{UInt8})
+  bits = length(x)*8
+  discard = bits % 64
+  if discard > 0
+    @printf("found %d bits, but discarding %d bits, please 64 bit align your samples", bits, discard)
+    warned = true
+  end
+
+  # this is a fast hack to create BitVectors
+  a = BitVector()
+  a.chunks = reinterpret(UInt64, x)
+  a.len = bits - discard
+  a.dims = (0,)
+
+  return a
 end

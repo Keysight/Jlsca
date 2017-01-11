@@ -8,13 +8,14 @@ include("sca-leakages.jl")
 
 using Trs
 using Aes
+using ProgressMeter
 
 const random = false
 const nrOfTraces = 500
 # random per trace
-const prenoise = 100
+const prenoise = 10000
 # random per trace set
-const postnoise = 100
+const postnoise = 10000
 
 if random
   testvec128 = hex2bytes("000102030405060708090a0b0c0d0e0f")
@@ -117,7 +118,7 @@ function simulate(nrOfTraces, key, cipher, inputgen=() -> [UInt8(rand(0:255)) fo
 
     local trs
 
-    for i in 1:nrOfTraces
+    @showprogress for i in 1:nrOfTraces
         input = inputgen()
         rng = MersenneTwister(1)
 				write(samplesBuf, [UInt8(rand(0:255)) for i in 1:prenoise])

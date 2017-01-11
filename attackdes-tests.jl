@@ -34,10 +34,12 @@ function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         # bit expand
         # addSamplePass(trs, tobits)
 
+        # addSamplePass(trs, x -> [Float64(y) for y in x])
+
         # params.analysis = analysis
 
         if conditional
-            setPostProcessor(trs, CondAvg, getNumberOfAverages(params))
+            setPostProcessor(trs, CondAvg, length(params.keyByteOffsets), getNumberOfCandidates(params))
         end
 
         key = sca(trs,params,1, 200)

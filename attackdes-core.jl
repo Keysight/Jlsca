@@ -4,7 +4,6 @@
 
 using Des
 using Trs
-using ProgressMeter
 
 @enum DesMode DES=1 TDES1=2 TDES2=3 TDES3=4
 @enum DesTargetType SBOX=1 ROUNDOUT=2
@@ -159,7 +158,7 @@ function innerDesRound2(input::Vector{UInt8}, expDesKey1::BitVector, expDesKey2:
   return round2(Des.Cipher(Des.Cipher(input, expDesKey1, (x,y)->y, encrypt), expDesKey2, (x,y)->y, !encrypt), rk1, params)
 end
 
-function getNumberOfAverages(params::DesSboxAttack)
+function getNumberOfCandidates(params::DesSboxAttack)
   if params.targetType == ROUNDOUT
     return 1024
   else

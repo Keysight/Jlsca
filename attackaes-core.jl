@@ -4,7 +4,8 @@
 
 using Aes
 using Trs
-using ProgressMeter
+
+export AesSboxAttack,AesMCAttack
 
 @enum AesMode CIPHER=1 INVCIPHER=2 EQINVCIPHER=3
 @enum AesKeyLength KL128=16 KL192=24 KL256=32
@@ -178,7 +179,7 @@ function recoverKey(keymaterial::Vector{UInt8}, mode, direction)
     end
 end
 
-function getNumberOfAverages(params::AesAttack)
+function getNumberOfCandidates(params::AesAttack)
   return 256
 end
 
@@ -285,14 +286,12 @@ function getCorrectRoundKeyMaterial(params::AesAttack, phase::Phase)
 end
 
 # filter function for mixcolumns attack so that we don't accept data that's not semi-constant
-function filterConstantInput(offsets, data::Vector{UInt8}, constant::UInt8=nothing)
+function filterConstantInput(offsets, data::Vector{UInt8}, constant::UInt8)
   for i in 1:length(data)
     if !(i in offsets)
-      if constant == nothing
-        constant = data[i]
-      elseif data[i] != constant
+      if data[i] != constant
         # return nothing (and thus reject the trace)
-        return
+        return Vector{UInt8}(0)
       end
     end
   end
@@ -414,7 +413,7 @@ function scatask(trs::Trace, params::AesSboxAttack, firstTrace=1, numberOfTraces
   #   (data,samples) = deserialize(fd)
   #   close(fd)
   # else
-  #   @time (data,samples) = readAllTraces(trs, firstTrace, numberOfTraces)
+  #   @time (data,samples) = readTraces(trs, firstTrace, numberOfTraces)
   #   if typeof(samples) == Vector{Matrix}
   #     fd = open("hack.bin", "w")
   #     serialize(fd, (data,samples))
