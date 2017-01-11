@@ -170,7 +170,7 @@ end
 
 # generic sca function, this one is called in all the unit tests and the main functions
 function sca(trs::Trace, params::Attack, firstTrace=1, numberOfTraces=length(trs), printSubs=false)
-  @printf("\nJlsca running in Julia version: %s\n\n", VERSION)
+  @printf("\nJlsca running in Julia version: %s, %d processes/%d workers\n\n", VERSION, nprocs(), nworkers())
 
   printParameters(params)
 

@@ -64,6 +64,10 @@ const CodingFloat = 0x14
 
 pipe(trs::InspectorTrace) = isa(trs.fileDescriptor, Base.PipeEndpoint)
 
+# hack
+import Base.skip
+skip(fd::Base.PipeEndpoint, x::Integer) = read(fd, x)
+
 length(trs::InspectorTrace) = isnull(trs.numberOfTraces) ? typemax(Int) : get(trs.numberOfTraces)
 
 # read the header of a Riscure Inspector trace set (TRS)
@@ -115,7 +119,11 @@ function readInspectorTrsHeader(filename)
         elseif tag == TitleSpace && length == TitleSpaceLength
           titleSpace = read(f, UInt8)
         elseif tag == NumberOfTraces && length == NumberOfTracesLength
-          lengthPosition = position(f)
+          if seekable
+            lengthPosition = position(f)
+          else
+            lengthPosition = -1
+          end
           numberOfTraces = Nullable(ltoh(read(f, UInt32)))
         elseif tag == DataSpace && length == DataSpaceLength
           dataSpace = ltoh(read(f, UInt16))
@@ -179,6 +187,7 @@ function readData(trs::InspectorTrace, idx)
 
   skip(trs.fileDescriptor, trs.titleSpace)
   data = read(trs.fileDescriptor, trs.dataSpace)
+  length(data) == trs.dataSpace || throw(EOFError())
   trs.filePosition += trs.dataSpace
 
   return data

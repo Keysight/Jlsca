@@ -135,7 +135,7 @@ end
 
 function runPostProcessor(trs::Trace, range::Range, f::Function)
   add(trs.postProcInstance, trs, range, f)
-  trs.tracesReturned += length(range)
+  trs.tracesReturned += getGlobCounter(trs.postProcInstance)
 end
 
 # returns true when a post processor is set to this trace set
@@ -209,7 +209,9 @@ end
 
 function fun(x::Int)
   progress = Main.getProgress()
-  update!(progress, progress.counter + x)
+  if progress != nothing
+    update!(progress, progress.counter + x)
+  end
 end
 
 
@@ -221,7 +223,11 @@ function readAndPostProcessTraces(trs2::Trace, traceOffset=start(trs), traceLeng
   eof = false
   local data, samples, dataLength, sampleLength
 
-  progress = Progress(traceLength*nworkers(), 1, "Processing traces.. ")
+  if !pipe(trs2)
+    progress = Progress(traceLength*nworkers(), 1, "Processing traces.. ")
+  else
+    progress = nothing
+  end
 
   traceStart = traceOffset
   traceEnd = (traceOffset + traceLength - 1)
@@ -244,7 +250,9 @@ function readAndPostProcessTraces(trs2::Trace, traceOffset=start(trs), traceLeng
     runPostProcessor(trs2, traceStart:traceEnd, fun)
   end
 
-  finish!(progress)
+  if progress != nothing
+    finish!(progress)
+  end
 
   if isa(trs2, DistributedTrace)
     (allData, allSamples) = @fetch get(Main.trs.postProcInstance)

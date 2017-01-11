@@ -45,15 +45,23 @@ function splitRange(w::WorkSplit, workers::Int)
 end
 
 function add(c::Cond, trs::Trace, range::Range, f::Function)
-  t1 = time()
-  cnt = 0
-  for idx in range
-    add(c, trs, idx)
-    t2 = time()
-    if t2 - t1 > 0.2
-      t1 = time()
-      remotecall_wait(f, 1, getGlobCounter(c)-cnt)
-      cnt = getGlobCounter(c)
+  try
+    t1 = time()
+    cnt = 0
+    for idx in range
+      add(c, trs, idx)
+      t2 = time()
+      if t2 - t1 > 0.2
+        t1 = time()
+        remotecall_wait(f, 1, getGlobCounter(c)-cnt)
+        cnt = getGlobCounter(c)
+      end
+    end
+  catch e
+    if isa(e, EOFError)
+      return
+    else
+      rethrow(e)
     end
   end
 end

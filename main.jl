@@ -81,8 +81,11 @@ function jlsca4inspector(params::Attack)
   # read Inspector traces from stdin
   trs = InspectorTrace("-")
 
+  numberOfAverages = length(params.keyByteOffsets)
+  numberOfCandidates = getNumberOfCandidates(params)
+
   # enable conditional averaging
-  setPostProcessor(trs, CondAvg, getNumberOfCandidates(params))
+  setPostProcessor(trs, CondAvg, numberOfAverages, numberOfCandidates)
 
   # go baby go!
   return sca(trs, params, 1, length(trs), false)
