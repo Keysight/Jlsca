@@ -4,6 +4,7 @@ Jlsca is a toolbox in Julia to do the computational part (DPA) of a side channel
 
 * Conditional averaging
 * Conditional sample reduction
+* Parallelization of the above
 * Correlation power analysis (CPA) and non-profiled Linear regression analysis (LRA)
 * AES128/192/256 enc/dec, backward/forward S-box attacks
 * AES128 enc/dec chosen input MixColumn attack
@@ -55,20 +56,25 @@ If you attack inner rounds, you'll need to manually cut and paste "next phase in
 
 # Running from cmd line
 
-Function go() in sca.jl can be used to attack all the example traces in directories aestraces/ and destraces/ without having to change any code, for example:
+Function gofaster(), called in the last line of main.jl, can be used to attack all the example traces in directories aestraces/ and destraces/ without having to change any code, for example:
 ```
-julia -Lsca.jl -e"Sca.go()" aestraces/aes192_sb_eqinvciph_5460adcd34117f1d9a90352d3a37188f6e9724f0696898d2.trs
+julia -Lsca.jl main.jl aestraces/aes192_sb_eqinvciph_5460adcd34117f1d9a90352d3a37188f6e9724f0696898d2.trs
+```
+If you want to run Jlsca with 2 workers:
+```
+julia -p2 -Lsca.jl main.jl aestraces/aes192_sb_eqinvciph_5460adcd34117f1d9a90352d3a37188f6e9724f0696898d2.trs
 ```
 or for short:
 ```
 ./jlsca.sh aestraces/aes192_sb_eqinvciph_5460adcd34117f1d9a90352d3a37188f6e9724f0696898d2.trs
 ```
 
+
 The attack parameters are extracted from the file name, and some hardcoded defaults are used (i.e. CPA, single bit0 or HW attack).
 
 In short this is what happens when you run the above command:
 
-`Sca.go()` sets up a "params" object with all the attack parameters, and then calls function `Sca.sca()` with that parameter object and a trace set. Function Sca.getParameters() called by Sca.go() looks at the filename of trace set and automatically configures a parameter object of the correct type and default parameter values if it can. The used parameters will be printed on the console. You can tweak and change most behavior by changing the parameters and not the underlying code. I recommend you copy go() to myahhack() and tweak it as described in the next section. There are some examples in sca.jl, see the Examples section.
+`gofaster()` sets up a "params" object with all the attack parameters, and then calls function `Sca.sca()` with that parameter object and a trace set. Function Sca.getParameters() called by Sca.go() looks at the filename of trace set and automatically configures a parameter object of the correct type and default parameter values if it can. The used parameters will be printed on the console. You can tweak and change most behavior by changing the parameters and not the underlying code. I recommend you copy go() or gofaster() to myhack() and tweak it as described in the next section. There are some examples in main.jl, see the Examples section.
 
 # Hacking stuff
 ## Attack parameters
@@ -190,8 +196,8 @@ The data passes that are configured with addDataPass determine the data on which
 
 ## Examples
 
-Function `wb()` in `sca.jl` implements the [leakage models](https://eprint.iacr.org/2013/794.pdf) to attack 	Dual AES implementations
-Function `hammer()` in `sca.jl` can be used as a starting point for running many CPAs on many memory dumps extracted from whiteboxes.
+Function `wb()` in `main.jl` implements the [leakage models](https://eprint.iacr.org/2013/794.pdf) to attack 	Dual AES implementations
+Function `condred()` in `main.jl` uses conditional sample reduction
 
 ## Test runs
 
