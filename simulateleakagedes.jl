@@ -17,10 +17,10 @@ using Des
 # random key or static testkey
 const random = false
 # random per trace
-const prenoise = 100
+const prenoise = 0
 # random per trace set
-const postnoise = 100
-const nrOfTraces = 64
+const postnoise = 0
+const nrOfTraces = 5000
 
 if random
 	testkey = map(x -> x & 0xfe, hex2bytes("0011223344556677"))

@@ -8,62 +8,140 @@ export CondAvg
 import Base.get
 
 type CondAvg <: Cond
-  averages::Vector{Vector{Vector{Float64}}}
-  counters::Matrix{UInt64}
+  averages::Dict{Int,Dict{Int,Vector{Float64}}}
+  counters::Dict{Int,Dict{Int,Int}}
   globcounter::Int
+  numberOfAverages::Int
+  numberOfCandidates::Int
+  worksplit::WorkSplit
+  range::Range
 
-  function CondAvg(dataColumns, sampleLength, nrOfAverages)
-    averagesType = Float64
+  function CondAvg(numberOfAverages::Int, numberOfCandidates::Int)
+    averages = Dict{Int,Dict{Int,Vector{Float64}}}()
+    counters = Dict{Int,Dict{Int,Int}}()
+    worksplit = WorkSplit(numberOfAverages, numberOfCandidates)
+    range = getWorkerRange(worksplit)
+    @printf("Conditional averaging, handling data range %s\n", range)
 
-    # a vector of vectors with vectors is fugly but much faster than a Matrix because these vectors are independent
-    averages = Vector{Vector{Vector{averagesType}}}(dataColumns)
-    for i in 1:dataColumns
-        averages[i] = Vector{Vector{averagesType}}(nrOfAverages)
-        for j in 1:nrOfAverages
-            averages[i][j] = zeros(averagesType, sampleLength)
-        end
-    end
-    counters = zeros(UInt64, dataColumns, nrOfAverages)
-    @printf("Conditional averaging for max %d averages of %d samples per data offset, #threads %d\n", nrOfAverages, sampleLength, Threads.nthreads())
-    new(averages, counters, 0)
+    new(averages, counters, 0, numberOfAverages, numberOfCandidates, worksplit, range)
   end
 end
 
-function add(c::CondAvg, datav::Vector, sample::Vector)
-   Threads.@threads for d in eachindex(datav)
-        data = datav[d]
-        c.counters[d, data + 1] += 1
-        counter = c.counters[d,data + 1]
+function addAverage(c::CondAvg, idx::Int, val::Int, samples::AbstractVector)
+  c.counters[idx][val] += 1
+  counter::Int = c.counters[idx][val]
+  average::Vector{Float64} = c.averages[idx][val]
 
-        # nice and short but slow
-        # a = c.averages[d][data + 1]
-        # c.averages[d][data + 1] = a .+ (sample .- a) ./ counter
+  for i in eachindex(samples)
+    @inbounds average[i] += (samples[i] - average[i]) / counter
+  end
+end
 
-        # looped and ugly but fast ..
-        for i in 1:length(sample)
-          a = c.averages[d][data + 1][i]
-          c.averages[d][data + 1][i] = a + (Float64(sample[i]) - a) / counter
-        end
+function add(c::CondAvg, trs::Trace, traceIdx::Int)
+  data::AbstractVector = getData(trs, traceIdx)
+  samples = Nullable{Vector{trs.sampleType}}()
+
+  if length(data) == 0
+    return
+  end
+
+  for idx in eachindex(data)
+    val = data[idx]
+
+    if !(toVal(c.worksplit, Int(idx), Int(val)) in c.range)
+      continue
     end
-    c.globcounter += 1
+
+    if isnull(samples)
+     samples = Nullable(getSamples(trs, traceIdx))
+     if length(get(samples)) == 0
+       return
+     end
+    end
+
+    if !haskey(c.counters, idx)
+     c.counters[idx] = Dict{Int,Int}()
+     c.averages[idx] = Dict{Int,Vector{Float64}}()
+    end
+
+    if !haskey(c.counters[idx], val)
+     c.counters[idx][val] = 0
+     c.averages[idx][val] = zeros(Float64, length(get(samples)))
+    end
+
+    addAverage(c, idx, Int(val), get(samples))
+
+  end
+
+  c.globcounter += 1
+
+end
+
+function merge(this::CondAvg, other::CondAvg)
+  for (idx,dictofavgs) in other.averages
+    if !haskey(this.averages, idx)
+      this.averages[idx] = dictofavgs
+    else
+      for (val, avg) in dictofavgs
+        if val in keys(this.averages[idx])
+          throw(ErrorException("fixme"))
+        else
+          this.averages[idx][val] = avg
+        end
+      end
+    end
+  end
+
+  for (idx,dictofcounts) in other.counters
+    if !haskey(this.counters, idx)
+      this.counters[idx] = dictofcounts
+    else
+      for (val, count) in dictofcounts
+        if val in keys(this.counters[idx])
+          throw(ErrorException("fixme"))
+        else
+          this.counters[idx][val] = count
+        end
+      end
+    end
+  end
+
 end
 
 function get(c::CondAvg)
+  if nprocs() > 1
+    for worker in workers()
+      if worker == c.worksplit.worker
+        continue
+      else
+        other = @fetchfrom worker Main.trs.postProcInstance
+        merge(c, other)
+      end
+    end
+  end
+
   datas = Matrix[]
   averages = Matrix[]
 
-  if size(c.counters)[2] <= 2^8
+  maxVal = 0
+  for k in keys(c.counters)
+    maxVal = max(maxVal, findmax(keys(c.counters[k]))[1])
+  end
+
+  if maxVal <= 2^8
     dataType = UInt8
-  elseif size(c.counters)[2] <= 2^16
+  elseif maxVal <= 2^16
     dataType = UInt16
   else
     throw(Exception("Unsupported and not recommended ;)"))
   end
 
-  for i in 1:size(c.counters)[1]
-    dataSnap = find(c.counters[i,:])
-    sampleSnap = reduce(hcat,c.averages[i][dataSnap])'
-    dataSnap = dataSnap .- 1
+  for k in sort(collect(keys(c.counters)))
+    dataSnap = collect(dataType, keys(c.counters[k]))
+    sampleSnap = Matrix{Float64}(length(dataSnap), length(first(first(c.averages)[2])[2]))
+    for i in 1:length(dataSnap)
+      sampleSnap[i,:] = c.averages[k][dataSnap[i]]
+    end
     dataSnap = reshape(convert(Array{dataType,1}, dataSnap), length(dataSnap),1)
     push!(datas, dataSnap)
     push!(averages, sampleSnap)
@@ -75,6 +153,6 @@ function get(c::CondAvg)
   return (datas,averages)
 end
 
-function getCounter(c::CondAvg)
-  return c.globcounter
-end
+getGlobCounter(c::CondAvg) = c.globcounter
+getAverages(c::CondAvg) = c.averages
+getCounters(c::CondAvg) = c.counters

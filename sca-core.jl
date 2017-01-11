@@ -11,7 +11,9 @@ export analysis,attack
 export sca
 export scatask
 export Status
-export printParameters
+export printParameters,getParameters
+export Direction,Phase
+export getNumberOfCandidates
 
 abstract Analysis
 
@@ -86,7 +88,7 @@ function analysis(params::Attack, phase::Enum, trs::Trace, firstTrace::Int, numb
       end
 
       # read traces
-      (data, samples, eof) = @time readAllTraces(trs, offset, min(stepSize, numberOfTraces - offset + 1))
+      (data, samples, eof) = @time readTraces(trs, offset, min(stepSize, numberOfTraces - offset + 1))
 
       if data == nothing || samples == nothing
         scores = nothing
@@ -120,7 +122,7 @@ function analysis(params::Attack, phase::Enum, trs::Trace, firstTrace::Int, numb
             getScoresAndOffsets!(scoresAndOffsets, C, 1, l, nrLeakageFunctions, params.analysis.postProcess, nrKbVals)
           end
       else
-        @printf("%s on samples shape %s and data shape %s\n", string(typeof(params.analysis).name.name), size(samples), size(data))
+        @printf("%s on %s samples shape %s and %s data shape %s\n", string(typeof(params.analysis).name.name), eltype(samples), size(samples), eltype(data), size(data))
         if size(samples)[2] == 0
           @printf("no samples!\n")
           scores = nothing
@@ -197,7 +199,6 @@ function sca(trs::Trace, params::Attack, firstTrace=1, numberOfTraces=length(trs
 
     # function scatask is overloaded for the params type
     t::Task = @task scatask(trs, params, firstTrace, numberOfTraces, phase, phaseInput)
-
 
     try
       # iterate through whatever scatask is producing

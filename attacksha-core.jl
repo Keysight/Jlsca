@@ -84,7 +84,7 @@ function scatask(trs::Trace, params::ModAddAttack, firstTrace=1, numberOfTraces=
 
 end
 
-function getNumberOfAverages(params::ModAddAttack)
+function getNumberOfCandidates(params::ModAddAttack)
 	return 256
 end
 
@@ -106,7 +106,7 @@ function shattack()
   # params.analysis.leakageFunctions = [hw]
 
   # enable conditional averaging
-  # setPostProcessor(trs, CondAvg, getNumberOfAverages(params))
+  # setPostProcessor(trs, CondAvg, getNumberOfCandidates(params))
 
   # addSamplePass(trs, x -> x[1:8])
 
