@@ -64,7 +64,7 @@ function gofaster()
 
   @everyworker begin
       using Trs
-      trs = InspectorTraceMM($filename)
+      trs = InspectorTrace($filename)
       setPostProcessor(trs, CondAvg, $numberOfAverages, $numberOfCandidates)
   end
 
@@ -172,7 +172,7 @@ function condred()
   params.keyByteOffsets = [1]
 
   # create Trace instance
-  trs = InspectorTraceMM(filename)
+  trs = InspectorTrace(filename)
 
   # addDataPass(trs, x -> x[1:16])
 
