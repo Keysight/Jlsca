@@ -7,7 +7,7 @@ include("des.jl")
 include("dpa.jl")
 include("lra.jl")
 include("trs.jl")
-# include("align.jl")
+include("align.jl")
 
 module Sca
 
