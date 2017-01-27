@@ -65,6 +65,14 @@ function gofaster()
   @everyworker begin
       using Trs
       trs = InspectorTrace($filename)
+
+      # maxShift = 20000
+      # referenceOffset = 5000
+      # reference = trs[1][2][referenceOffset:referenceOffset+5000]
+      # corvalMin = 0.4
+      # alignstate = CorrelationAlignFFT(reference, referenceOffset, maxShift)
+      # addSamplePass(trs, x -> ((shift,corval) = correlationAlign(x, alignstate); corval > corvalMin ? circshift(x, shift) : Vector{eltype(x)}(0)))
+
       setPostProcessor(trs, CondAvg, $numberOfAverages, $numberOfCandidates)
   end
 
