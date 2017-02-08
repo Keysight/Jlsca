@@ -225,7 +225,7 @@ function printParameters(params::Union{AesSboxAttack,AesMCAttack})
   targetFunction = getTargetFunction(params)
 
   attackStr = (isa(params, AesSboxAttack) ? "Sbox" : "Mixcolumn")
-  analysisStr = (isa(params.analysis, DPA) ? "DPA" : "LRA")
+  analysisStr = string(typeof(params.analysis).name.name)
 
   @printf("AES %s %s attack parameters\n", attackStr, analysisStr)
   printParameters(params.analysis)

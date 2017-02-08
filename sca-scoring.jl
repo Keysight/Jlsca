@@ -72,7 +72,7 @@ function truncate(fname)
     close(fd)
 end
 
-function add2kka(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, keyLength, keyOffsets, numberOfTraces, numberOfSamples, correctRoundKeymaterial::Vector{UInt8}, fdorstring::Union{IO,AbstractString},  leakageFunctionsCombinator=(+))
+function add2kka(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, keyLength, keyOffsets, numberOfTraces, correctRoundKeymaterial::Vector{UInt8}, fdorstring::Union{IO,AbstractString},  leakageFunctionsCombinator=(+))
   local fd
 
   if isa(fdorstring,AbstractString)
@@ -125,7 +125,7 @@ function add2kka(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}},
 end
 
 # print the scores pretty
-function printScores(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, keyLength, keyOffsets, numberOfTraces, numberOfSamples, leakageFunctionsCombinator=(+), correctRoundKeymaterial=Nullable{Vector{UInt8}}(), printsubs=true,  max=5, io=STDOUT)
+function printScores(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, keyLength, keyOffsets, numberOfTraces, leakageFunctionsCombinator=(+), correctRoundKeymaterial=Nullable{Vector{UInt8}}(), printsubs=true,  max=5, io=STDOUT)
   max = 5
   scores = getCombinedScores(scoresAndOffsets, leakageFunctionsCombinator)
 
@@ -168,8 +168,7 @@ function printScores(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt
 
       if nrLeakageFunctions == 1
         sample = scoresAndOffsets[1][2][i,j]
-        percentage = 100 * sample/numberOfSamples
-        @printf(io, "rank: %3d, %s: 0x%02x, peak: %f @ %d (%0.2f%%)\n", rank, pretty, cand, peak, sample, percentage)
+        @printf(io, "rank: %3d, %s: 0x%02x, peak: %f @ %d\n", rank, pretty, cand, peak, sample)
       else
         @printf(io, "rank: %3d, %s: 0x%02x, %s of peaks: %f\n", rank, pretty, cand, string(leakageFunctionsCombinator), peak)
         if printsubs
@@ -177,8 +176,7 @@ function printScores(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt
           for l in 1:nrLeakageFunctions
             (lscores, loffsets) = scoresAndOffsets[l]
             sample = loffsets[i,j]
-            percentage = 100 * sample/numberOfSamples
-            @printf(io, " %0.2f @ %d (%0.2f%%)\n", lscores[i,j], sample, percentage)
+            @printf(io, " %0.2f @ %d\n", lscores[i,j], sample)
           end
         end
       end

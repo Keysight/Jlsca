@@ -11,20 +11,25 @@ type CondAvg <: Cond
   averages::Dict{Int,Dict{Int,Vector{Float64}}}
   counters::Dict{Int,Dict{Int,Int}}
   globcounter::Int
-  numberOfAverages::Int
-  numberOfCandidates::Int
   worksplit::WorkSplit
-  range::Range
 
-  function CondAvg(numberOfAverages::Int, numberOfCandidates::Int)
+  function CondAvg()
+    CondAvg(NoSplit())
+  end
+
+  function CondAvg(worksplit::WorkSplit)
     averages = Dict{Int,Dict{Int,Vector{Float64}}}()
     counters = Dict{Int,Dict{Int,Int}}()
-    worksplit = WorkSplit(numberOfAverages, numberOfCandidates)
-    range = getWorkerRange(worksplit)
-    @printf("Conditional averaging, handling data range %s\n", range)
+    # @printf("Conditional averaging, split %s\n", worksplit)
 
-    new(averages, counters, 0, numberOfAverages, numberOfCandidates, worksplit, range)
+    new(averages, counters, 0, worksplit)
   end
+end
+
+function reset(c::CondAvg)
+  c.averages = Dict{Int,Dict{Int,Vector{Float64}}}()
+  c.counters = Dict{Int,Dict{Int,Int}}()
+  c.globcounter = 0
 end
 
 function addAverage(c::CondAvg, idx::Int, val::Int, samples::AbstractVector)
@@ -48,7 +53,7 @@ function add(c::CondAvg, trs::Trace, traceIdx::Int)
   for idx in eachindex(data)
     val = data[idx]
 
-    if !(toVal(c.worksplit, Int(idx), Int(val)) in c.range)
+    if isa(c.worksplit, SplitByData) && !(toVal(c.worksplit, Int(idx), Int(val)) in c.worksplit.range)
       continue
     end
 
@@ -78,13 +83,18 @@ function add(c::CondAvg, trs::Trace, traceIdx::Int)
 end
 
 function merge(this::CondAvg, other::CondAvg)
+  if isa(this.worksplit, SplitByTraces)
+    this.globcounter += other.globcounter
+  end
   for (idx,dictofavgs) in other.averages
     if !haskey(this.averages, idx)
       this.averages[idx] = dictofavgs
     else
       for (val, avg) in dictofavgs
         if val in keys(this.averages[idx])
-          throw(ErrorException("fixme"))
+          delta = other.averages[idx][val] - this.averages[idx][val]
+          n = other.counters[idx][val] + this.counters[idx][val]
+          this.averages[idx][val] += other.counters[idx][val] .* delta ./ n
         else
           this.averages[idx][val] = avg
         end
@@ -98,7 +108,7 @@ function merge(this::CondAvg, other::CondAvg)
     else
       for (val, count) in dictofcounts
         if val in keys(this.counters[idx])
-          throw(ErrorException("fixme"))
+          this.counters[idx][val] += count
         else
           this.counters[idx][val] = count
         end
@@ -109,7 +119,8 @@ function merge(this::CondAvg, other::CondAvg)
 end
 
 function get(c::CondAvg)
-  if nprocs() > 1
+  @assert myid() == 1
+  if !isa(c.worksplit, NoSplit)
     for worker in workers()
       if worker == c.worksplit.worker
         continue
@@ -137,7 +148,7 @@ function get(c::CondAvg)
   end
 
   for k in sort(collect(keys(c.counters)))
-    dataSnap = collect(dataType, keys(c.counters[k]))
+    dataSnap = sort(collect(dataType, keys(c.counters[k])))
     sampleSnap = Matrix{Float64}(length(dataSnap), length(first(first(c.averages)[2])[2]))
     for i in 1:length(dataSnap)
       sampleSnap[i,:] = c.averages[k][dataSnap[i]]

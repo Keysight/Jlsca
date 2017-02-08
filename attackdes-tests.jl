@@ -4,14 +4,10 @@
 
 using Base.Test
 
-include("des.jl")
-include("dpa.jl")
-include("lra.jl")
-include("trs.jl")
-include("sca-core.jl")
-include("sca-scoring.jl")
-include("sca-leakages.jl")
-include("attackdes-core.jl")
+using Sca
+using Trs
+
+import Sca.FORWARD,Sca.BACKWARD,Sca.PHASE1,Sca.PHASE2,Sca.PHASE3,Sca.PHASE4,Sca.PHASE5,Sca.PHASE6,Sca.SBOX,Sca.ROUNDOUT,Sca.TDES1,Sca.TDES2,Sca.TDES3
 
 function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysis, onetest::Bool=false)
     tracedir = "destraces"
@@ -29,20 +25,23 @@ function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         params.analysis = analysis
         # params.analysis.leakageFunctions = [hw]
         # create Trace instance
-        @time trs = InspectorTrace(fullfilename)
-
-        # bit expand
-        # addSamplePass(trs, tobits)
-
-        # addSamplePass(trs, x -> [Float64(y) for y in x])
-
-        # params.analysis = analysis
-
         if conditional
-            setPostProcessor(trs, CondAvg, length(params.keyByteOffsets), getNumberOfCandidates(params))
+          @everyworker begin
+            using Trs
+            trs = InspectorTrace($fullfilename)
+
+            setPostProcessor(trs, CondAvg(SplitByTracesSliced()))
+          end
+        else
+          trs = InspectorTrace(fullfilename)
         end
 
-        key = sca(trs,params,1, 200)
+
+        if conditional
+          key = sca(DistributedTrace(),params,1,200)
+        else
+          key = sca(trs,params,1, 200)
+        end
 
         @test(key == get(params.knownKey))
 

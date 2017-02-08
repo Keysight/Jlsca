@@ -5,6 +5,8 @@
 using Des
 using Trs
 
+export DesSboxAttack
+
 @enum DesMode DES=1 TDES1=2 TDES2=3 TDES3=4
 @enum DesTargetType SBOX=1 ROUNDOUT=2
 
@@ -59,7 +61,7 @@ function printParameters(params::DesSboxAttack)
   targetFunction = getTargetFunction(params)
 
   attackStr = "Sbox"
-  analysisStr = (isa(params.analysis, DPA) ? "DPA" : "LRA")
+  analysisStr = string(typeof(params.analysis).name.name)
 
   @printf("DES %s %s attack parameters\n", attackStr, analysisStr)
   printParameters(params.analysis)

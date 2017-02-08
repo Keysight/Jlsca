@@ -1,5 +1,20 @@
 export DistributedTrace
 
+import Base.sync_begin, Base.sync_end, Base.async_run_thunk
+export @everyworker
+
+macro everyworker(ex)
+    quote
+        sync_begin()
+        thunk = ()->(eval(Main,$(Expr(:quote,ex))); nothing)
+        for pid in workers()
+            async_run_thunk(()->remotecall_fetch(thunk, pid))
+            yield() # ensure that the remotecall_fetch has been started
+        end
+        sync_end()
+    end
+end
+
 type DistributedTrace <: Trace
   count::Int
 
@@ -43,40 +58,27 @@ function reset(trs::DistributedTrace)
   end
 end
 
-function getCounter(trs::DistributedTrace)
-  total = @fetch Main.trs.tracesReturned
-  # total::Int = 0
-  # @sync for worker in workers()
-  #   total += @fetchfrom worker Main.trs.tracesReturned
-  # end
+function getCounter(trs2::DistributedTrace)
+  if isa(trs2, DistributedTrace)
+    worksplit = @fetch Main.trs.postProcInstance.worksplit
+  else
+    worksplit = trs2.postProcInstance.worksplit
+  end
+
+  if isa(worksplit, SplitByTraces)
+    total::Int = 0
+    @sync for worker in workers()
+      total += @fetchfrom worker Main.trs.tracesReturned
+    end
+  elseif isa(worksplit, SplitByData) || isa(worksplit, NoSplit)
+    total = @fetch Main.trs.tracesReturned
+  else
+    throw(ErrorException("not suppoerpeopsodpsofd!!!1"))
+  end
+
   return total
 end
 
-function setPostProcessor(trs::DistributedTrace, x, args...)
-  @sync for worker in workers()
-    @spawnat worker setPostProcessor(Main.trs, x, args...)
-  end
-end
-
-
-function instantiatePostProcessor(trs::DistributedTrace)
-  @sync for worker in workers()
-    @spawnat worker instantiatePostProcessor(Main.trs)
-  end
-end
-
-# return immediately
-function runPostProcessor(trs::DistributedTrace, range::Range, done::BitArray{1})
-  for w in workers()
-    @async begin
-      @spawnat w begin
-        runPostProcessor(Main.trs, range)
-      end
-      if nprocs() > 1
-        done[w-1] = true
-      else
-        done[1] = true
-      end
-    end
-  end
+function hasPostProcessor(trs::DistributedTrace)
+  return @fetch hasPostProcessor(Main.trs)
 end

@@ -6,7 +6,7 @@ using Dpa
 using Lra
 using Trs
 
-export Attack,Analysis,LRA,DPA
+export Attack,Analysis,LRA,DPA,IncrementalCPA
 export analysis,attack
 export sca
 export scatask
@@ -16,9 +16,10 @@ export Direction,Phase
 export getNumberOfCandidates
 
 abstract Analysis
+abstract NonIncrementalAnalysis <: Analysis
 
 # two types of analysis methods: DPA and LRA
-type DPA <: Analysis
+type DPA <: NonIncrementalAnalysis
   statistic::Function
   leakageFunctions::Vector{Function}
   postProcess::Vector{Function}
@@ -28,7 +29,7 @@ type DPA <: Analysis
   end
 end
 
-type LRA <: Analysis
+type LRA <: NonIncrementalAnalysis
   basisModel::Function
   postProcess::Vector{Function}
 
@@ -41,6 +42,20 @@ type LRA <: Analysis
   end
 end
 
+type IncrementalCPA <: Analysis
+  leakageFunctions::Vector{Function}
+  postProcess::Vector{Function}
+  reducer::Function
+
+  function IncrementalCPA()
+    return new([hw], [abs], x -> max(abs(x)))
+  end
+end
+
+function printParameters(a::IncrementalCPA)
+  @printf("leakages:   %s\n", a.leakageFunctions)
+end
+
 function printParameters(a::LRA)
   @printf("basismodel: %s\n", a.basisModel)
 end
@@ -50,22 +65,80 @@ function printParameters(a::DPA)
   @printf("leakages:   %s\n", a.leakageFunctions)
 end
 
+getNrLeakageFunctions(a::LRA) = 1
+getNrLeakageFunctions(a::DPA) = length(a.leakageFunctions)
+getNrLeakageFunctions(a::IncrementalCPA) = length(a.leakageFunctions)
+
 abstract Attack
 
 # currently supported: LRA and DPA
 
 # (mostly) running a CPA attack, but is not called CPA because it's not necessarly using correlation. You can plug another function in the DPA type "statistic" field. But anyway, it's mostly CPA.
-function attack(a::DPA, data, samples, keyByteOffsets::Vector{Int}, dataFunction::Function, dataFunctionReturnType::DataType=UInt8, kbvals=collect(UInt8, 0:255))
-  @time C = dpa(data, samples, keyByteOffsets, dataFunction, a.leakageFunctions, a.statistic, kbvals, dataFunctionReturnType, UInt8)
+function attack(a::DPA, trs::Trace, range::Range, keyByteOffsets::Vector{Int}, dataFunction::Function, dataFunctionReturnType::DataType, kbvals::Vector, scoresAndOffsets)
 
-  return (C, length(keyByteOffsets), length(a.leakageFunctions), length(kbvals))
+  attackfun = (data, samples, keyByteOffsets) -> dpa(data, samples, keyByteOffsets, dataFunction, a.leakageFunctions, a.statistic, kbvals, dataFunctionReturnType, UInt8)
+
+  attack(convert(NonIncrementalAnalysis, a), attackfun, trs, range, keyByteOffsets, dataFunction, dataFunctionReturnType, kbvals, scoresAndOffsets)
+
+end
+
+function attack(a::NonIncrementalAnalysis, attackfun::Function, trs::Trace, range::Range, keyByteOffsets::Vector{Int}, dataFunction::Function, dataFunctionReturnType::DataType, kbvals::Vector, scoresAndOffsets)
+
+  ((data, samples), eof) = @time readTraces(trs, range)
+
+  if data == nothing || samples == nothing
+    return
+  end
+
+  for kb in 1:length(keyByteOffsets)
+    if hasPostProcessor(trs)
+      kbsamples = samples[kb]
+      kbdata = data[kb]
+    else
+      kbsamples = samples
+      kbdata = reshape(data[:,kb], size(data)[1], 1)
+    end
+
+    @printf("%s on samples shape %s and data shape %s\n", string(typeof(a).name.name), size(kbsamples), size(kbdata))
+    if size(kbsamples)[2] == 0
+      @printf("no samples!\n")
+      scores = nothing
+      continue
+    end
+
+    # run the attack
+    @time C = attackfun(kbdata, kbsamples, [keyByteOffsets[kb]])
+
+    # nop the nans
+    C[isnan(C)] = 0
+
+    # get the scores for all leakage functions
+    getScoresAndOffsets!(scoresAndOffsets, C, 1, kb, getNrLeakageFunctions(a), a.postProcess, length(kbvals))
+  end
 end
 
 # running an LRA attack (I know this is also a DPA attack, I know, but it's a completely different beast from correlation, mia, or difference of means)
-function attack(a::LRA, data, samples, keyByteOffsets::Vector{Int}, dataFunction::Function, dataFunctionReturnType::DataType=UInt8, kbvals=collect(UInt8, 0:255))
-  @time C = lra(data, samples, keyByteOffsets, dataFunction, a.basisModel, kbvals)
+function attack(a::LRA, trs::Trace, range::Range, keyByteOffsets::Vector{Int}, dataFunction::Function, dataFunctionReturnType::DataType, kbvals::Vector, scoresAndOffsets)
+  attackfun = (data, samples, keyByteOffsets) -> lra(data, samples, keyByteOffsets, dataFunction, a.basisModel, kbvals)
 
-  return (C, length(keyByteOffsets), 1, length(kbvals))
+  attack(convert(NonIncrementalAnalysis, a), attackfun, trs, range, keyByteOffsets, dataFunction, dataFunctionReturnType, kbvals, scoresAndOffsets)
+end
+
+
+function attack(a::IncrementalCPA, trs::Trace, range::Range, keyByteOffsets::Vector{Int}, dataFunction::Function, dataFunctionReturnType::DataType, kbvals::Vector, scoresAndOffsets)
+  if isa(trs, DistributedTrace)
+    @sync for w in workers()
+      @spawnat w init(Main.trs.postProcInstance, keyByteOffsets, dataFunction, kbvals, a.leakageFunctions)
+    end
+  else
+    init(trs.postProcInstance, keyByteOffsets, dataFunction, kbvals, a.leakageFunctions)
+  end
+
+  @time (C,eof) = readTraces(trs, range)
+
+  for kb in 1:length(keyByteOffsets)
+    getScoresAndOffsets!(scoresAndOffsets, C, kb, kb, length(a.leakageFunctions), a.postProcess, length(kbvals))
+  end
 end
 
 # does the attack & analysis per xxx traces, should be called from an scatask
@@ -73,93 +146,34 @@ function analysis(params::Attack, phase::Enum, trs::Trace, firstTrace::Int, numb
     local scoresAndOffsets
 
     if !isnull(params.updateInterval) && !hasPostProcessor(trs)
-        @printf("WARNING: update interval only supported for conditionally averaged traces, option ignored\n")
+        @printf("WARNING: update interval only supported for traces with a post processor, option ignored\n")
         updateInterval = Nullable()
     end
 
     offset = firstTrace
     stepSize = min(numberOfTraces, get(params.updateInterval, numberOfTraces))
 
+    scoresAndOffsets = allocateScoresAndOffsets(getNrLeakageFunctions(params.analysis), length(kbVals), length(keyByteOffsets))
     eof = false
 
     for offset in firstTrace:stepSize:numberOfTraces
+      range = offset:(offset+min(stepSize, numberOfTraces - offset + 1)-1)
+
       if eof
         break
       end
 
-      # read traces
-      (data, samples, eof) = @time readTraces(trs, offset, min(stepSize, numberOfTraces - offset + 1))
+      attack(params.analysis, trs, range, keyByteOffsets, targetFunction, targetFunctionType, kbVals, scoresAndOffsets)
 
-      if data == nothing || samples == nothing
-        scores = nothing
-        break
-      end
-
-      scoresAndOffsets = nothing
-
-      if isa(samples[1], Array)
-          length(samples) == length(keyByteOffsets) || throw(ErrorException("attack implementation broken"))
-
-          for l in 1:length(keyByteOffsets)
-            @printf("%s on samples shape %s and data shape %s\n", string(typeof(params.analysis).name.name), size(samples[l]), size(data[l]))
-            if size(samples[l])[2] == 0
-              @printf("no samples!\n")
-              scores = nothing
-              continue
-            end
-
-            # run the attack
-            (C, nrKeyBytes, nrLeakageFunctions, nrKbVals) = attack(params.analysis, data[l], samples[l], [keyByteOffsets[l]], targetFunction, targetFunctionType, kbVals)
-
-            # nop the nans
-            C[isnan(C)] = 0
-
-            if scoresAndOffsets == nothing
-              scoresAndOffsets = allocateScoresAndOffsets(nrLeakageFunctions, length(kbVals), length(keyByteOffsets))
-            end
-
-            # get the scores for all leakage functions
-            getScoresAndOffsets!(scoresAndOffsets, C, 1, l, nrLeakageFunctions, params.analysis.postProcess, nrKbVals)
-          end
-      else
-        @printf("%s on %s samples shape %s and %s data shape %s\n", string(typeof(params.analysis).name.name), eltype(samples), size(samples), eltype(data), size(data))
-        if size(samples)[2] == 0
-          @printf("no samples!\n")
-          scores = nothing
-          break
-        end
-
-        # run the attack
-        (C, nrKeyBytes, nrLeakageFunctions, nrKbVals) = attack(params.analysis, data, samples, keyByteOffsets, targetFunction, targetFunctionType, kbVals)
-
-        # nop the nans
-        C[isnan(C)] = 0
-
-        if scoresAndOffsets == nothing
-          scoresAndOffsets = allocateScoresAndOffsets(nrLeakageFunctions, length(kbVals), length(keyByteOffsets))
-        end
-
-        for l in 1:length(keyByteOffsets)
-          # get the scores for all leakage functions
-          getScoresAndOffsets!(scoresAndOffsets, C, l, l, nrLeakageFunctions, params.analysis.postProcess, nrKbVals)
-        end
-      end
-
-      if scoresAndOffsets != nothing
-        # let somebody do something with the scores for these traces
-        produce(INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs), size(C)[1], length(keyByteOffsets), keyByteOffsets, !isnull(params.knownKey) ? getCorrectRoundKeyMaterial(params, phase) : Nullable()))
-      end
+      # let somebody do something with the scores for these traces
+      produce(INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs), length(keyByteOffsets), keyByteOffsets, !isnull(params.knownKey) ? getCorrectRoundKeyMaterial(params, phase) : Nullable()))
     end
 
     # reset the state of trace post processor (conditional averager)
     reset(trs)
 
-    if scoresAndOffsets != nothing
-      # return the final combined scores to scatask
-      scores = getCombinedScores(scoresAndOffsets)
-    else
-      throw(ErrorException("no samples"))
-    end
+    # return the final combined scores to scatask
+    scores = getCombinedScores(scoresAndOffsets)
 
     return scores
 end
@@ -169,7 +183,7 @@ end
 @enum Status FINISHED PHASERESULT INTERMEDIATESCORES INTERMEDIATESCORESANDOFFSETS INTERMEDIATECORRELATION
 
 # generic sca function, this one is called in all the unit tests and the main functions
-function sca(trs::Trace, params::Attack, firstTrace=1, numberOfTraces=length(trs), printSubs=false)
+function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=length(trs), printSubs::Bool=false, scoresCallBack::Nullable{Function}=Nullable{Function}())
   @printf("\nJlsca running in Julia version: %s, %d processes/%d workers\n\n", VERSION, nprocs(), nworkers())
 
   printParameters(params)
@@ -213,11 +227,15 @@ function sca(trs::Trace, params::Attack, firstTrace=1, numberOfTraces=length(trs
             end
           end
         elseif status == INTERMEDIATESCORES
-          (scoresAndOffsets, numberOfTraces2, numberOfSamples, dataWidth, keyOffsets, knownKey) = statusData
-          printScores(scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2, numberOfSamples, (+), knownKey, false,  5)
+          (scoresAndOffsets, numberOfTraces2, dataWidth, keyOffsets, knownKey) = statusData
+          printScores(scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2, (+), knownKey, printSubs,  5)
 
           if !isnull(params.outputkka) && !isnull(params.knownKey)
-            add2kka(scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2, numberOfSamples, get(knownKey), kkaFilename)
+            add2kka(scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2, get(knownKey), kkaFilename)
+          end
+
+          if !isnull(scoresCallBack)
+            get(scoresCallBack)(phase, params, scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2)
           end
         elseif status == PHASERESULT
           phaseInput = statusData
@@ -230,7 +248,7 @@ function sca(trs::Trace, params::Attack, firstTrace=1, numberOfTraces=length(trs
       end
     catch e
       if t.exception != nothing
-        @printf("Task blew up: %s", t.exception)
+        # @printf("Task blew up: %s", t.exception)
         Base.show_backtrace(STDOUT, t.backtrace)
         @printf("\n")
       end

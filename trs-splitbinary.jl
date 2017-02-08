@@ -2,7 +2,7 @@
 #
 # Author: Cees-Bart Breunesse
 
-export SplitBinary,readData,readSamples,parseSamplesFilename
+export SplitBinary
 
 # split binary has the data and samples in 2 different files, similar to how Daredevil reads its data and samples. Since there is not metadata in these files, the meta data is encoded in and read from the file names.
 type SplitBinary <: Trace
@@ -14,8 +14,6 @@ type SplitBinary <: Trace
   dataFileDescriptor
   passes
   dataPasses
-  postProcType
-  postProcArguments
   postProcInstance
   bgtask
   tracesReturned
@@ -74,7 +72,7 @@ type SplitBinary <: Trace
     samplesFileDescriptor = open(samplesFn, write ? "w+" : "r")
     dataFileDescriptor = open(dataFname, write ? "w+" :"r")
 
-    new(nrtraces, dataSpace, sampleType, numberOfSamplesPerTrace, samplesFileDescriptor, dataFileDescriptor, [], [], Union, nothing, Union, Union, 0, 0, 0)
+    new(nrtraces, dataSpace, sampleType, numberOfSamplesPerTrace, samplesFileDescriptor, dataFileDescriptor, [], [], Union, Union, 0, 0, 0)
   end
 end
 
@@ -113,10 +111,9 @@ function readSamples(trs::SplitBinary, idx)
 
   trs.samplesPosition += bytesinsamples
 
-  samples = read(trs.samplesFileDescriptor, bytesinsamples)
+  samples = read(trs.samplesFileDescriptor, trs.sampleType, trs.numberOfSamplesPerTrace)
 
   if trs.sampleType != UInt8
-    samples = reinterpret(trs.sampleType, samples)
     if ltoh(ENDIAN_BOM) != ENDIAN_BOM
       samples = map(ltoh, samples)
     end

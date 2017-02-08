@@ -28,6 +28,10 @@ function hw(x::UInt8)
   return hw_table[x + 1]
 end
 
+function hw(x::UInt16)
+  return hw(UInt8(x>>8)) + hw(UInt8(x & 0xff))
+end 
+
 # function hw(x::UInt8)
 #     ret::UInt8 = 0
 #     for i in 0:7

@@ -6,7 +6,7 @@ using Base.Test
 
 include("trs-core.jl")
 include("conditional.jl")
-include("conditional-distributed.jl")
+include("distributed.jl")
 
 function sanity1()
   # configurable
