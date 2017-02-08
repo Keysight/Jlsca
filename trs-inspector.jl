@@ -2,7 +2,7 @@
 #
 # Author: Cees-Bart Breunesse
 
-export InspectorTrace,readData,readSamples,writeToTraces
+export InspectorTrace
 
 using Base.get
 import Base.close
@@ -19,8 +19,6 @@ type InspectorTrace <: Trace
   fileDescriptor
   passes
   dataPasses
-  postProcType
-  postProcArguments
   postProcInstance
   bgtask
   tracesReturned
@@ -30,9 +28,9 @@ type InspectorTrace <: Trace
   lengthPosition::Int
 
   # to open an existing file
-  function InspectorTrace(filename::String)
-    (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, fileDescriptor) = readInspectorTrsHeader(filename)
-    new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, nothing, Union, Union, 0, filename, traceBlockPosition, false, lengthPosition)
+  function InspectorTrace(filename::String, bits::Bool = false)
+    (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, fileDescriptor) = readInspectorTrsHeader(filename, bits)
+    new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, Union, 0, filename, traceBlockPosition, false, lengthPosition)
   end
 
   # to create a new one
@@ -40,7 +38,7 @@ type InspectorTrace <: Trace
     !isfile(filename) || throw(ErrorException(@sprintf("file %s exists!", filename)))
 
     (titleSpace, traceBlockPosition, lengthPosition, fileDescriptor) = writeInspectorTrsHeader(filename, dataSpace, sampleType, numberOfSamplesPerTrace)
-    new(titleSpace, Nullable(0), dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, nothing, Union, Union, 0, filename, traceBlockPosition, true, lengthPosition)
+    new(titleSpace, Nullable(0), dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, Union, 0, filename, traceBlockPosition, true, lengthPosition)
   end
 end
 
@@ -71,7 +69,7 @@ skip(fd::Base.PipeEndpoint, x::Integer) = read(fd, x)
 length(trs::InspectorTrace) = isnull(trs.numberOfTraces) ? typemax(Int) : get(trs.numberOfTraces)
 
 # read the header of a Riscure Inspector trace set (TRS)
-function readInspectorTrsHeader(filename)
+function readInspectorTrsHeader(filename, bits::Bool)
     if filename != "-"
       f = open(filename, "r")
     else
@@ -152,6 +150,15 @@ function readInspectorTrsHeader(filename)
         end
       end
 
+      if bits
+        if (numberOfSamplesPerTrace * sampleSpace) % 8 != 0
+          throw(ErrorException("samples needs to be 8 byte aligned in order to force sample type to UInt64!!!1\n"))
+        end
+        numberOfSamplesPerTrace = div((sampleSpace * numberOfSamplesPerTrace), 8)
+        sampleType = UInt64
+        sampleSpace = 8
+      end
+
       @printf("Opened %s, #traces %s, #samples %d (%s), #data %d\n", filename, isnull(numberOfTraces) ? "unknown" : @sprintf("%d", get(numberOfTraces)), numberOfSamplesPerTrace, sampleType, dataSpace)
 
       return (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, f)
@@ -211,7 +218,7 @@ function writeData(trs::InspectorTrace, idx, data::Vector{UInt8})
   return data
 end
 
-# read samples for a single tracec from an Inspector trace set
+# read samples for a single trace from an Inspector trace set
 function readSamples(trs::InspectorTrace, idx)
   position = calcFilePositionForIdx(trs, idx)
   position += trs.titleSpace
@@ -223,11 +230,10 @@ function readSamples(trs::InspectorTrace, idx)
     trs.filePosition = position
   end
 
-  samples = read(trs.fileDescriptor, trs.numberOfSamplesPerTrace * trs.sampleSpace)
+  samples = read(trs.fileDescriptor, trs.sampleType, trs.numberOfSamplesPerTrace)
   trs.filePosition += trs.numberOfSamplesPerTrace * trs.sampleSpace
 
   if trs.sampleType != UInt8
-    samples = reinterpret(trs.sampleType, samples)
     if ltoh(ENDIAN_BOM) != ENDIAN_BOM
       samples = map(ltoh, samples)
     end
@@ -255,7 +261,6 @@ function writeSamples(trs::InspectorTrace, idx, samples::Vector)
     if ltoh(ENDIAN_BOM) != ENDIAN_BOM
       samples = map(htol, samples)
     end
-    samples = reinterpret(UInt8, samples)
   end
 
   write(trs.fileDescriptor, samples)
@@ -277,7 +282,7 @@ function writeInspectorTrsHeader(filename::String, dataSpace::Int, sampleType::T
   elseif sampleType == Float32
     sampleCoding = CodingFloat
   else
-    @printf("[x] Not suppoerpeopsodpsofd sample type %s\n", string(eltype(samples)))
+    @printf("[x] Not suppoerpeopsodpsofd sample type %s\n", sampleType)
     return
   end
 

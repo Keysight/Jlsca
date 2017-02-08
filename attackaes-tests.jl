@@ -4,14 +4,10 @@
 
 using Base.Test
 
-include("aes.jl")
-include("dpa.jl")
-include("lra.jl")
-include("trs.jl")
-include("sca-core.jl")
-include("sca-scoring.jl")
-include("sca-leakages.jl")
-include("attackaes-core.jl")
+using Sca
+using Trs
+
+import Sca.FORWARD,Sca.BACKWARD,Sca.PHASE1,Sca.PHASE2,Sca.PHASE3,Sca.PHASE4,Sca.PHASE5,Sca.PHASE6,Sca.SBOX,Sca.ROUNDOUT,Sca.TDES1,Sca.TDES2,Sca.TDES3
 
 function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysis, onetest::Bool=false)
     tracedir = "aestraces"
@@ -31,10 +27,19 @@ function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         end
 
         # create Trace instance
-        @time trs = InspectorTrace(fullfilename)
+        if conditional
+          @everyworker begin
+            using Trs
+            trs = InspectorTrace($fullfilename)
 
-        # bit expand
-        # addSamplePass(trs, tobits)
+            # bit expand
+            # addSamplePass(trs, tobits)
+
+            setPostProcessor(trs, CondAvg(SplitByTracesSliced()))
+          end
+        else
+          trs = InspectorTrace(fullfilename)
+        end
 
         params.analysis = analysis
         if isa(params, AesSboxAttack) && isa(params.analysis, DPA)
@@ -44,10 +49,10 @@ function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         end
 
         if conditional
-          setPostProcessor(trs, CondAvg, length(params.keyByteOffsets), getNumberOfCandidates(params))
+          key = sca(DistributedTrace(),params,1, 200, false)
+        else
+          key = sca(trs,params,1, 200, false)
         end
-
-        key = sca(trs,params,1, 200)
 
         @test(key == get(params.knownKey))
 

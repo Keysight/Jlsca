@@ -16,29 +16,35 @@
 # - bitwise conditional reduction reduces the #traces and #samples
 #
 # This approach does not work on ciphers that use widening encodings or random masks.
-export CondReduce,tobits
+#
+# TODO: add duplicate column removal
 
-using ProgressMeter
+export CondReduce,tobits
 
 type CondReduce <: Cond
   mask::Dict{Int,BitVector}
   traceIdx::Dict{Int,Dict{Int,Int}}
   globcounter::Int
-  numberOfAverages::Int
-  numberOfCandidates::Int
   worksplit::WorkSplit
-  range::Range
   trs::Trace
 
-  function CondReduce(numberOfAverages::Int, numberOfCandidates::Int, trs::Trace)
+  function CondReduce(trs::Trace)
+    CondReduce(NoSplit(), trs)
+  end
+
+  function CondReduce(worksplit::WorkSplit, trs::Trace)
     mask = Dict{Int,BitVector}()
     traceIdx = Dict{Int,Dict{Int,Int}}()
-    worksplit = WorkSplit(numberOfAverages, numberOfCandidates)
-    range = getWorkerRange(worksplit)
-    @printf("Conditional bitwise sample reduction, handling data range %s\n", range)
+    # @printf("Conditional bitwise sample reduction, split %s\n", worksplit)
 
-    new(mask, traceIdx, 0, numberOfAverages, numberOfCandidates, worksplit, range, trs)
+    new(mask, traceIdx, 0, worksplit, trs)
   end
+end
+
+function reset(c::CondReduce)
+  c.mask = Dict{Int,BitVector}()
+  c.traceIdx = Dict{Int,Dict{Int,Int}}()
+  c.globcounter = 0
 end
 
 # only works on samples of BitVector type, do addSamplePass(trs, tobits)
@@ -54,7 +60,7 @@ function add(c::CondReduce, trs::Trace, traceIdx::Int)
   for idx in eachindex(data)
     val = data[idx]
 
-    if !(toVal(c.worksplit, Int(idx), Int(val)) in c.range)
+    if isa(c.worksplit, SplitByData) && !(toVal(c.worksplit, Int(idx), Int(val)) in c.worksplit.range)
       continue
     end
 
@@ -72,43 +78,56 @@ function add(c::CondReduce, trs::Trace, traceIdx::Int)
 
     if !haskey(c.traceIdx[idx], val)
       c.traceIdx[idx][val] = traceIdx
+      continue
     end
 
     currmask = c.mask[idx]
-    idxes = find(currmask)
-    maskidxes = idxes[find(trs[c.traceIdx[idx][val]][2][idxes] $ get(samples)[idxes])]
-    currmask[maskidxes] .= false
+    cachedreftrace = getSamples(trs, c.traceIdx[idx][val])
+    cachedsamples = get(samples)
+
+    cachedreftrace $= cachedsamples
+    c.mask[idx][:] &= !(c.mask[idx] & cachedreftrace)
+    cachedsamples = nothing
+    cachedreftrace = nothing
+
   end
 
   c.globcounter += 1
 end
 
 function merge(this::CondReduce, other::CondReduce)
+  if isa(this.worksplit, SplitByTraces)
+    this.globcounter += other.globcounter
+  end
+
   for (idx,dictofavgs) in other.traceIdx
     if !haskey(this.traceIdx, idx)
       this.traceIdx[idx] = dictofavgs
+      this.mask[idx] = other.mask[idx]
     else
+      this.mask[idx][:] &= other.mask[idx]
       for (val, avg) in dictofavgs
         if val in keys(this.traceIdx[idx])
-          throw(ErrorException("fixme"))
+          if this.traceIdx[idx][val] != other.traceIdx[idx][val]
+            cachedreftrace = getSamples(this.trs, this.traceIdx[idx][val])
+            cachedsamples = getSamples(this.trs, other.traceIdx[idx][val])
+
+            cachedreftrace $= cachedsamples
+            this.mask[idx][:] &= !(this.mask[idx] & cachedreftrace)
+            cachedsamples = nothing
+            cachedreftrace = nothing
+          end
         else
-          this.traceIdx[idx][val] = avg
+          this.traceIdx[idx][val] = other.traceIdx[idx][val]
         end
       end
-    end
-  end
-
-  for (idx,msk) in other.mask
-    if !haskey(this.mask, idx)
-      this.mask[idx] = msk
-    else
-      this.mask[idx] &= msk
     end
   end
 end
 
 function get(c::CondReduce)
-  if nprocs() > 1
+  @assert myid() == 1
+  if !isa(c.worksplit, NoSplit)
     for worker in workers()
       if worker == c.worksplit.worker
         continue
@@ -136,9 +155,10 @@ function get(c::CondReduce)
   end
 
   for k in sort(collect(keys(c.traceIdx)))
-    dataSnap = collect(dataType, keys(c.traceIdx[k]))
+    dataSnap = sort(collect(dataType, keys(c.traceIdx[k])))
     idxes = find(c.mask[k])
     sampleSnap = BitArray{2}(length(dataSnap), length(idxes))
+    @printf("Reduction for %d: %d left after sample reduction\n", k, countnz(c.mask[k]))
 
     for j in 1:length(dataSnap)
       trsIndex = c.traceIdx[k][dataSnap[j]]
@@ -160,18 +180,14 @@ function getGlobCounter(c::CondReduce)
   return c.globcounter
 end
 
-function tobits(x::Vector{UInt8})
-  bits = length(x)*8
-  discard = bits % 64
-  if discard > 0
-    @printf("found %d bits, but discarding %d bits, please 64 bit align your samples", bits, discard)
-    warned = true
-  end
+# This pass will work on trs objects opened with trs = InspectorTrace("name.trs", true)
+function tobits(x::Vector{UInt64})
+  bits = length(x)*64
 
   # this is a fast hack to create BitVectors
   a = BitVector()
-  a.chunks = reinterpret(UInt64, x)
-  a.len = bits - discard
+  a.chunks = x
+  a.len = bits
   a.dims = (0,)
 
   return a

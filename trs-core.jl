@@ -2,14 +2,14 @@
 #
 # Author: Cees-Bart Breunesse
 
+using ProgressMeter
 
 import Base.length, Base.getindex, Base.setindex!
 import Base.reset
-using ProgressMeter
 import Base.start, Base.done, Base.next
 
 
-export Trace,readTraces,readTracesDistributed,addSamplePass,popSamplePass,addDataPass,setPostProcessor,popDataPass,hasPostProcessor,reset,getCounter
+export Trace,readTraces,addSamplePass,popSamplePass,addDataPass,popDataPass,hasPostProcessor,reset,getCounter,setPostProcessor
 export start,done,next,endof,setindex!
 
 abstract Trace
@@ -110,7 +110,9 @@ end
 
 # removes the data processor and sets the number of traces it fed into the post processor to 0.
 function reset(trs::Trace)
-  trs.postProcInstance = Union
+  if trs.postProcInstance != Union
+    reset(trs.postProcInstance)
+  end
   trs.tracesReturned = 0
 end
 
@@ -119,40 +121,25 @@ function getCounter(trs::Trace)
   return trs.tracesReturned
 end
 
-# set a post processor that aggregates all data and samples: think conditional averaging.
-function setPostProcessor(trs::Trace, x, args...)
-  trs.postProcType = x
-  trs.postProcArguments = args
-end
-
-function instantiatePostProcessor(trs::Trace)
-  if trs.postProcArguments != nothing
-    trs.postProcInstance = trs.postProcType(trs.postProcArguments...)
-  else
-    trs.postProcInstance = trs.postProcType()
-  end
-end
-
-function runPostProcessor(trs::Trace, range::Range, f::Function)
-  add(trs.postProcInstance, trs, range, f)
-  trs.tracesReturned += getGlobCounter(trs.postProcInstance)
+function setPostProcessor(trs::Trace, p::PostProcessor)
+  trs.postProcInstance = p
 end
 
 # returns true when a post processor is set to this trace set
 function hasPostProcessor(trs::Trace)
-  return trs.postProcType != Union
+  return trs.postProcInstance != Union
 end
 
-function readTraces(trs::Trace, traceOffset::Int, traceLength::Int)
+function readTraces(trs::Trace, range::Range)
   if isa(trs, DistributedTrace) || hasPostProcessor(trs)
-    return readAndPostProcessTraces(trs, traceOffset, traceLength)
+    return readAndPostProcessTraces(trs, range)
   else
-    return readNoPostProcessTraces(trs, traceOffset, traceLength)
+    return readNoPostProcessTraces(trs, range)
   end
 end
 
 # read traces without conditional averaging (but with all the data and sample passes), creates huge matrices, use with care
-function readNoPostProcessTraces(trs::Trace, traceOffset=start(trs), traceLength=length(trs))
+function readNoPostProcessTraces(trs::Trace, range::Range)
   numberOfTraces = length(trs)
   readCount = 0
   allSamples = nothing
@@ -160,11 +147,13 @@ function readNoPostProcessTraces(trs::Trace, traceOffset=start(trs), traceLength
   eof = false
   local data, samples, dataLength, sampleLength
 
+  traceLength = length(range)
+
   if !pipe(trs)
     progress = Progress(traceLength-1, 1, "Processing traces .. ")
   end
 
-  for idx in traceOffset:(traceOffset + traceLength - 1)
+  for idx in range
     (data, samples) = trs[idx]
 
     if length(data) == 0 || length(samples) == 0
@@ -204,50 +193,55 @@ function readNoPostProcessTraces(trs::Trace, traceOffset=start(trs), traceLength
   allData = reshape(allData, (dataLength, readCount))'
   allSamples = reshape(allSamples, (sampleLength, readCount))'
 
-  return (allData, allSamples, eof)
+  return ((allData, allSamples), eof)
 end
 
-function fun(x::Int)
+function updateProgress(x::Int)
   progress = Main.getProgress()
   if progress != nothing
     update!(progress, progress.counter + x)
   end
 end
 
+function readAndPostProcessTraces(trs2::Trace, range::Range)
 
-function readAndPostProcessTraces(trs2::Trace, traceOffset=start(trs), traceLength=length(trs))
-  readCount = 0
-  allSamples = nothing
-  allData = nothing
-  once = true
-  eof = false
-  local data, samples, dataLength, sampleLength
+  traceLength = length(range)
+
+  progressLength = traceLength*nworkers()
+  if isa(trs2, DistributedTrace)
+    worksplit = @fetch Main.trs.postProcInstance.worksplit
+  else
+    worksplit = trs2.postProcInstance.worksplit
+  end
+
+  if isa(worksplit, SplitByTraces)
+    progressLength = traceLength
+  elseif isa(worksplit, SplitByData) || isa(worksplit, NoSplit)
+    progressLength = traceLength*nworkers()
+  else
+    throw(ErrorException("not suppoerpeopsodpsofd!!!1"))
+  end
 
   if !pipe(trs2)
-    progress = Progress(traceLength*nworkers(), 1, "Processing traces.. ")
+    progress = Progress(progressLength, 1, @sprintf("Processing traces %s.. ", range))
   else
     progress = nothing
   end
 
-  traceStart = traceOffset
-  traceEnd = (traceOffset + traceLength - 1)
-
-  instantiatePostProcessor(trs2)
-
   @everywhere getProgress()=$progress
 
   if isa(trs2, DistributedTrace)
-      @sync begin
-        for w in workers()
-          @async begin
-            # remotecall_wait(runPostProcessor, w, Main.trs, traceStart:traceEnd, x -> return)
-            remotecall_wait((range) -> runPostProcessor(Main.trs, range,  fun), w, traceStart:traceEnd)
-            # @fetchfrom w runPostProcessor(Main.trs, traceStart:traceEnd, fun)
+    @sync begin
+      for w in workers()
+        @async begin
+          @fetchfrom w begin
+            add(Main.trs.postProcInstance, Main.trs, range, updateProgress)
           end
         end
       end
+    end
   else
-    runPostProcessor(trs2, traceStart:traceEnd, fun)
+    add(trs2.postProcInstance, trs2, range, updateProgress)
   end
 
   if progress != nothing
@@ -255,11 +249,13 @@ function readAndPostProcessTraces(trs2::Trace, traceOffset=start(trs), traceLeng
   end
 
   if isa(trs2, DistributedTrace)
-    (allData, allSamples) = @fetch get(Main.trs.postProcInstance)
+    worker1copy = @fetchfrom workers()[1] Main.trs.postProcInstance
+    ret = get(worker1copy)
+    # ret = @fetchfrom workers()[1] get(Main.trs.postProcInstance)
   else
-    (allData, allSamples) = get(trs2.postProcInstance)
+    ret = get(trs2.postProcInstance)
   end
 
-  return (allData, allSamples, true)
+  return (ret, true)
 
 end
