@@ -39,7 +39,7 @@ type BitCompress
   end
 end
 
-# Efficient removal of duplicate columns for row-wise available data by Ruben Muijers.
+# Efficient removal of duplicate columns for row-wise available data by Ruben Muijrers.
 function bitcompress(state::BitCompress, input::AbstractArray)
   if state.first
     # state.duplicates[find(x -> x == input[1], input)] .= 1
