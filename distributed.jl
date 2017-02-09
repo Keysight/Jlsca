@@ -80,7 +80,7 @@ end
 function getWorkerRange(w::SplitByTracesBlock, globalRange::Range)
   if nprocs() > 1
     traceStart = (w.worker - 2) * div(globalRange[end], nworkers()) + 1
-    if w.worker == workers()[end]
+    if w.worker == findmax(workers())[1]
       traceEnd = globalRange[end]
     else
       traceEnd = (w.worker - 1) * div(globalRange[end], nworkers())
