@@ -17,9 +17,71 @@
 #
 # This approach does not work on ciphers that use widening encodings or random masks.
 #
-# TODO: add duplicate column removal
+# Duplicate column removal by Ruben Muijrers
 
 export CondReduce,tobits
+
+function toMask(a::Vector{Int})
+  mask = BitVector(length(a))
+  for i in 1:length(a)
+    mask[i] = (a[i] == i)
+  end
+  return mask
+end
+
+type BitCompress
+  tmp::Vector{Int}
+  duplicates::Vector{Int}
+  first::Bool
+
+  function BitCompress(nrOfSamples::Int)
+    return new(Vector{Int}(nrOfSamples), Vector{Int}(nrOfSamples), true)
+  end
+end
+
+# Efficient removal of duplicate columns for row-wise available data by Ruben Muijers.
+function bitcompress(state::BitCompress, input::AbstractArray)
+  if state.first
+    # state.duplicates[find(x -> x == input[1], input)] .= 1
+    # state.duplicates[find(x -> x != input[1], input)] .= findfirst(x -> x != input[1], input)
+    x = input[1]
+    seen = false
+    y = 0
+    for b in eachindex(input)
+      if input[b] == x
+        state.duplicates[b] = 1
+      else
+        if !seen
+           seen = true
+           y = b
+        end
+        state.duplicates[b] = y
+      end
+    end
+    state.first = false
+  else
+    duplicates = state.duplicates
+    tmp = state.tmp
+
+    @inbounds for i in 1:length(duplicates)
+      # freshly made for keeping track of splits
+      tmp[i] = i
+      # if we were labeled a duplicate before
+      if duplicates[i] != i
+        #  check if we still belong to the same group
+        if input[i] != input[duplicates[i]]
+          # if not, check if we split this group earlier
+          if tmp[duplicates[i]] == duplicates[i]
+            # if not, make a new group
+            tmp[duplicates[i]] = i
+          end
+          # assign the new group
+          duplicates[i] = tmp[duplicates[i]]
+        end
+      end
+    end
+  end
+end
 
 type CondReduce <: Cond
   mask::Dict{Int,BitVector}
@@ -27,6 +89,8 @@ type CondReduce <: Cond
   globcounter::Int
   worksplit::WorkSplit
   trs::Trace
+  bitcompressedInitialized::Bool
+  state::BitCompress
 
   function CondReduce(trs::Trace)
     CondReduce(NoSplit(), trs)
@@ -37,7 +101,7 @@ type CondReduce <: Cond
     traceIdx = Dict{Int,Dict{Int,Int}}()
     # @printf("Conditional bitwise sample reduction, split %s\n", worksplit)
 
-    new(mask, traceIdx, 0, worksplit, trs)
+    new(mask, traceIdx, 0, worksplit, trs, false)
   end
 end
 
@@ -45,6 +109,7 @@ function reset(c::CondReduce)
   c.mask = Dict{Int,BitVector}()
   c.traceIdx = Dict{Int,Dict{Int,Int}}()
   c.globcounter = 0
+  c.bitcompressedInitialized = true
 end
 
 # only works on samples of BitVector type, do addSamplePass(trs, tobits)
@@ -69,6 +134,13 @@ function add(c::CondReduce, trs::Trace, traceIdx::Int)
      if length(get(samples)) == 0
        return
      end
+
+     if !c.bitcompressedInitialized
+       c.state = BitCompress(length(get(samples)))
+       c.bitcompressedInitialized = true
+     end
+
+     bitcompress(c.state, get(samples))
     end
 
     if !haskey(c.mask, idx)
@@ -104,6 +176,7 @@ function merge(this::CondReduce, other::CondReduce)
     if !haskey(this.traceIdx, idx)
       this.traceIdx[idx] = dictofavgs
       this.mask[idx] = other.mask[idx]
+      this.state = other.state
     else
       this.mask[idx][:] &= other.mask[idx]
       for (val, avg) in dictofavgs
@@ -114,10 +187,13 @@ function merge(this::CondReduce, other::CondReduce)
 
             cachedreftrace $= cachedsamples
             this.mask[idx][:] &= !(this.mask[idx] & cachedreftrace)
-            cachedsamples = nothing
-            cachedreftrace = nothing
+
+            bitcompress(this.state, cachedsamples)
           end
         else
+          cachedsamples = getSamples(this.trs, other.traceIdx[idx][val])
+          bitcompress(this.state, cachedsamples)
+
           this.traceIdx[idx][val] = other.traceIdx[idx][val]
         end
       end
@@ -138,6 +214,8 @@ function get(c::CondReduce)
     end
   end
 
+  globalmask = toMask(c.state.duplicates)
+
   datas = Matrix[]
   reducedsamples = Matrix[]
 
@@ -156,9 +234,9 @@ function get(c::CondReduce)
 
   for k in sort(collect(keys(c.traceIdx)))
     dataSnap = sort(collect(dataType, keys(c.traceIdx[k])))
-    idxes = find(c.mask[k])
+    idxes = find(c.mask[k] & globalmask)
     sampleSnap = BitArray{2}(length(dataSnap), length(idxes))
-    @printf("Reduction for %d: %d left after sample reduction\n", k, countnz(c.mask[k]))
+    @printf("Reduction for %d: %d left after global dup col removal, %d left after sample reduction, %d left combined\n", k, countnz(globalmask), countnz(c.mask[k]), length(idxes))
 
     for j in 1:length(dataSnap)
       trsIndex = c.traceIdx[k][dataSnap[j]]
