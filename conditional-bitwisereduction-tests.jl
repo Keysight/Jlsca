@@ -101,7 +101,7 @@ function ParallelCondReduceTestWithInterval()
       setPostProcessor(trs, CondReduce(SplitByTracesSliced(), $localtrs))
     end
 
-    numberOfScas = div(len, 50) + ((len % updateInterval) > 0 ? 1 : 0)
+    numberOfScas = div(len, updateInterval) + ((len % updateInterval) > 0 ? 1 : 0)
     sando = Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}(numberOfScas*2)
     sandoIdx = 1
 
