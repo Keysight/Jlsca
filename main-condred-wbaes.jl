@@ -3,12 +3,11 @@ using Sca
 using Trs
 using Align
 
-import Sca.FORWARD,Sca.BACKWARD,Sca.PHASE1,Sca.PHASE2,Sca.PHASE3,Sca.PHASE4,Sca.PHASE5,Sca.PHASE6,Sca.SBOX,Sca.ROUNDOUT,Sca.TDES1,Sca.TDES2,Sca.TDES3,Sca.CIPHER,Sca.INVCIPHER,Sca.EQINVCIPHER
+gf2dot(xx::Array{UInt8}, y::UInt8) = map(x -> gf2dot(x,y), xx)
 
-function gf2dot(xx::Array{UInt8}, y::UInt8)
-  return map(x -> gf2dot(x,y), xx)
-end
-
+# Uses the leakage models defined by Jakub Klemsa in his MSc thesis (see
+# docs/Jakub_Klemsa---Diploma_Thesis.pdf) to attack Dual AES # implementations
+# (see docs/dual aes.pdf)
 function gf2dot(x::UInt8, y::UInt8)
   ret::UInt8 = 0
 
@@ -19,7 +18,6 @@ function gf2dot(x::UInt8, y::UInt8)
   return ret
 end
 
-# uses the leakage models defined by Jakub Klemsa in his MSc thesis (see docs/Jakub_Klemsa---Diploma_Thesis.pdf) to attack Dual AES  implementations (see docs/dual aes.pdf)
 function gofaster()
   if length(ARGS) < 1
     @printf("no input trace\n")
@@ -28,16 +26,19 @@ function gofaster()
 
   filename = ARGS[1]
 
-  # hardcoded for AES128 FORWARD.
+  # hardcoded for AES128 FORWARD, but this works for any AES, any direction, any
+  # round key.
   params = AesSboxAttack()
   params.mode = CIPHER
+  params.keyLength = KL128
   params.direction = FORWARD
   params.dataOffset = 1
   params.analysis = DPA()
   params.analysis.statistic = cor
+  # the leakage function to attack dual AESes
   params.analysis.leakageFunctions = [x -> gf2dot(x,UInt8(y)) for y in 1:255]
-  # only a few key bytes at a time, since the large #leakageFunctions are requiring lots of memory
-  params.keyByteOffsets = [1,4]
+  params.keyByteOffsets = collect(1:16)
+  params.phases = [PHASE1]
 
   numberOfAverages = length(params.keyByteOffsets)
   numberOfCandidates = getNumberOfCandidates(params)
