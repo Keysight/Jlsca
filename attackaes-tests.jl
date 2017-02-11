@@ -7,8 +7,6 @@ using Base.Test
 using Sca
 using Trs
 
-import Sca.FORWARD,Sca.BACKWARD,Sca.PHASE1,Sca.PHASE2,Sca.PHASE3,Sca.PHASE4,Sca.PHASE5,Sca.PHASE6,Sca.SBOX,Sca.ROUNDOUT,Sca.TDES1,Sca.TDES2,Sca.TDES3
-
 function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysis, onetest::Bool=false)
     tracedir = "aestraces"
     filenames = readdir(tracedir)

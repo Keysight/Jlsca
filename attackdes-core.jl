@@ -10,6 +10,9 @@ export DesSboxAttack
 @enum DesMode DES=1 TDES1=2 TDES2=3 TDES3=4
 @enum DesTargetType SBOX=1 ROUNDOUT=2
 
+for s in instances(DesMode); @eval export $(Symbol(s)); end
+for s in instances(DesTargetType); @eval export $(Symbol(s)); end
+
 const left = 1:32
 const right = 33:64
 

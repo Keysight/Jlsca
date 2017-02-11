@@ -182,6 +182,10 @@ end
 @enum Phase PHASE1 PHASE2 PHASE3 PHASE4 PHASE5 PHASE6
 @enum Status FINISHED PHASERESULT INTERMEDIATESCORES INTERMEDIATESCORESANDOFFSETS INTERMEDIATECORRELATION
 
+for s in instances(Direction); @eval export $(Symbol(s)); end
+for s in instances(Phase); @eval export $(Symbol(s)); end
+for s in instances(Status); @eval export $(Symbol(s)); end
+
 # generic sca function, this one is called in all the unit tests and the main functions
 function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=length(trs), printSubs::Bool=false, scoresCallBack::Nullable{Function}=Nullable{Function}())
   @printf("\nJlsca running in Julia version: %s, %d processes/%d workers\n\n", VERSION, nprocs(), nworkers())

@@ -5,10 +5,13 @@
 using Aes
 using Trs
 
-export AesSboxAttack,AesMCAttack
+export AesSboxAttack,AesMCAttack,AesKeyLength,AesMode
 
 @enum AesMode CIPHER=1 INVCIPHER=2 EQINVCIPHER=3
 @enum AesKeyLength KL128=16 KL192=24 KL256=32
+
+for s in instances(AesMode); @eval export $(Symbol(s)); end
+for s in instances(AesKeyLength); @eval export $(Symbol(s)); end
 
 abstract AesAttack <: Attack
 
