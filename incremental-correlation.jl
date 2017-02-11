@@ -39,14 +39,13 @@ function reset(c::IncrementalCorrelation)
 end
 
 function toLeakages!(c::IncrementalCorrelation, hypo, idx::Int, input::Integer)
-  i = 1
   kbOffset = c.keyByteOffsets[idx]
+  nrOfKbVals = length(c.kbvals)
 
-  for kb in c.kbvals
+  for (k,kb) in enumerate(c.kbvals)
     target = c.dataFunction([input], kbOffset, kb)[1]
-    for l in eachindex(c.leakageFunctions)
-      hypo[i] = c.leakageFunctions[l](target)
-      i += 1
+    for (l,lfun) in enumerate(c.leakageFunctions)
+      hypo[(l-1)*nrOfKbVals+k] = lfun(target)
     end
   end
 

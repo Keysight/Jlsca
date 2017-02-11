@@ -9,8 +9,6 @@ using Base.Test
 using Sca
 using Trs
 
-import Sca.FORWARD,Sca.BACKWARD,Sca.PHASE1,Sca.PHASE2,Sca.PHASE3,Sca.PHASE4,Sca.PHASE5,Sca.PHASE6,Sca.SBOX,Sca.ROUNDOUT,Sca.TDES1,Sca.TDES2,Sca.TDES3
-
 function IncrementalCPATest(splitmode)
     len = 200
 
@@ -21,7 +19,7 @@ function IncrementalCPATest(splitmode)
     params = getParameters(fullfilename, direction)
 
     params.analysis = IncrementalCPA()
-    params.analysis.leakageFunctions = [hw]
+    params.analysis.leakageFunctions = [bit0,bit7]
 
     numberOfAverages = length(params.keyByteOffsets)
     numberOfCandidates = getNumberOfCandidates(params)
@@ -49,7 +47,7 @@ function IncrementalCPATest(splitmode)
 
     params.analysis = DPA()
     params.analysis.statistic = cor
-    params.analysis.leakageFunctions = [hw]
+    params.analysis.leakageFunctions = [bit0,bit7]
 
     trs = InspectorTrace(fullfilename)
 
@@ -73,7 +71,7 @@ function ParallelIncrementalCPATest(splitmode)
     params = getParameters(fullfilename, direction)
 
     params.analysis = IncrementalCPA()
-    params.analysis.leakageFunctions = [hw]
+    params.analysis.leakageFunctions = [bit0,bit7]
 
     numberOfAverages = length(params.keyByteOffsets)
     numberOfCandidates = getNumberOfCandidates(params)
@@ -100,7 +98,7 @@ function ParallelIncrementalCPATest(splitmode)
     @test(key == get(params.knownKey))
 
     params.analysis = IncrementalCPA()
-    params.analysis.leakageFunctions = [hw]
+    params.analysis.leakageFunctions = [bit0,bit7]
 
     trs = InspectorTrace(fullfilename)
     setPostProcessor(trs, IncrementalCorrelation(NoSplit()))
@@ -126,7 +124,7 @@ function ParallelIncrementalCPATestWithInterval()
     params = getParameters(fullfilename, direction)
 
     params.analysis = IncrementalCPA()
-    params.analysis.leakageFunctions = [hw]
+    params.analysis.leakageFunctions = [bit0,bit7]
     params.updateInterval = Nullable(updateInterval)
 
     numberOfAverages = length(params.keyByteOffsets)
@@ -149,7 +147,7 @@ function ParallelIncrementalCPATestWithInterval()
     @test(key == get(params.knownKey))
 
     params.analysis = IncrementalCPA()
-    params.analysis.leakageFunctions = [hw]
+    params.analysis.leakageFunctions = [bit0,bit7]
     params.updateInterval = Nullable()
 
     for s in 1:numberOfScas
