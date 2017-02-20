@@ -45,6 +45,15 @@ type MiaColumnData{T}
   end
 end
 
+function dump(c::MiaColumnData)
+  # print(c.uniques)
+  @printf("%s\n", c.where)
+  # print(c.p)
+  # print(c.numobs)
+  @printf("entropy: %f\n", - sum(map(x-> x*log2(x), values(c.p))))
+  @printf("sum(p): %f\n", sum(values(c.p)))
+end
+
 function mia(X::MiaColumnData, Y::MiaColumnData, normalized=false)
   X.numobs == Y.numobs || throw(DimensionMismatch())
 
@@ -78,11 +87,11 @@ end
 function bucket(X::Vector{Float64}, nrXbuckets::Int)
   minX = minimum(X)
   maxX = maximum(X)
-  stepX = (maxX - minX) / (nrXbuckets - 1)
+  stepX = (maxX - minX) / nrXbuckets
 
   Xbucketed = zeros(Int, length(X))
   for (idx,val) in enumerate(X)
-    Xbucketed[idx] = Int(div(val,stepX))
+    Xbucketed[idx] = min(Int(div(val,stepX)), nrXbuckets - 1)
   end
   return Xbucketed
 end
@@ -93,7 +102,14 @@ function mia(O::Matrix, P::Matrix, nrOfObuckets=9)
 
   C = zeros(Float64, co, cp)
 
-  Ocolumndata = vec(mapslices(x -> MiaColumnData{Int}(bucket(x, nrOfObuckets)), O, 1))
+  if eltype(O) <: AbstractFloat
+    Ocolumndata = vec(mapslices(x -> MiaColumnData{Int}(bucket(x, nrOfObuckets)), O, 1))
+  else
+    Ocolumndata = vec(mapslices(MiaColumnData{eltype(O)}, O, 1))
+  end
+
+  # dump(Ocolumndata[1])
+
   progress = Progress(co*cp,1)
 
   for p in 1:cp
