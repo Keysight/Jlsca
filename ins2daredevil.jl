@@ -6,26 +6,41 @@ include("trs.jl")
 
 using Trs
 
-function ins2daredevil(filename)
-	trs = InspectorTrace(filename)
-	(data,samples) = trs[1]
 
-	guessesfn = @sprintf("data_UInt8_%dt.bin", length(trs))
-	samplesfn = @sprintf("samples_%s_%dt.bin", eltype(samples), length(trs))
+# Convert Inspector trs file to Daredevil split binary format
+# filename      - Inspector trs file name
+# dataStartByte - first data byte to take (starting from 1)
+# dataNumBytes  - number of data bytes to take
+function ins2daredevil(filename, dataOffset, dataBytes)
 
-	trs2 = SplitBinary(guessesfn, length(data), samplesfn, length(samples), eltype(samples), length(trs), true)
+    trs = InspectorTrace(filename)
+    (data,samples) = trs[1]
+    numOriginalDataBytes = length(data)
+    numOriginalSamples = length(samples)
+    numOriginalTraces = length(trs)
 
-	for i in 1:length(trs)
-		trs2[i] = trs[i]
-	end
+    # assert a careless user
+    if (dataOffset + dataBytes - 1 > numOriginalDataBytes)
+        @printf("Requested data range is out of bounds! \n")
+        exit()
+    end
+
+    guessesfn = @sprintf("data_UInt8_%dt.bin", numOriginalTraces)
+    samplesfn = @sprintf("samples_%s_%dt.bin", eltype(samples), numOriginalTraces)
+
+    bin = SplitBinary(guessesfn, dataBytes, samplesfn, numOriginalSamples, eltype(samples), numOriginalTraces, true)
+
+    for i in 1:length(trs)
+        bin[i] = (trs[i][1][dataOffset:dataOffset+dataBytes-1], trs[i][2])
+    end
 
 
-	@printf("Daredevil config:\n")
-	@printf("guess=%s %d %d\n", guessesfn, length(trs), length(trs[1][1]))
-	@printf("trace=%s %d %d\n", samplesfn, length(trs), length(trs[1][2]))
+    @printf("Daredevil config:\n")
+    @printf("guess=%s %d %d\n", guessesfn, length(trs), dataBytes)
+    @printf("trace=%s %d %d\n", samplesfn, length(trs), numOriginalSamples)
 
-	close(trs)
-	close(trs2)
+    close(trs)
+    close(bin)
 end
 
-ins2daredevil(ARGS[1])
+ins2daredevil(ARGS[1], 1, 16)
