@@ -1,3 +1,5 @@
+#!/usr/bin/env julia -Lsca.jl
+
 # This file is part of Jlsca, license is GPLv3, see https://www.gnu.org/licenses/gpl-3.0.en.html
 #
 # Author: Cees-Bart Breunesse, Ilya Kizhvatov
@@ -6,13 +8,12 @@ include("trs.jl")
 
 using Trs
 
-
 # Convert Inspector trs file to Daredevil split binary format
 # filename      - Inspector trs file name
 # dataStartByte - first data byte to take (starting from 1)
 # dataNumBytes  - number of data bytes to take
 # bitsToBytes   - represent individual bits from trs as bytes in split binary
-function trs2ddl(filename, dataOffset, dataBytes, bitsToBytes::Bool = true)
+function trs2splitbin(filename, dataOffset, dataBytes, bitsToBytes::Bool = true)
 
     trs = InspectorTrace(filename)
 
@@ -60,4 +61,4 @@ function trs2ddl(filename, dataOffset, dataBytes, bitsToBytes::Bool = true)
     close(bin)
 end
 
-trs2ddl(ARGS[1], 1, 16)
+trs2splitbin(ARGS[1], 1, 16)
