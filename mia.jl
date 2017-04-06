@@ -12,7 +12,6 @@ module Mia
 export mia
 
 using ProgressMeter
-using StatsBase
 
 type MiaColumnData{T}
   uniques::Set{T}
@@ -88,6 +87,10 @@ function bucket(X::Vector{Float64}, nrXbuckets::Int)
   minX = minimum(X)
   maxX = maximum(X)
   stepX = (maxX - minX) / nrXbuckets
+
+  if stepX <= 0
+    stepX = 1
+  end 
 
   Xbucketed = zeros(Int, length(X))
   for (idx,val) in enumerate(X)
