@@ -270,16 +270,3 @@ function tobits(x::Vector{UInt64})
 
   return a
 end
-
-# This pass will work on trs objects opened with trs = InspectorTrace("name.trs", true)
-function tobits(x::Vector{UInt8})
-  bits = length(x)*8
-
-  # this is a fast hack to create BitVectors
-  a = BitVector()
-  a.chunks = x
-  a.len = bits
-  a.dims = (0,)
-
-  return a
-end
