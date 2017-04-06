@@ -30,7 +30,7 @@ end
 
 function hw(x::UInt16)
   return hw(UInt8(x>>8)) + hw(UInt8(x & 0xff))
-end 
+end
 
 # function hw(x::UInt8)
 #     ret::UInt8 = 0
@@ -79,16 +79,6 @@ function basisModelSingleBits(x::UInt8, bitWidth=8)
 end
 
 # TODO: understand why bitWidth=32 results in non-invertable matrices.
-function basisModelSingleBits(x::Integer, bitWidth=8)
-  g = zeros(Float64, bitWidth+1)
-  for i in 1:bitWidth
-      g[i] = (x >> (i-1)) & 1
-  end
-  g[length(g)] = 1
-
-  return g
-end
-
 # function basisModelSingleBits(x::UInt32, bits=collect(1:31))
 #   g = zeros(Float64, length(bits)+1)
 #   for i in bits
