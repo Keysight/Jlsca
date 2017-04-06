@@ -6,8 +6,6 @@ julia aes-tests.jl && \
 julia des-tests.jl && \
 # incremental statistics tests
 julia incremental-statistics-tests.jl && \
-# some work split related sanity checks
-julia distributed-tests.jl && \
 # trs testing
 julia trs-tests.jl && \
 
