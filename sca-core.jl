@@ -23,22 +23,24 @@ type DPA <: NonIncrementalAnalysis
   statistic::Function
   leakageFunctions::Vector{Function}
   postProcess::Vector{Function}
+  maxCols::Nullable{Int}
 
   function DPA()
-    return new(cor, [hw], [abs])
+    return new(cor, [hw], [abs], Nullable())
   end
 end
 
 type LRA <: NonIncrementalAnalysis
   basisModel::Function
   postProcess::Vector{Function}
+  maxCols::Nullable{Int}
 
   function LRA(basisModel)
     return new(basisModel, [])
   end
 
   function LRA()
-    return new(basisModelSingleBits, [])
+    return new(basisModelSingleBits, [], Nullable())
   end
 end
 
@@ -99,21 +101,28 @@ function attack(a::NonIncrementalAnalysis, attackfun::Function, trs::Trace, rang
       kbdata = reshape(data[:,kb], size(data)[1], 1)
     end
 
-    @printf("%s on samples shape %s and data shape %s\n", string(typeof(a).name.name), size(kbsamples), size(kbdata))
-    if size(kbsamples)[2] == 0
-      @printf("no samples!\n")
-      scores = nothing
-      continue
+    cols = size(kbsamples)[2]
+    # FIXME: need to pick something sane here
+    maxCols = get(a.maxCols, 10000)
+
+    for sr in 1:maxCols:cols
+      srEnd = min(sr+maxCols-1, cols)
+      @printf("%s on samples shape %s (range %s) and data shape %s\n", string(typeof(a).name.name), size(kbsamples), string(sr:srEnd), size(kbdata))
+      if size(kbsamples)[2] == 0
+        @printf("no samples!\n")
+        scores = nothing
+        continue
+      end
+
+      # run the attack
+      @time C = attackfun(kbdata, kbsamples[:,sr:srEnd], [keyByteOffsets[kb]])
+
+      # nop the nans
+      C[isnan(C)] = 0
+
+      # get the scores for all leakage functions
+      updateScoresAndOffsets!(scoresAndOffsets, C, 1, kb, getNrLeakageFunctions(a), a.postProcess, length(kbvals))
     end
-
-    # run the attack
-    @time C = attackfun(kbdata, kbsamples, [keyByteOffsets[kb]])
-
-    # nop the nans
-    C[isnan(C)] = 0
-
-    # get the scores for all leakage functions
-    getScoresAndOffsets!(scoresAndOffsets, C, 1, kb, getNrLeakageFunctions(a), a.postProcess, length(kbvals))
   end
 end
 
@@ -137,7 +146,7 @@ function attack(a::IncrementalCPA, trs::Trace, range::Range, keyByteOffsets::Vec
   @time (C,eof) = readTraces(trs, range)
 
   for kb in 1:length(keyByteOffsets)
-    getScoresAndOffsets!(scoresAndOffsets, C, kb, kb, length(a.leakageFunctions), a.postProcess, length(kbvals))
+    updateScoresAndOffsets!(scoresAndOffsets, C, kb, kb, length(a.leakageFunctions), a.postProcess, length(kbvals))
   end
 end
 
@@ -162,6 +171,8 @@ function analysis(params::Attack, phase::Enum, trs::Trace, firstTrace::Int, numb
       if eof
         break
       end
+      
+      clearScoresAndOffsets!(scoresAndOffsets)
 
       attack(params.analysis, trs, range, keyByteOffsets, targetFunction, targetFunctionType, kbVals, scoresAndOffsets)
 
