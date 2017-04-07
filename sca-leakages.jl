@@ -68,7 +68,7 @@ id(x) = x
 
 # some models for LRA
 
-function basisModelSingleBits(x::UInt8, bitWidth=8)
+function basisModelSingleBits(x::Integer, bitWidth=8)
   g = zeros(Float64, bitWidth+1)
   for i in 1:bitWidth
       g[i] = (x >> (i-1)) & 1
