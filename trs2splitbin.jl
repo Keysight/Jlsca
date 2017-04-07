@@ -1,16 +1,13 @@
-#!/usr/bin/env julia -Lsca.jl
-
 # Converter between Inspector trs and Daredevil split binary format, and vice versa.
 #  Assumes that individual bytes in the spit bnary represents a bit; trs file can either store
 #  bits as bytes, or have bits packed. See test() for examples of use.
 #
-# Tested so far only with UInt8 traces.
+# Tested so far only with UInt8 traces. To run the tests, do
+# julia -L sca.jl trs2splitbin.jl
 #
 # This file is part of Jlsca, license is GPLv3, see https://www.gnu.org/licenses/gpl-3.0.en.html
 #
 # Author: Cees-Bart Breunesse, Ilya Kizhvatov
-
-include("trs.jl")
 
 using Trs
 
@@ -113,7 +110,9 @@ end
 
 # test back and forth
 # TODO: add test with different data types!
-function test(cleanup::Bool = true)
+function testTrs2splitbin(cleanup::Bool = true)
+
+    @printf("Running tests...\n")
 
     ### 1. Without bit compression
     
@@ -140,11 +139,11 @@ function test(cleanup::Bool = true)
     trs2splitbin("output_UInt8_17t_bitsasbytes.trs", 1, 32, false)
     
     if readstring(`cmp samples_UInt8_17t.bin samples_UInt8_17t_original.bin`) != ""
-        @printf("Files not identical, fail!\n")hexdump -
+        @printf("Files not identical, fail!\n")
         exit()
     end
 
-    ### 3. Check versus original Daredevil split binary and trs (confirms that endianness is the same)
+    ### 3. Check versus original Daredevil split binary and trs
 
     trs2splitbin("testtraces/trs2splitbin_bitsasbytes.trs", 1, 32, false)
     if readstring(`cmp samples_UInt8_13t.bin testtraces/trs2splitbin_bitsasbytes.trace`) != ""
@@ -160,4 +159,5 @@ function test(cleanup::Bool = true)
     end
 end
 
-test()
+# run the test if thi sfile is executed
+testTrs2splitbin()
