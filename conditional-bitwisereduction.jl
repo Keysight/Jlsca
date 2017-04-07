@@ -19,69 +19,8 @@
 #
 # Duplicate column removal by Ruben Muijrers
 
-export CondReduce,tobits
+export CondReduce
 
-function toMask(a::Vector{Int})
-  mask = BitVector(length(a))
-  for i in 1:length(a)
-    mask[i] = (a[i] == i)
-  end
-  return mask
-end
-
-type BitCompress
-  tmp::Vector{Int}
-  duplicates::Vector{Int}
-  first::Bool
-
-  function BitCompress(nrOfSamples::Int)
-    return new(Vector{Int}(nrOfSamples), Vector{Int}(nrOfSamples), true)
-  end
-end
-
-# Efficient removal of duplicate columns for row-wise available data by Ruben Muijrers.
-function bitcompress(state::BitCompress, input::AbstractArray)
-  if state.first
-    # state.duplicates[find(x -> x == input[1], input)] .= 1
-    # state.duplicates[find(x -> x != input[1], input)] .= findfirst(x -> x != input[1], input)
-    x = input[1]
-    seen = false
-    y = 0
-    for b in eachindex(input)
-      if input[b] == x
-        state.duplicates[b] = 1
-      else
-        if !seen
-           seen = true
-           y = b
-        end
-        state.duplicates[b] = y
-      end
-    end
-    state.first = false
-  else
-    duplicates = state.duplicates
-    tmp = state.tmp
-
-    @inbounds for i in 1:length(duplicates)
-      # freshly made for keeping track of splits
-      tmp[i] = i
-      # if we were labeled a duplicate before
-      if duplicates[i] != i
-        #  check if we still belong to the same group
-        if input[i] != input[duplicates[i]]
-          # if not, check if we split this group earlier
-          if tmp[duplicates[i]] == duplicates[i]
-            # if not, make a new group
-            tmp[duplicates[i]] = i
-          end
-          # assign the new group
-          duplicates[i] = tmp[duplicates[i]]
-        end
-      end
-    end
-  end
-end
 
 type CondReduce <: Cond
   mask::Dict{Int,BitVector}
@@ -153,7 +92,6 @@ function add(c::CondReduce, trs::Trace, traceIdx::Int)
       continue
     end
 
-    currmask = c.mask[idx]
     cachedreftrace = getSamples(trs, c.traceIdx[idx][val])
     cachedsamples = get(samples)
 
@@ -214,7 +152,7 @@ function get(c::CondReduce)
     end
   end
 
-  globalmask = toMask(c.state.duplicates)
+  globalmask = toMask(c.state)
 
   datas = Matrix[]
   reducedsamples = Matrix[]
@@ -269,4 +207,14 @@ function tobits(x::Vector{UInt64})
   a.dims = (0,)
 
   return a
+end
+
+function tobits(x::Vector{UInt8})
+  ret = falses(length(x)*8)
+  for i in 1:length(x)
+    for j in 1:8
+      ret[(i-1)*8+j] = ((x[i] >> (j-1)) & 1) == 1
+    end
+  end
+  return BitVector(ret)
 end
