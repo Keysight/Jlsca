@@ -53,7 +53,7 @@ function bitcompress(state::BitCompress, input::AbstractArray)
     tmp = state.tmp
     inverses = state.inverses
 
-    for i in 1:length(duplicates)
+    @inbounds for i in 1:length(duplicates)
       # freshly made for keeping track of splits
       tmp[i] = i
       # if we were labeled a duplicate before
@@ -71,7 +71,7 @@ function bitcompress(state::BitCompress, input::AbstractArray)
       end
     end
 
-    for i in 1:length(inverses)
+    @inbounds for i in 1:length(inverses)
       if inverses[i] != i
         # Ruben's Magic
         j = inverses[i]
