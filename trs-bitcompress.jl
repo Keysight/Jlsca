@@ -17,10 +17,27 @@ end
 
 function toMask(state::BitCompress)
   mask = BitVector(length(state.duplicates))
-  for i in 1:length(state.duplicates)
-    mask[i] = (state.duplicates[i] == i) && (state.inverses[i] == i)
+  for (i,val) in enumerate(state.duplicates)
+    mask[i] = (val == i) && (state.inverses[val] == i)
   end
   return mask
+end
+
+function stats(state::BitCompress) 
+  keptnondups = 0
+  keptnondupsandnoninvs = 0
+
+  for (i,val) in enumerate(state.duplicates)
+    if val == i
+      keptnondups += 1
+      if state.inverses[val] == i
+        keptnondupsandnoninvs += 1
+      end
+    end
+  end
+
+  return (keptnondups, keptnondupsandnoninvs)
+
 end
 
 # Efficient removal of duplicate columns and inverse duplicate columns for

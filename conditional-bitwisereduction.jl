@@ -170,11 +170,13 @@ function get(c::CondReduce)
     throw(Exception("Unsupported and not recommended ;)"))
   end
 
+  (keptnondups, keptnondupsandinvcols) = stats(c.state)
+
   for k in sort(collect(keys(c.traceIdx)))
     dataSnap = sort(collect(dataType, keys(c.traceIdx[k])))
     idxes = find(c.mask[k] & globalmask)
     sampleSnap = BitArray{2}(length(dataSnap), length(idxes))
-    @printf("Reduction for %d: %d left after global dup col removal, %d left after sample reduction, %d left combined\n", k, countnz(globalmask), countnz(c.mask[k]), length(idxes))
+    @printf("Reduction for %d: %d left after global dup col removal, %d left after removing the invers dup cols, %d left after sample reduction\n", k, keptnondups, keptnondupsandinvcols, length(idxes))
 
     for j in 1:length(dataSnap)
       trsIndex = c.traceIdx[k][dataSnap[j]]

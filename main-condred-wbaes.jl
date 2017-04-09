@@ -48,15 +48,17 @@ function gofaster()
   numberOfAverages = length(params.keyByteOffsets)
   numberOfCandidates = getNumberOfCandidates(params)
 
-  localtrs = InspectorTrace(filename, true)
+  toBitsEfficient = false
+
+  localtrs = InspectorTrace(filename, toBitsEfficient)
   addSamplePass(localtrs, tobits)
 
   @everyworker begin
       using Trs
       # the "true" argument will force the sample type to be UInt64, throws an exception if samples are not 8-byte aligned
-      trs = InspectorTrace($filename, true)
+      trs = InspectorTrace($filename, $toBitsEfficient)
 
-      # this efficiently converts UInt64 to packed BitVectors
+      # this converts to packed BitVectors (efficiently, if toBitsEfficient is set)
       addSamplePass(trs, tobits)
 
       setPostProcessor(trs, CondReduce(SplitByData($numberOfAverages, $numberOfCandidates), $localtrs))
