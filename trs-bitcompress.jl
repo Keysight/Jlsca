@@ -40,6 +40,8 @@ function stats(state::BitCompress)
 
 end
 
+setInverses = (s,i,j) -> (i < j) ? s.inverses[j] = i : s.inverses[i] = j
+
 # Efficient removal of duplicate columns and inverse duplicate columns for
 # row-wise available data by Ruben Muijrers.
 function bitcompress(state::BitCompress, input::AbstractArray)
@@ -70,46 +72,46 @@ function bitcompress(state::BitCompress, input::AbstractArray)
     tmp = state.tmp
     inverses = state.inverses
 
-    @inbounds for i in 1:length(duplicates)
+    @inbounds for (i,dupi) in enumerate(duplicates)
       # freshly made for keeping track of splits
       tmp[i] = i
       # if we were labeled a duplicate before
-      if duplicates[i] != i
+      if dupi != i
         #  check if we still belong to the same group
-        if input[i] != input[duplicates[i]]
+        if input[i] != input[dupi]
           # if not, check if we split this group earlier
-          if tmp[duplicates[i]] == duplicates[i]
+          if tmp[dupi] == dupi
             # if not, make a new group
-            tmp[duplicates[i]] = i
+            tmp[dupi] = i
           end
           # assign the new group
-          duplicates[i] = tmp[duplicates[i]]
+          duplicates[i] = tmp[dupi]
         end
       end
     end
 
-    @inbounds for i in 1:length(inverses)
-      if inverses[i] != i
+    @inbounds for (i,j) in enumerate(inverses)
+      if j != i
+        tmpj = tmp[j]
+        tmpi = tmp[i] 
         # Ruben's Magic
-        j = inverses[i]
-        jHasNewGroup = (tmp[j] != j)
-        iHasNewGroup = (tmp[i] != i)
-        setInverses = (i,j) -> (i < j) ? inverses[j] = i : inverses[i] = j
+        jHasNewGroup = (tmpj != j)
+        iHasNewGroup = (tmpi != i)
 
         if input[i] == input[j]
           if jHasNewGroup
-            setInverses(i, tmp[j])
+            setInverses(state, i, tmpj)
           end
 
           if iHasNewGroup
-            setInverses(tmp[i], j)
+            setInverses(state, tmpi, j)
           end
           
           if inverses[i] == j
             inverses[i] = i
           end
         elseif jHasNewGroup && iHasNewGroup
-          setInverses(tmp[i], tmp[j])
+          setInverses(state, tmpi, tmpj)
         end
       end
     end
