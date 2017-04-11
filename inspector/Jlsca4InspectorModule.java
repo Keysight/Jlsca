@@ -134,7 +134,7 @@ public class Jlsca4InspectorModule extends Module implements ModuleInChain {
   }
 
   void startJlscaProcess(String parameters, int nrOfSamples) throws IOException {
-    String expr = String.format("using Sca, Trs; %s; trs = InspectorTrace(%s); numberOfAverages = length(params.keyByteOffsets); numberOfCandidates = getNumberOfCandidates(params); setPostProcessor(trs, CondAvg, numberOfAverages, numberOfCandidates); sca(trs, params, 1, length(trs), false)", parameters, Platform.isWindows() ? "\\\"-\\\"" : "\"-\"");
+    String expr = String.format("using Sca, Trs; %s; trs = InspectorTrace(%s); setPostProcessor(trs, CondAvg()); sca(trs, params, 1, length(trs), false)", parameters, Platform.isWindows() ? "\\\"-\\\"" : "\"-\"");
     log("Jlsca params: " + expr);
     ProcessBuilder pb = new ProcessBuilder("julia", "-Lsca.jl", "-e", expr);
     pb.directory(new File(JLSCA_PATH));

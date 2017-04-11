@@ -11,7 +11,7 @@ using ProgressMeter
 
 
 # Vanilla DPA on data and sample matrices.
-function dpa(data::Matrix, samples::Matrix, keyByteOffsets::Vector{Int}, intermediateFun::Function, leakageFuns::Vector{Function}, statistic=cor, kcVals=collect(UInt8, 0:255), H_type=UInt8, HL_type=UInt8)
+function dpa(data::AbstractArray, samples::AbstractArray, keyByteOffsets::Vector{Int}, intermediateFun::Function, leakageFuns::Vector{Function}, statistic=cor, kcVals=collect(UInt8, 0:255), H_type=UInt8, HL_type=UInt8)
   (tr,tc) = size(samples)
   (dr,dc) = size(data)
   nrKcVals = length(kcVals)

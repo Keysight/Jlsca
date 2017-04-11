@@ -20,7 +20,7 @@ type SplitBinary <: Trace
   samplesPosition
   dataPosition
 
-  function SplitBinary(dataFn, samplesFn)
+  function SplitBinary(dataFn, samplesFn, bits::Bool = false)
     (sampleSpace, sampleType, numberOfTracesSamples) = parseFilename(samplesFn)
     (dataSpace, dataType, numberOfTracesData) = parseFilename(dataFn)
     if isnull(sampleSpace) && isnull(numberOfTracesSamples) == nothing
@@ -65,12 +65,21 @@ type SplitBinary <: Trace
       throw(ErrorException(@sprintf("Different #traces in samples %d versus data %d", get(numberOfTracesSamples), get(numberOfTracesData))))
     end
 
-    SplitBinary(dataFn, get(dataSpace), samplesFn::String, get(sampleSpace), sampleType, get(numberOfTracesSamples))
+    SplitBinary(dataFn, get(dataSpace), samplesFn::String, get(sampleSpace), sampleType, get(numberOfTracesSamples), false, bits)
   end
 
-  function SplitBinary(dataFname::String, dataSpace::Int, samplesFn::String, numberOfSamplesPerTrace, sampleType, nrtraces, write::Bool=false)
+  function SplitBinary(dataFname::String, dataSpace::Int, samplesFn::String, numberOfSamplesPerTrace, sampleType, nrtraces, write::Bool=false, bits::Bool=false)
     samplesFileDescriptor = open(samplesFn, write ? "w+" : "r")
     dataFileDescriptor = open(dataFname, write ? "w+" :"r")
+
+
+    if bits
+      if (numberOfSamplesPerTrace * sizeof(sampleType)) % 8 != 0
+        throw(ErrorException("samples needs to be 8 byte aligned in order to force sample type to UInt64!!!1\n"))
+      end
+      numberOfSamplesPerTrace = div((numberOfSamplesPerTrace * sizeof(sampleType)), 8)
+      sampleType = UInt64
+    end
 
     new(nrtraces, dataSpace, sampleType, numberOfSamplesPerTrace, samplesFileDescriptor, dataFileDescriptor, [], [], Union, Union, 0, 0, 0)
   end

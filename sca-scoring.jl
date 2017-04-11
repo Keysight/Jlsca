@@ -21,8 +21,15 @@ function allocateScoresAndOffsets(nrLeakageFunctions::Int, nrKeyChunkValues::Int
   return scoresAndOffsets
 end
 
+function clearScoresAndOffsets!(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}})  
+  for i in 1:length(scoresAndOffsets)
+    scoresAndOffsets[i][1] .= 0
+    scoresAndOffsets[i][2] .= 0
+  end
+end
+
 # the scoring function returns two vectors of matrices, one with scores matrices, one with offet matrices into the samples, for each leakage function
-function getScoresAndOffsets!(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, C::Matrix{Float64}, keyIdxIntoC::Int, keyIdxIntoScores::Int, nrLeakageFunctions::Int, preprocessors::Vector{Function}, nrKeyChunkValues::Int=256)
+function updateScoresAndOffsets!(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, C::Matrix{Float64}, keyIdxIntoC::Int, keyIdxIntoScores::Int, nrLeakageFunctions::Int, preprocessors::Vector{Function}, nrKeyChunkValues::Int=256)
   (rc, cc) = size(C)
 
   for fn in preprocessors
@@ -36,8 +43,13 @@ function getScoresAndOffsets!(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Ma
     lower = (keyIdxIntoC-1)*nrLeakageFunctions*nrKeyChunkValues + (l-1)*nrKeyChunkValues  + 1
     upper = lower+nrKeyChunkValues-1
     (corrvals, corrvaloffsets) = findmax(C[:,lower:upper], 1)
-    scores[:,keyIdxIntoScores] = corrvals
-    offsets[:,keyIdxIntoScores] = map(x -> ind2sub(size(C), x)[1] - 1, corrvaloffsets)
+
+    for (idx,val) in enumerate(corrvals)
+      if val > scores[:,keyIdxIntoScores][idx]
+        scores[idx,keyIdxIntoScores] = val
+        offsets[idx,keyIdxIntoScores] = ind2sub(size(C), corrvaloffsets[idx])[1]
+      end
+    end
   end
 
   return scoresAndOffsets

@@ -29,10 +29,12 @@ type AesSboxAttack <: AesAttack
   phases::Vector{Phase}
   phaseInput::Nullable{Vector{UInt8}}
   outputkka::Nullable{AbstractString}
+  sbox::Vector{UInt8}
+  invsbox::Vector{UInt8}
 
   function AesSboxAttack()
     leakageFunctions = [bit0, bit1, bit2, bit3, bit4, bit5, bit6, bit7]
-    return new(CIPHER, KL128, FORWARD, 1, collect(1:16), Nullable(), DPA(), false, Nullable(), [], Nullable(), Nullable())
+    return new(CIPHER, KL128, FORWARD, 1, collect(1:16), Nullable(), DPA(), false, Nullable(), [], Nullable(), Nullable(), Aes.sbox, Aes.invsbox)
   end
 end
 
@@ -57,10 +59,12 @@ type AesMCAttack <: AesAttack
   phases::Vector{Phase}
   phaseInput::Nullable{Vector{UInt8}}
   outputkka::Nullable{AbstractString}
+  sbox::Vector{UInt8}
+  invsbox::Vector{UInt8}
 
   function AesMCAttack()
     leakageFunctions = [bit0]
-    return new(CIPHER, KL128, FORWARD, 1, collect(1:16), Nullable(), DPA(), false, Nullable(), [], Nullable(), Nullable())
+    return new(CIPHER, KL128, FORWARD, 1, collect(1:16), Nullable(), DPA(), false, Nullable(), [], Nullable(), Nullable(), Aes.sbox, Aes.invsbox)
   end
 end
 
@@ -80,9 +84,9 @@ function toShortString(params::Union{AesSboxAttack,AesMCAttack})
  end
 
 # target functions
-function invMcOut(x::UInt8, keyByte::UInt8, position::Int, constant::UInt8)
+function invMcOut(a::AesMCAttack, x::UInt8, keyByte::UInt8, position::Int, constant::UInt8)
     mcIn = fill(constant, 4)
-    mcIn[position] = invsbox[(x $ keyByte) + 1]
+    mcIn[position] = a.invsbox[(x $ keyByte) + 1]
     mcOut = Aes.InvMixColumn(mcIn)
     ret::UInt32 = 0
     for i in 1:4
@@ -92,15 +96,15 @@ function invMcOut(x::UInt8, keyByte::UInt8, position::Int, constant::UInt8)
     return ret
 end
 
-function invMcOut(data::Array{UInt8}, dataColumn, keyByte::UInt8, position::Int, constant::UInt8)
-    ret = map(x -> invMcOut(x,keyByte,position,constant), data)
+function invMcOut(a::AesMCAttack, data::Array{UInt8}, dataColumn, keyByte::UInt8, position::Int, constant::UInt8)
+    ret = map(x -> invMcOut(a,x,keyByte,position,constant), data)
     return ret
 end
 
 
-function mcOut(x::UInt8, keyByte::UInt8, position::Int, constant::UInt8)
+function mcOut(a::AesMCAttack, x::UInt8, keyByte::UInt8, position::Int, constant::UInt8)
     mcIn = fill(constant, 4)
-    mcIn[position] = sbox[(x $ keyByte) + 1]
+    mcIn[position] = a.sbox[(x $ keyByte) + 1]
     mcOut = Aes.MixColumn(mcIn)
     ret::UInt32 = 0
     for i in 1:4
@@ -110,14 +114,14 @@ function mcOut(x::UInt8, keyByte::UInt8, position::Int, constant::UInt8)
     return ret
 end
 
-function mcOut(data::Array{UInt8}, dataColumn, keyByte::UInt8, position::Int, constant::UInt8)
-    ret = map(x -> mcOut(x,keyByte,position,constant), data)
+function mcOut(a::AesMCAttack, data::Array{UInt8}, dataColumn, keyByte::UInt8, position::Int, constant::UInt8)
+    ret = map(x -> mcOut(a,x,keyByte,position,constant), data)
     return ret
 end
 
-function mcOutXORIn(x::UInt8, keyByte::UInt8, position::Int, constant::UInt8)
+function mcOutXORIn(a::AesMCAttack, x::UInt8, keyByte::UInt8, position::Int, constant::UInt8)
     mcIn = fill(constant, 4)
-    mcIn[position] = sbox[(x $ keyByte) + 1]
+    mcIn[position] = a.sbox[(x $ keyByte) + 1]
     mcOut = Aes.MixColumn(mcIn) $ mcIn
     ret::UInt32 = 0
     for i in 1:4
@@ -127,28 +131,28 @@ function mcOutXORIn(x::UInt8, keyByte::UInt8, position::Int, constant::UInt8)
     return ret
 end
 
-function mcOutXORIn(data::Array{UInt8}, dataColumn, keyByte::UInt8, position::Int, constant::UInt8)
-    ret = map(x -> mcOutXORIn(x,keyByte,position,constant), data)
+function mcOutXORIn(a::AesMCAttack, data::Array{UInt8}, dataColumn, keyByte::UInt8, position::Int, constant::UInt8)
+    ret = map(x -> mcOutXORIn(a,x,keyByte,position,constant), data)
     return ret
 end
 
-function sboxOut(data::Array{UInt8}, dataColumn, keyByte::UInt8)
-    ret = map(x -> sbox[(x $ keyByte) + 1], data)
+function sboxOut(a::AesSboxAttack, data::Array{UInt8}, dataColumn, keyByte::UInt8)
+    ret = map(x -> a.sbox[(x $ keyByte) + 1], data)
     return ret
 end
 
-function invSboxOut(data::Array{UInt8}, dataColumn, keyByte::UInt8)
-    ret = map(x -> invsbox[(x $ keyByte) + 1], data)
+function invSboxOut(a::AesSboxAttack, data::Array{UInt8}, dataColumn, keyByte::UInt8)
+    ret = map(x -> a.invsbox[(x $ keyByte) + 1], data)
     return ret
 end
 
-function sboxOutXORIn(data::Array{UInt8}, dataColumn, keyByte::UInt8)
-    ret = map(x -> x $ keyByte $ sbox[(x $ keyByte) + 1], data)
+function sboxOutXORIn(a::AesSboxAttack, data::Array{UInt8}, dataColumn, keyByte::UInt8)
+    ret = map(x -> x $ keyByte $ a.sbox[(x $ keyByte) + 1], data)
     return ret
 end
 
-function invSboxOutXORIn(data::Array{UInt8}, dataColumn, keyByte::UInt8)
-    ret = map(x -> x $ keyByte $ invsbox[(x $ keyByte) + 1], data)
+function invSboxOutXORIn(a::AesSboxAttack, data::Array{UInt8}, dataColumn, keyByte::UInt8)
+    ret = map(x -> x $ keyByte $ a.invsbox[(x $ keyByte) + 1], data)
     return ret
 end
 
@@ -326,7 +330,7 @@ function scatask(trs::Trace, params::AesMCAttack, firstTrace=1, numberOfTraces=l
     throw(Exception("Only KL128 supported for MC attack"))
   end
 
-  myfn = (data,keyBytePosition,keyVal) -> targetFunction(data, keyBytePosition, keyVal, 1, constant)
+  myfn = (data,keyBytePosition,keyVal) -> targetFunction(params, data, keyBytePosition, keyVal, 1, constant)
 
   if isnull(phaseInput)
     phaseInput = Nullable(zeros(UInt8, 16))
@@ -405,7 +409,7 @@ function scatask(trs::Trace, params::AesSboxAttack, firstTrace=1, numberOfTraces
   # dataOffsets = params.dataOffsets
   knownKey = params.knownKey
   updateInterval = params.updateInterval
-  targetFunction = getTargetFunction(params)
+  targetFunction = (x...) -> getTargetFunction(params)(params, x...)
 
 
   local key, scores

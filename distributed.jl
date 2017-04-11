@@ -19,8 +19,6 @@ type SplitByData <: WorkSplit
   end
 end
 
-getAverageIdx(w::SplitByData, val::Int) = div(val,w.numberOfCandidates)+1
-getCandidate(w::SplitByData, val::Int) = val % w.numberOfCandidates
 toVal(w::SplitByData, averageIdx::Int, candidate::Int) = ((averageIdx-1)*w.numberOfCandidates) + candidate
 
 function splitRange(numberOfAverages::Int, numberOfCandidates::Int, workers::Int)
@@ -40,14 +38,6 @@ function splitRange(numberOfAverages::Int, numberOfCandidates::Int, workers::Int
   end
 
   return workerranges
-end
-
-function getWorkerRange(w::SplitByData)
-  if nprocs() > 1 && !w.traceSplit
-    return splitRange(w, nworkers())[myid()-1]
-  else
-    return splitRange(w, 1)[1]
-  end
 end
 
 abstract SplitByTraces <: WorkSplit
