@@ -8,6 +8,8 @@ julia des-tests.jl && \
 julia incremental-statistics-tests.jl && \
 # trs testing
 julia trs-tests.jl && \
+# trs conversion testing
+julia trs-convert-tests.jl && \
 
 # AES attack tests, all modes and directions. Can be called with -pX too.
 julia -Lsca.jl attackaes-tests.jl && \

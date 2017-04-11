@@ -9,7 +9,7 @@
 #
 # Author: Cees-Bart Breunesse, Ilya Kizhvatov
 
-using Trs
+export trs2splitbin,splitbin2trs
 
 # Convert Inspector trs file to Daredevil split binary format
 # filename      - Inspector trs file name
@@ -107,57 +107,3 @@ function splitbin2trs(dataFname, dataSpace, samplesFn, numberOfSamplesPerTrace, 
     close(bin)
     close(trs)
 end
-
-# test back and forth
-# TODO: add test with different data types!
-function testTrs2splitbin(cleanup::Bool = true)
-
-    @printf("Running tests...\n")
-
-    ### 1. Without bit compression
-    
-    # take file storing bits compressed and create uncompressed splitbin
-    trs2splitbin("testtraces/trs2splitbin_bitpacked.trs", 1, 32) 
-    
-    # re-create the compressed trs
-    splitbin2trs("data_UInt8_17t.bin", 32, "samples_UInt8_17t.bin", 1024, UInt8, 17) 
-    
-    if readstring(`cmp testtraces/trs2splitbin_bitpacked.trs output_UInt8_17t.trs`) != ""
-        @printf("Files not identical, fail!\n")
-        exit()
-    end
-
-    ### 2. With bit compression
-    
-    run(`mv samples_UInt8_17t.bin samples_UInt8_17t_original.bin`)
-    run(`mv data_UInt8_17t.bin data_UInt8_17t_original.bin`)
-    
-    # take the uncompressed splitbin and create an uncompressed trs
-    splitbin2trs("data_UInt8_17t_original.bin", 32, "samples_UInt8_17t_original.bin", 1024, UInt8, 17, false)
-    
-    # take the uncompressed trs and create uncompressed splitbin
-    trs2splitbin("output_UInt8_17t_bitsasbytes.trs", 1, 32, false)
-    
-    if readstring(`cmp samples_UInt8_17t.bin samples_UInt8_17t_original.bin`) != ""
-        @printf("Files not identical, fail!\n")
-        exit()
-    end
-
-    ### 3. Check versus original Daredevil split binary and trs
-
-    trs2splitbin("testtraces/trs2splitbin_bitsasbytes.trs", 1, 32, false)
-    if readstring(`cmp samples_UInt8_13t.bin testtraces/trs2splitbin_bitsasbytes.trace`) != ""
-        @printf("Files not identical, fail!\n")
-        exit()
-    end
-
-    if cleanup
-        run(`rm data_UInt8_17t.bin data_UInt8_17t_original.bin`)
-        run(`rm samples_UInt8_17t.bin samples_UInt8_17t_original.bin`)
-        run(`rm output_UInt8_17t.trs output_UInt8_17t_bitsasbytes.trs`)
-        run(`rm data_UInt8_13t.bin samples_UInt8_13t.bin`)
-    end
-end
-
-# run the test if thi sfile is executed
-testTrs2splitbin()
