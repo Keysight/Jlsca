@@ -137,10 +137,10 @@ function ParallelIncrementalCPATestWithInterval()
     end
 
     numberOfScas = div(len, updateInterval) + ((len % updateInterval) > 0 ? 1 : 0)
-    sando = Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}(numberOfScas*2)
+    sando = Vector{Tuple{Matrix{Float64}, Matrix{UInt}, Int}}(numberOfScas*2)
     sandoIdx = 1
 
-    cb::Function = (phase,params,scoresAndOffsets,dataWidth,keyOffsets,numberOfTraces2) -> (sando[sandoIdx] = scoresAndOffsets[1]; sandoIdx += 1)
+    cb::Function = (phase,params,scoresAndOffsets,dataWidth,keyOffsets,numberOfTraces2) -> (sando[sandoIdx] = (copy(scoresAndOffsets[1][1]),copy(scoresAndOffsets[1][2]),numberOfTraces2); sandoIdx += 1)
 
     key = sca(DistributedTrace(),params,1, len, false, Nullable{Function}(cb))
 
@@ -164,8 +164,9 @@ function ParallelIncrementalCPATestWithInterval()
     @test sandoIdx == numberOfScas*2+1
 
     for s in 1:numberOfScas
-      @test_approx_eq sando[s][1] sando[s][1]
-      @test sando[s][2] == sando[s][2]
+      @test_approx_eq sando[s][1] sando[s+numberOfScas][1]
+      @test sando[s][2] == sando[s+numberOfScas][2]
+      @test sando[s][3] == sando[s+numberOfScas][3]
     end
 end
 
