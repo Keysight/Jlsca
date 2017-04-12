@@ -8,6 +8,8 @@
 
 const squares = 0
 
+export gf8_mul,gf8_square,gf2_mul,gf8_sqrt,gf8_exp,gf2_dot,KeyExpansion,KeyExpansionBackwards,InvMixColumns,InvMixColumn,MixColumns,MixColumn,ShiftRows,InvShiftRows,AddRoundKey,Cipher,InvCipher,EqInvCipher,EqInvKeyExpansion,SubBytes,InvSubBytes,Nb,sbox,invsbox
+
 function myinv(s)
   invs = zeros(UInt8, length(s))
   for i in 1:length(invs)

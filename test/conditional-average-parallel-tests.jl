@@ -114,7 +114,7 @@ function ParallelCondAvgTestWithInterval()
     end
 
     @test sandoIdx == numberOfScas*2+1
-
+    
     for s in 1:numberOfScas
       @test_approx_eq sando[s][1] sando[s+numberOfScas][1]
       @test sando[s][2] == sando[s+numberOfScas][2]

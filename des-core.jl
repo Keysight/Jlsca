@@ -3,7 +3,7 @@
 # Author: Cees-Bart Breunesse
 
 export Cipher,InvCipher,KeyExpansion,KeyExpansionBackwards,Sbox,E,IP,getK,invP,f,invIP
-export toBytes,toSixbits,toBits,toNibbles
+export toBytes,toSixbits,toBits,toNibbles,toUInt64
 export TDESencrypt,TDESdecrypt
 
 # 64 to 64 bits

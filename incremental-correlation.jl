@@ -2,6 +2,7 @@
 #
 # Author: Cees-Bart Breunesse
 
+# TODO: move incremental-statistics.jl into its own module
 include("incremental-statistics.jl")
 
 export IncrementalCorrelation,init

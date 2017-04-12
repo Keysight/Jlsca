@@ -4,9 +4,8 @@
 
 using Base.Test
 
-include("incremental-statistics.jl")
-
 using ProgressMeter
+using Trs
 
 # normal usage
 function test1()

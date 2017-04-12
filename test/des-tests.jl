@@ -4,9 +4,8 @@
 
 module DesTest
 
+using Des
 using Base.Test
-
-include("des-core.jl")
 
 function testBitsAndBytes()
 	bytes = hex2bytes("deadbeefc335")

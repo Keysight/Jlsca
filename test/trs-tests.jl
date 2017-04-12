@@ -1,6 +1,4 @@
 
-include("trs.jl")
-
 using Base.Test
 using Trs
 

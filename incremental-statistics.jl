@@ -5,6 +5,8 @@
 # Implements algorithms from this fine Sandia paper:
 # http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.214.8508&rep=rep1&type=pdf
 
+export IncrementalMeanVariance,IncrementalCovariance,add!,getVariance,getStdDev,getCov,getCorr
+
 type IncrementalMeanVariance
   mean::Vector{Float64}
   var::Vector{Float64}

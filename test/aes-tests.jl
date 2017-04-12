@@ -4,10 +4,11 @@
 
 using Base.Test
 
-include("aes-core.jl")
+
+using Aes
 
 function sq(data::Array{UInt8})
-    return gf8_square(data, squares)
+    return gf8_square(data, Aes.squares)
 end
 
 function testKeyExpansion128()
