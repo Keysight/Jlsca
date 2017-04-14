@@ -16,11 +16,10 @@
 # - bitwise conditional reduction reduces the #traces and #samples
 #
 # This approach does not work on ciphers that use widening encodings or random masks.
-#
-# Duplicate column removal by Ruben Muijrers
 
 export CondReduce
 
+using ..Log
 
 type CondReduce <: Cond
   mask::Dict{Int,BitVector}
@@ -29,18 +28,20 @@ type CondReduce <: Cond
   worksplit::WorkSplit
   trs::Trace
   bitcompressedInitialized::Bool
+  logfile::SimpleCSV
+  # deliberatly not initialized with new in the constructor below
   state::BitCompress
 
-  function CondReduce(trs::Trace)
-    CondReduce(NoSplit(), trs)
+  function CondReduce(trs::Trace, logfile::String=Nullable{String}())
+    CondReduce(NoSplit(), trs, logfile=logfile)
   end
 
-  function CondReduce(worksplit::WorkSplit, trs::Trace)
+  function CondReduce(worksplit::WorkSplit, trs::Trace, logfile::Nullable{String}=Nullable{String}())
     mask = Dict{Int,BitVector}()
     traceIdx = Dict{Int,Dict{Int,Int}}()
     # @printf("Conditional bitwise sample reduction, split %s\n", worksplit)
 
-    new(mask, traceIdx, 0, worksplit, trs, false)
+    new(mask, traceIdx, 0, worksplit, trs, false, SimpleCSV(logfile))
   end
 end
 
@@ -171,12 +172,15 @@ function get(c::CondReduce)
   end
 
   (keptnondups, keptnondupsandinvcols) = stats(c.state)
+  Log.writecsvheader(c.logfile, "#traces, global dups", "global inv dups", map(x -> "cond sample red kb $x", 1:length(keys(c.mask)))...)
+  Log.writecsv(c.logfile, c.globcounter, keptnondups, keptnondupsandinvcols)
 
   for k in sort(collect(keys(c.traceIdx)))
     dataSnap = sort(collect(dataType, keys(c.traceIdx[k])))
     idxes = find(c.mask[k] & globalmask)
     sampleSnap = BitArray{2}(length(dataSnap), length(idxes))
-    @printf("Reduction for %d: %d left after global dup col removal, %d left after removing the invers dup cols, %d left after sample reduction\n", k, keptnondups, keptnondupsandinvcols, length(idxes))
+    @printf("Reduction for %d: %d left after global dup col removal, %d left after removing the inv dup cols, %d left after sample reduction\n", k, keptnondups, keptnondupsandinvcols, length(idxes))
+    Log.writecsv(c.logfile, length(idxes))
 
     for j in 1:length(dataSnap)
       trsIndex = c.traceIdx[k][dataSnap[j]]
@@ -188,6 +192,8 @@ function get(c::CondReduce)
     push!(datas, dataSnap)
     push!(reducedsamples, sampleSnap)
   end
+
+  Log.writecsvnewline(c.logfile)
 
   @printf("\nReduced %d input traces, %s data type\n", c.globcounter, string(dataType))
 

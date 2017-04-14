@@ -7,12 +7,8 @@
 # edit the constants to change how the traces are generated
 # go to function calls at the bottom of this file to change which traces are generated
 
-include("des.jl")
-include("trs.jl")
-include("sca-leakages.jl")
-
-using Trs
-using Des
+using Jlsca.Trs
+using Jlsca.Des
 
 # random key or static testkey
 const random = false

@@ -5,7 +5,7 @@
 using Base.Test
 
 using ProgressMeter
-using Trs
+using Jlsca.Trs
 
 # normal usage
 function test1()

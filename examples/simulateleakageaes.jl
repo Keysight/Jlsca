@@ -2,12 +2,8 @@
 #
 # Author: Cees-Bart Breunesse
 
-include("aes.jl")
-include("trs.jl")
-include("sca-leakages.jl")
-
-using Trs
-using Aes
+using Jlsca.Trs
+using Jlsca.Aes
 using ProgressMeter
 
 const random = false

@@ -1,7 +1,7 @@
 
-using Sca
-using Trs
-using Align
+using Jlsca.Sca
+using Jlsca.Trs
+using Jlsca.Align
 
 # our vanilla  main function
 function gofaster()
@@ -21,8 +21,8 @@ function gofaster()
   numberOfCandidates = getNumberOfCandidates(params)
 
   @everyworker begin
-      using Trs
-      using Align
+      using Jlsca.Trs
+      using Jlsca.Align
       trs = InspectorTrace($filename)
 
       # # example alignment pass

@@ -1,4 +1,6 @@
 
+export sha1,hmacsha1,sha1init,update,final
+
 Ch(x::UInt32,y::UInt32,z::UInt32) = (x & y) $ (~x & z)
 Maj(x::UInt32,y::UInt32,z::UInt32) = (x & y) $ (x & z) $ (y & z)
 rotl(value::UInt32, count::Int) = (value<<count) | (value>>( (-count) & 0b11111 ))

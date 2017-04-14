@@ -2,9 +2,9 @@
 #
 # Author: Cees-Bart Breunesse
 
-using Dpa
-using Lra
-using Trs
+using ..Dpa
+using ..Lra
+using ..Trs
 
 export Attack,Analysis,LRA,DPA,IncrementalCPA
 export analysis,attack

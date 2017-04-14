@@ -4,11 +4,11 @@
 
 using Base.Test
 
-using Sca
-using Trs
+using Jlsca.Sca
+using Jlsca.Trs
 
 function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysis, onetest::Bool=false)
-    tracedir = "aestraces"
+    tracedir = "../aestraces"
     filenames = readdir(tracedir)
     leakageFunctions = [hw]
 
@@ -27,7 +27,7 @@ function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         # create Trace instance
         if conditional
           @everyworker begin
-            using Trs
+            using Jlsca.Trs
             trs = InspectorTrace($fullfilename)
 
             # bit expand

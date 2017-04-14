@@ -9,18 +9,16 @@ function runtests()
     testdir = dirname(@__FILE__)
     istest(f) = endswith(f, "-tests.jl") && f != "runtests.jl"
     testfiles = sort(filter(istest, readdir(testdir)))
-    @printf("testfiles: %s\n", testfiles)
-    hack = "-Lsca.jl"
-    print_with_color(:white, "Running Jlsca tests\n")
+    # @printf("testfiles: %s\n", testfiles)
     
     for f in testfiles
         if endswith(f, "parallel-tests.jl") 
-            run(`$exename -p $nprocs $hack $(joinpath(testdir, f))`)
-            Base.with_output_color(:green,STDOUT) do io
-                println(io,"\tSUCCESS: $f\n")
-            end
+            run(`$exename -p $nprocs $(joinpath(testdir, f))`)
         else
             include(f)
+        end
+        Base.with_output_color(:green,STDOUT) do io
+            println(io,"\tSUCCESS: $f\n")
         end
     end
 end

@@ -6,13 +6,13 @@
 
 using Base.Test
 
-using Sca
-using Trs
+using Jlsca.Sca
+using Jlsca.Trs
 
 function ParallelCondReduceTest(splitmode)
     len = 200
 
-    fullfilename = "aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
+    fullfilename = "../aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
     @printf("file: %s\n", fullfilename)
 
     direction = FORWARD
@@ -29,7 +29,7 @@ function ParallelCondReduceTest(splitmode)
     addSamplePass(localtrs, tobits)
 
     @everyworker begin
-      using Trs
+      using Jlsca.Trs
       trs = InspectorTrace($fullfilename, true)
       addSamplePass(trs, tobits)
       if $splitmode == 1
@@ -77,7 +77,7 @@ function ParallelCondReduceTestWithInterval()
     len = 200
     updateInterval = 49
 
-    fullfilename = "aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
+    fullfilename = "../aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
     @printf("file: %s\n", fullfilename)
 
     direction = FORWARD
@@ -95,7 +95,7 @@ function ParallelCondReduceTestWithInterval()
     addSamplePass(localtrs, tobits)
 
     @everyworker begin
-      using Trs
+      using Jlsca.Trs
       trs = InspectorTrace($fullfilename, true)
       addSamplePass(trs, tobits)
       setPostProcessor(trs, CondReduce(SplitByTracesSliced(), $localtrs))

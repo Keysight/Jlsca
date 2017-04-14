@@ -4,7 +4,7 @@
 
 module DesTest
 
-using Des
+using Jlsca.Des
 using Base.Test
 
 function testBitsAndBytes()

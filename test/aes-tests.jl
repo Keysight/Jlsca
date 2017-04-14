@@ -5,7 +5,7 @@
 using Base.Test
 
 
-using Aes
+using Jlsca.Aes
 
 function sq(data::Array{UInt8})
     return gf8_square(data, Aes.squares)

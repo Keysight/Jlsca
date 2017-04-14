@@ -1,6 +1,6 @@
-using Sca
-using Trs
-using Align
+using Jlsca.Sca
+using Jlsca.Trs
+using Jlsca.Align
 
 # our vanilla  main function
 function go()

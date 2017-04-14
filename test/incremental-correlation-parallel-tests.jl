@@ -6,13 +6,13 @@
 
 using Base.Test
 
-using Sca
-using Trs
+using Jlsca.Sca
+using Jlsca.Trs
 
 function IncrementalCPATest(splitmode)
     len = 200
 
-    fullfilename = "aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
+    fullfilename = "../aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
     @printf("file: %s\n", fullfilename)
 
     direction = FORWARD
@@ -25,7 +25,7 @@ function IncrementalCPATest(splitmode)
     numberOfCandidates = getNumberOfCandidates(params)
 
     @everyworker begin
-      using Trs
+      using Jlsca.Trs
       trs = InspectorTrace($fullfilename)
       if $splitmode == 1
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
@@ -64,7 +64,7 @@ end
 function ParallelIncrementalCPATest(splitmode)
     len = 200
 
-    fullfilename = "aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
+    fullfilename = "../aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
     @printf("file: %s\n", fullfilename)
 
     direction = FORWARD
@@ -77,7 +77,7 @@ function ParallelIncrementalCPATest(splitmode)
     numberOfCandidates = getNumberOfCandidates(params)
 
     @everyworker begin
-      using Trs
+      using Jlsca.Trs
       trs = InspectorTrace($fullfilename)
       if $splitmode == 1
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
@@ -117,7 +117,7 @@ function ParallelIncrementalCPATestWithInterval()
     len = 200
     updateInterval = 49
 
-    fullfilename = "aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
+    fullfilename = "../aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
     @printf("file: %s\n", fullfilename)
 
     direction = FORWARD
@@ -131,7 +131,7 @@ function ParallelIncrementalCPATestWithInterval()
     numberOfCandidates = getNumberOfCandidates(params)
 
     @everyworker begin
-      using Trs
+      using Jlsca.Trs
       trs = InspectorTrace($fullfilename)
       setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
     end

@@ -2,7 +2,7 @@
 #
 # Author: Ilya Kizhvatov
 
-using Trs
+using Jlsca.Trs
 
 using Base.Test
 
@@ -15,12 +15,12 @@ function testTrs2splitbin(cleanup::Bool = true)
     ### 1. Without bit compression
     
     # take file storing bits compressed and create uncompressed splitbin
-    trs2splitbin("testtraces/trs2splitbin_bitpacked.trs", 1, 32) 
+    trs2splitbin("../testtraces/trs2splitbin_bitpacked.trs", 1, 32) 
     
     # re-create the compressed trs
     splitbin2trs("data_UInt8_17t.bin", 32, "samples_UInt8_17t.bin", 1024, UInt8, 17) 
         
-    @test readstring(`cmp testtraces/trs2splitbin_bitpacked.trs output_UInt8_17t.trs`) == ""
+    @test readstring(`cmp ../testtraces/trs2splitbin_bitpacked.trs output_UInt8_17t.trs`) == ""
 
     ### 2. With bit compression
     
@@ -37,8 +37,8 @@ function testTrs2splitbin(cleanup::Bool = true)
 
     ### 3. Check versus original Daredevil split binary and trs
 
-    trs2splitbin("testtraces/trs2splitbin_bitsasbytes.trs", 1, 32, false)
-    @test readstring(`cmp samples_UInt8_13t.bin testtraces/trs2splitbin_bitsasbytes.trace`) == ""
+    trs2splitbin("../testtraces/trs2splitbin_bitsasbytes.trs", 1, 32, false)
+    @test readstring(`cmp samples_UInt8_13t.bin ../testtraces/trs2splitbin_bitsasbytes.trace`) == ""
 
     if cleanup
         run(`rm data_UInt8_17t.bin data_UInt8_17t_original.bin`)

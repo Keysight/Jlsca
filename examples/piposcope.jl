@@ -22,7 +22,7 @@
 using ProgressMeter
 
 include("aes.jl")
-using Aes
+using Jlsca.Aes
 
 using LibSerialPort
 import LibSerialPort.sp_blocking_read

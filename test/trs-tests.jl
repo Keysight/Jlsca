@@ -1,6 +1,6 @@
 
 using Base.Test
-using Trs
+using Jlsca.Trs
 
 function createTmpFile(tail)
   return @sprintf("/tmp/tmp%s%s", String([UInt8(rand(0x30:0x5a)) for i in 1:10]), tail)

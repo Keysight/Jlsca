@@ -2,8 +2,8 @@
 #
 # Author: Cees-Bart Breunesse
 
-using Aes
-using Trs
+using ..Aes
+using ..Trs
 
 export AesSboxAttack,AesMCAttack,AesKeyLength,AesMode
 

@@ -1,5 +1,5 @@
 
-using Trs
+using Jlsca.Trs
 using Base.Test
 
 type MyNode

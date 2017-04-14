@@ -4,11 +4,11 @@
 
 using Base.Test
 
-using Sca
-using Trs
+using Jlsca.Sca
+using Jlsca.Trs
 
 function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysis, onetest::Bool=false)
-    tracedir = "destraces"
+    tracedir = "../destraces"
     filenames = readdir(tracedir)
     # leakageFunctions = [bit7]
 
@@ -25,7 +25,7 @@ function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         # create Trace instance
         if conditional
           @everyworker begin
-            using Trs
+            using Jlsca.Trs
             trs = InspectorTrace($fullfilename)
 
             setPostProcessor(trs, CondAvg(SplitByTracesSliced()))

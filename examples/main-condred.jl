@@ -1,7 +1,7 @@
 
-using Sca
-using Trs
-using Align
+using Jlsca.Sca
+using Jlsca.Trs
+using Jlsca.Align
 
 # our vanilla  main function
 function gofaster()
@@ -26,7 +26,7 @@ function gofaster()
   addSamplePass(localtrs, tobits)
 
   @everyworker begin
-      using Trs
+      using Jlsca.Trs
       # the "true" argument will force the sample type to be UInt64, throws an exception if samples are not 8-byte aligned
       trs = InspectorTrace($filename, true)
 

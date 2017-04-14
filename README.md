@@ -2,18 +2,22 @@
 
 Jlsca is a toolbox in Julia to do the computational part (DPA) of a side channel attack. It supports:
 
-* Conditional averaging
-* Conditional sample reduction
+* Conditional averaging, for analog measurements
+* Conditional bitwise sample reduction, for whiteboxes
 * Incremental correlation statistics
-* Parallelization of the above
-* Correlation power analysis (CPA) and non-profiled Linear regression analysis (LRA)
+* Parallelization of all the above
+* Correlation power analysis (CPA)
+* non-profiled Linear regression analysis (LRA)
+* Mutual Information Analysis (MIA)
 * AES128/192/256 enc/dec, backward/forward S-box attacks
 * AES128 enc/dec chosen input MixColumn attack
+* Some whitebox models for AES (INV MUL / Klemsa)
 * DES/TDES1/TDES2/TDES3 enc/dec, backward/forward attack
 * Known key analysis + key rank evolution CSV output
-* Inspector trace set input
-* Split sample and data raw binary (Daredevil) input
-* I've been playing with a Picoscope, and there is an example in `piposcope.jl` that does (a quite fast, if I may say so myself) acquisition on Riscure's Pinata board using the scope's rapid block mode. Check the file header of `piposcope.jl` for more information.
+* Inspector trace set input and output
+* Split sample and data raw binary (Daredevil) input and output
+
+Then, not really that related to this toolbox, but I've been playing with a Picoscope, and there is an example in `examples/piposcope.jl` that does (a quite fast, if I may say so myself) acquisition on Riscure's Pinata board using the scope's rapid block mode. Check the file header of `piposcope.jl` for more information. 
 
 # Why would I want it?
 
@@ -25,61 +29,115 @@ It runs standalone or inside Riscure's Inspector as a module, so you would want 
 	* [non-profiled LRA](https://eprint.iacr.org/2013/794.pdf)
  	* [Conditional averaging](https://eprint.iacr.org/2013/794.pdf)
 	* Conditional sample reduction for attacking whiteboxes (see conditional-bitwisereduction.jl for what that means)
+	* Superduper fast parallization of conditional averaging, conditional bitwise sample reduction, and incremental correlation statistics!
+	* Mutual Information Analysis (MIA)
 
 # Who wrote it?
 
-It's written for fun by me (Cees-Bart Breunesse), and Ilya Kizhvatov contributed some python example code I shamelessly copied and adapted. It's not a Riscure product, and Riscure does not support or maintain this code. If it crashes or you have feature requests, Github allows you to contact the authors, or you do a pull request ;-)
+It's written for fun by me (Cees-Bart Breunesse), and Ilya Kizhvatov contributed some python example code I shamelessly copied and adapted. Ruben Muijrers contributed the bit compression for whiteboxes used in conditional bitwise sample reduction. This toolbox is not a Riscure product, and Riscure does not support or maintain this code. If it crashes or you have feature requests, Github allows you to contact the authors, or you do a pull request ;-) It's the first code I ever wrote in Julia so if you have comments about how to make it faster or less of a hack (try the parallelization code), by all means contact me.
 
 # Installation
 
-0. Git clone this repo
+1. Install Julia (0.5.1 is tested) and make sure the `julia` executable is in your path (notably for Windows users). Start he Julia REPL by executing `julia`.
 
-1. Install Julia (0.5.0 is tested) and make sure the `julia` executable is in your path (for Windows users).
+2. In the REPL type `Pkg.add("https://github.com/Riscure/Jlsca")`
 
-2. Start a shell or cmd shell (Windows users), and install an additional required package ProgressMeter like this:
-	`julia -e 'Pkg.add("ProgressMeter")'`
+You can now close the Julia prompt, or start using Jlsca interactively (see "Running in the REPL")
 
 # Running from cmd line
 
-There are a few example *main* files (i.e. files that import the Jlsca library) that, except for one, can run *all* the example AES and DES traces in the `aestraces` and `destraces` directories. The attack parameters and "known key" used in these main files are extracted from the file name, and some hard coded attack defaults are used (i.e. CPA, single bit0 or HW attack). You can change all this by editing the main files only: the library code (everything referenced by `sca.jl`) need not be touched for that.
+Step 2 in the installation performed a git clone of Jlsca in your Julia's user directory. For me, it's in ~/.julia/v0.5/Jlsca. Jlsca is a library, but there are a few script files in Jlsca's `examples` directory. These scripts perform the various attacks and combination of settings supported by Jlsca. Some attack parameters, for example the "known key", are extracted from the file name, and some hard coded attack defaults are used (i.e. CPA, single bit0 or HW attack). You can change all this by editing the main files only: the library code under `src` need not be touched for that.
 
-## `main-noninc.jl`
+### File `main-noninc.jl`
 
 This file performs vanilla correlation statistics on an input trace set. Vanilla meaning that it will compute correlation with the entire sample and hypothesis matrices present in memory. This is a good starting point for playing and implementing new statistics or attacks. This main does not do parallelization, so it will complain when you specify multiple processes (`-pX`) on the `julia` command line. For example:
 ```
-julia -Lsca.jl main-noninc.jl destraces/tdes2_enc_9084b0087a1a1270587c146ccc60a252.trs
+julia examples/main-noninc.jl destraces/tdes2_enc_9084b0087a1a1270587c146ccc60a252.trs
 ```
 
-## `main-condavg.jl`
+### File `main-condavg.jl`
 
 This file performs vanilla correlation statistics but will first run the conditional averager over the trace set input. This can be parallelized, for example the following will use three local processes to perform the conditional averaging.
 ```
-julia -p3 -Lsca.jl main-condavg.jl aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs
+julia -p3 examples/main-condavg.jl aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs
 ```
 
-## `main-condred.jl`
+### File `main-condred.jl`
 
 This file perform vanilla correlation statistics over conditionally sample reduced trace sets. Check the source of `conditional-bitwisereduction.jl` if you want to know more; this is only useful for whiteboxes, since it works on bit vector sample data, not on floating points. This process can be parallelized, for example on three processes as demonstrated here:
 ```
-julia -p3 -Lsca.jl main-condred.jl destraces/des_enc_1c764a2af6e0322e.trs
+julia -p3 examples/main-condred.jl destraces/des_enc_1c764a2af6e0322e.trs
 ```
-## `main-condred-wbaes.jl`
+### File `main-condred-wbaes.jl`
 
 This file combines Klemsa's [leakage models](https://eprint.iacr.org/2013/794.pdf) for tackling Dual AES with the conditional bit wise reduction. Can be parallelized. In `main-condred-wbaes.jl` the attack params are hardcoded for AES128 trace sets, so you'll need to edit the main file if you want pass it something else, like AES192 or 256. If you want to apply this on your own whitebox data make sure the `params.dataOffset` in `main-condred-wbaes.jl` point to the input (if `params.direction == FORWARD`) or output (if `params.direction == BACKWARD`). Can parallelized, for example:
 ```
-julia -p3 -Lsca.jl main-condred-wbaes.jl aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs
+julia -p3 examples/main-condred-wbaes.jl aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs
 ```
 
-## `main-inccpa.jl`
+### File `main-inccpa.jl`
 
 Last but not least, this file will perform a correlation attack using incremental correlation statistics. This is what Inspector also implements in its "first order" attack modules. You can parallelize this attack. For example:
 ```
-julia -p3 -Lsca.jl main-inccpa.jl aestraces/aes128_mc_invciph_da6339e783ee690017b8604aaeed3a6d.trs
+julia -p3 examples/main-inccpa.jl aestraces/aes128_mc_invciph_da6339e783ee690017b8604aaeed3a6d.trs
 ```
 
-# Interactive
+# Running in the REPL
 
-XXX shell stuff
+```julia
+julia> using Jlsca.Trs
+
+julia> trs=InspectorTrace("aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs")
+Opened aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs, #traces 500, #samples 1920 (UInt8), #data 32
+Jlsca.Trs.InspectorTrace(0x00,Nullable{Int64}(500),0x0020,1,UInt8,0x00000780,24,IOStream(<file aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs>),Any[],Any[],Union,Union,0,"aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs",24,false,18)
+
+julia> convert the data bytes to its hamming weight on the fly
+
+julia> addDataPass(trs, Jlsca.Sca.hw)
+1-element Array{Any,1}:
+ Jlsca.Sca.hw
+
+julia> # reading all samples and data-converted-to-HW into memory
+
+julia> ((data,samples),eof) = readTraces(trs, 1:length(trs))
+((
+UInt8[0x06 0x06 … 0x02 0x04; 0x04 0x03 … 0x03 0x04; … ; 0x05 0x06 … 0x02 0x08; 0x05 0x04 … 0x05 0x04],
+
+UInt8[0x6f 0x6f … 0x02 0x04; 0xd4 0x2c … 0x03 0x04; … ; 0xad 0xf6 … 0x02 0x08; 0xbc 0xe4 … 0x05 0x04]),false)
+
+julia> using PyPlot.plot
+
+julia> # plotting correlation with byte wise hamming weight of input data
+
+julia> plot(cor(samples, data[:,1:16]))
+
+```
+![Input correlation plot](https://github.com/Riscure/Jlsca/images/inputcorrelation.png)
+```julia
+julia> # and for the output
+
+julia> plot(cor(samples, data[:,17:32]))
+
+```
+![Output correlation plot](https://github.com/Riscure/Jlsca/images/outputcorrelation.png)
+
+
+
+# Running from Inspector
+
+First of all, you're currently missing out on the parallelization when you're running Jlsca from Inspector. This is because from Inspector to Jlsca the trace set data and samples are transported over a pipe, since I thought it was cool to be able to run Jlsca in an Inspector chain. The implementation of parallelization in Jlsca now assumes seekable files for each process, so the pipe is no longer an option. I have not come around to fix the Inspector module to safely pass the temp file data to Inspector. This is TBD.
+
+In addition to the installation steps for Jlsca described before, you also need to:
+
+3. Copy `inspector/Jlsca4InspectorModule.java` to `$HOME/Inspector/modules/jlsca` (or the Windows equivalent).
+
+Start Inspector and open the module source `Jlsca4InspectorModule.java`. Hit compile, and run on a trace set. This will open a dialog. The dialog is intended to be always consistent: i.e. you should only be able to run it in a way that "makes sense". You can still crash everything if you enter wrong offsets. Offset in the dialog are 0-based, as you Java guys would be used to.
+
+Design wise, `Jlsca4InspectorModule.java` consists of 2 classes, a module class that extends Inspector's `Module` class and a panel class that extends `JPanel` and implements the module GUI. The GUI code is horrible, and I'm quite proud of it. The panel classes exposes a `toJlscParameters()` method which is called by the module when you press the OK button. This function returns a String which is a Julia expression that constructs a parameters object which will be passed to Jlsca: it's printed in the "log" window. The module simply executes Julia with Jlsca, passes the parameters, and passes the trace sample and data to standard input of the slave Julia process. Whatever Jlsca prints on std error and std out is printed in the Inspector "log" and "out" console. No correlation traces are returned (also TBD).
+
+If you run the module with a known key and a >0 update interval it will create a KKA file with the key ranking which you can plot in openoffice (Excel for Windows users).
+
+If you attack inner rounds, you'll need to manually cut and paste "next phase input" data from Jlsca's output in Inspector's "out" window into the phase input field in the module's GUI. This is because the Inspector module only makes a single pass over the trace set, whereas to break the inner rounds you need to do another analysis pass.
 
 # Hacking stuff
 
@@ -152,10 +210,6 @@ params.phases = [PHASE2]
 params.phaseInput = Nullable(hex2bytes("00112233445566778899aabbccddeeff")))
 ```
 
-## Passing attack phase data from Inspector
-
-If you run the Jlsca Inspector module, you'll have to paste this data (only the hex string) into a GUI text field yourself since I'm to lazy to parse the Jlsca output and feed it back into the module.
-
 ## Passes and processors
 
 Attacks in Jlsca work on instances of the `Trace` type. There are two implementations of this type in Jlsca: `InspectorTrace` representing an Inspector trace set, and `SplitBinary` representing the completely flat and split data and samples used in, for example, Daredevil. These types are not simply providing access to the trace data in files, they come with addition functionality.
@@ -196,7 +250,7 @@ Once you push a sample or data pass on the stack of passes, you can pop the last
 
 Conditional averaging [Conditional averaging](https://eprint.iacr.org/2013/794.pdf) is implemented as a trace post processor that is configured in the "trs" object as follows:
 ```julia
-setPostProcessor(trs, CondAvg, getNumberOfAverages(params))
+setPostProcessor(trs, CondAvgXXXX, getNumberOfAverages(params))
 ```
 For AES, there are max 256 averages per key byte offset. For DES SBOX out there are 64, and for DES ROUNDOUT there are 1024. This is returned by getNumberOfAverages(). See type CondAvg in conditional-average.jl how the averager works: it uses Julia's newly added Threads module. By default only a single thread is used. If you set the JULIA_NUM_THREADS=2 environment variable it will use 2 threads, making it quite much faster if the input has many samples. Using more than 2 threads doesn't currently speed up the process (on my laptop at least), but I haven't profiled it.
 
@@ -204,8 +258,8 @@ The data passes that are configured with addDataPass determine the data on which
 
 ## Parallelization
 
-What's currently parallelized are the post processors:
-* Conditional sample reduction
+What's currently parallelized are all the post processors:
+* Conditional bitwise sample reduction
 * Conditional averaging
 * Incremental correlation statistics
 
@@ -220,63 +274,8 @@ Since parallelization is tightly coupled to post processors, you need to pass th
 
 ## Test runs
 
-If you hack stuff and you want to verify stuff is still working, you can run all the tests:
+Since Jlsca is a Julia package, it runs all tests from `test/runtests.jl`. Either trigger this by:
 
-```
-#!/bin/bash
+1. ```Pkg.test("Jlsca")``` in the Julia REPL
 
-# AES cipher implementation tests
-julia aes-tests.jl && \
-# DES cipher implementation tests
-julia des-tests.jl && \
-# incremental statistics tests
-julia incremental-statistics-tests.jl && \
-# some work split related sanity checks
-julia distributed-tests.jl && \
-# trs testing
-julia trs-tests.jl && \
-
-# AES attack tests, all modes and directions. Can be called with -pX too.
-julia -Lsca.jl attackaes-tests.jl && \
-# DES attack tests, all modes and directions. Can be called with -pX too.
-julia -Lsca.jl attackdes-tests.jl && \
-
-
-# Parallelization tests for conditional averaging
-julia -p3 -Lsca.jl conditional-average-tests.jl && \
-# Parallelization tests for condition bitwise sample reduction
-julia -p3 -Lsca.jl conditional-bitwisereduction-tests.jl && \
-# Parallelization & vanilla correlation equivalence tests for incremental correlation statistics
-julia -p3 -Lsca.jl incremental-correlation-tests.jl && \
-
-# Example run of main function that performs vanilla correlation statistics on an input trace set (i.e. having the entire sample and hypothesis matrices present in memory)
-julia -Lsca.jl main-noninc.jl destraces/tdes2_enc_9084b0087a1a1270587c146ccc60a252.trs && \
-# Example run of main function that performs vanilla correlation statistics on conditionally averaged output
-julia -p3 -Lsca.jl main-condavg.jl aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs && \
-# Example run of main function that performs vanilla correlation statistics on bitwise sample reduced output
-julia -p3 -Lsca.jl main-condred.jl destraces/des_enc_1c764a2af6e0322e.trs && \
-# Example run of main function that performs vanilla correlation statistics on bitwise sample reduced output using Klemsa's leakage models for WB AESes, hardcoded for AES128 FORWARD input
-julia -p3 -Lsca.jl main-condred-wbaes.jl aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs && \
-# Example run of main function that performs incremental correlation statistics on an input trace set
-julia -p3 -Lsca.jl main-inccpa.jl aestraces/aes128_mc_invciph_da6339e783ee690017b8604aaeed3a6d.trs
-```
-
-
-
-# Running from Inspector
-
-First of all, you're currently missing out on the parallelization when you're running Jlsca from Inspector. This is because from Inspector to Jlsca the trace set data and samples are transported over a pipe, since I thought it was cool to be able to run Jlsca in an Inspector chain. The implementation of parallelization in Jlsca now assumes seekable files for each process, so the pipe is no more an option. I have not come around to fix the Inspector module to safely pass the temp file data to Inspector. This is TBD.
-
-In addition to the installation steps for Jlsca described before, you also need to:
-
-3. Copy `inspector/Jlsca4InspectorModule.java` to `$HOME/Inspector/modules/jlsca` (or the Windows equivalent).
-
-4. Edit `Jlsca4InspectorModule.java` and change `JLSCA_PATH` to point to wherever you installed Jlsca.
-
-Start Inspector and open the module source `Jlsca4InspectorModule.java`. Hit compile, and run on a trace set. This will open a dialog. The dialog is intended to be always consistent: i.e. you should only be able to run it in a way that "makes sense". You can still crash everything if you enter wrong offsets. Offset in the dialog are 0-based, as you Java guys would be used to.
-
-Design wise, `Jlsca4InspectorModule.java` consists of 2 classes, a module class that extends Inspector's `Module` class and a panel class that extends `JPanel` and implements the module GUI. The GUI code is horrible, and I'm quite proud of it. The panel classes exposes a `toJlscParameters()` method which is called by the module when you press the OK button. This function returns a String which is a Julia expression that constructs a parameters object which will be passed to Jlsca: it's printed in the "log" window. The module simply executes Julia with Jlsca, passes the parameters, and passes the trace sample and data to standard input of the slave Julia process. Whatever Jlsca prints on std error and std out is printed in the Inspector "log" and "out" console. No traces are returned.
-
-If you run the module with a known key and a >0 update interval it will create a KKA file with the key ranking which you can plot in openoffice (Excel for Windows users).
-
-If you attack inner rounds, you'll need to manually cut and paste "next phase input" data from Jlsca's output in Inspector's "out" window into the phase input field in the module's GUI. This is because the Inspector module only makes a single pass over the trace set, whereas to break the inner rounds you need to do another analysis pass.
+2. `julia ../test/runtests.jl` from Jlsca's source directory (typically in `~/.julia/v0.5/Jlsca/src`)

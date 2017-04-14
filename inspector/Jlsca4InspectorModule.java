@@ -49,16 +49,13 @@ import com.riscure.signalanalysis.TraceSet;
 import com.riscure.signalanalysis.operations.DataOperationException;
 
 /**
- * Wrapper to call Jlsca from Inspector. Set JLSCA_PATH to wherever you installed Jlsca, and
- * make sure the julia executable is in your path, or fail!
+ * Wrapper to call Jlsca from Inspector. Make sure the julia executable is in your path, or fail!
  *
  * @author Cees-Bart Breunesse <ceesb@riscure.com>
  *
  */
 public class Jlsca4InspectorModule extends Module implements ModuleInChain {
   private static final long serialVersionUID = 1L;
-
-  static String JLSCA_PATH="/home/ceesb/projects/jlsca";
 
   boolean running = false;
 
@@ -134,10 +131,9 @@ public class Jlsca4InspectorModule extends Module implements ModuleInChain {
   }
 
   void startJlscaProcess(String parameters, int nrOfSamples) throws IOException {
-    String expr = String.format("using Sca, Trs; %s; trs = InspectorTrace(%s); setPostProcessor(trs, CondAvg()); sca(trs, params, 1, length(trs), false)", parameters, Platform.isWindows() ? "\\\"-\\\"" : "\"-\"");
+    String expr = String.format("using Jlsca.Sca, Jlsca.Trs; %s; trs = InspectorTrace(%s); setPostProcessor(trs, CondAvg()); sca(trs, params, 1, length(trs), false)", parameters, Platform.isWindows() ? "\\\"-\\\"" : "\"-\"");
     log("Jlsca params: " + expr);
-    ProcessBuilder pb = new ProcessBuilder("julia", "-Lsca.jl", "-e", expr);
-    pb.directory(new File(JLSCA_PATH));
+    ProcessBuilder pb = new ProcessBuilder("julia", "-e", expr);
 
     p = pb.start();
     toJlscaStream = new BufferedOutputStream(p.getOutputStream(), nrOfSamples*4);

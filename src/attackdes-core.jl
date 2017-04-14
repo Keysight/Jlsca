@@ -2,8 +2,8 @@
 #
 # Author: Cees-Bart Breunesse
 
-using Des
-using Trs
+using ..Des
+using ..Trs
 
 export DesSboxAttack
 

@@ -6,7 +6,7 @@ using ProgressMeter
 
 import Base.length, Base.getindex, Base.setindex!
 import Base.reset
-import Base.start, Base.done, Base.next
+import Base.start, Base.done, Base.next, Base.endof
 
 
 export Trace,readTraces,addSamplePass,popSamplePass,addDataPass,popDataPass,hasPostProcessor,reset,getCounter,setPostProcessor
