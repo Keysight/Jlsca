@@ -112,14 +112,14 @@ julia> # plotting correlation with byte wise hamming weight of input data
 julia> plot(cor(samples, data[:,1:16]))
 
 ```
-![Input correlation plot](https://github.com/Riscure/Jlsca/images/inputcorrelation.png)
+![Input correlation plot](https://raw.githubusercontent.com/Riscure/Jlsca/master/images/inputcorrelation.png)
 ```julia
 julia> # and for the output
 
 julia> plot(cor(samples, data[:,17:32]))
 
 ```
-![Output correlation plot](https://github.com/Riscure/Jlsca/images/outputcorrelation.png)
+![Output correlation plot](https://raw.githubusercontent.com/Riscure/Jlsca/master/images/outputcorrelation.png)
 
 
 
