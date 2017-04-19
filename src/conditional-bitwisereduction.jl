@@ -32,11 +32,11 @@ type CondReduce <: Cond
   # deliberatly not initialized with new in the constructor below
   state::BitCompress
 
-  function CondReduce(trs::Trace, logfile::String=Nullable{String}())
-    CondReduce(NoSplit(), trs, logfile=logfile)
+  function CondReduce(trs::Trace, logfile::Nullable{String}=Nullable())
+    CondReduce(NoSplit(), trs, logfile)
   end
 
-  function CondReduce(worksplit::WorkSplit, trs::Trace, logfile::Nullable{String}=Nullable{String}())
+  function CondReduce(worksplit::WorkSplit, trs::Trace, logfile::Nullable{String}=Nullable())
     mask = Dict{Int,BitVector}()
     traceIdx = Dict{Int,Dict{Int,Int}}()
     # @printf("Conditional bitwise sample reduction, split %s\n", worksplit)

@@ -138,7 +138,6 @@ end
 
 # print the scores pretty
 function printScores(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, keyLength, keyOffsets, numberOfTraces, leakageFunctionsCombinator=(+), correctRoundKeymaterial=Nullable{Vector{UInt8}}(), printsubs=true,  max=5, io=STDOUT)
-  max = 5
   scores = getCombinedScores(scoresAndOffsets, leakageFunctionsCombinator)
 
   nrLeakageFunctions = length(scoresAndOffsets)
