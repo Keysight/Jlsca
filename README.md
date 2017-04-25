@@ -91,7 +91,7 @@ julia> trs=InspectorTrace("aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs")
 Opened aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs, #traces 500, #samples 1920 (UInt8), #data 32
 Jlsca.Trs.InspectorTrace(0x00,Nullable{Int64}(500),0x0020,1,UInt8,0x00000780,24,IOStream(<file aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs>),Any[],Any[],Union,Union,0,"aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs",24,false,18)
 
-julia> convert the data bytes to its hamming weight on the fly
+julia> #convert the data bytes to its hamming weight on the fly
 
 julia> addDataPass(trs, Jlsca.Sca.hw)
 1-element Array{Any,1}:
@@ -120,6 +120,44 @@ julia> plot(cor(samples, data[:,17:32]))
 
 ```
 ![Output correlation plot](https://raw.githubusercontent.com/Riscure/Jlsca/master/images/outputcorrelation.png)
+
+```julia
+julia> # Remove the HW data pass
+
+julia> popDataPasss(trs)
+
+julia> # Correlate with the cipher state at the start of round 5. We define a leak function first.
+
+julia> round5leak(str,state,globstate) = (if str == "r5.start"; globstate[:] = state; end; return state;)
+round5leak (generic function with 1 method)
+
+julia> globstate = zeros(UInt8, 16)
+
+julia> # Then, we define a pass that returns the start of round 5 data for each trace
+
+julia> mypass(data) = (leakstate = zeros(UInt8, 16)
+       ; Cipher(data[1:16], expkey, (str,state) -> round5leak(str, state, leakstate)); return leakstate)
+mypass (generic function with 1 method)
+
+julia> addDataPass(trs,mypass)
+1-element Array{Any,1}:
+ mypass
+
+julia> addDataPass(trs, Jlsca.Sca.hw)
+2-element Array{Any,1}:
+ mypass      
+ Jlsca.Sca.hw
+
+julia> ((data,samples),eof) = readTraces(trs, 1:length(trs))
+Processing traces .. 100% Time: 0:00:01
+((
+UInt8[0x07 0x04 … 0x04 0x05; 0x03 0x05 … 0x04 0x05; … ; 0x02 0x02 … 0x05 0x06; 0x02 0x04 … 0x04 0x04],
+
+UInt8[0x6f 0x6f … 0x02 0x04; 0xd4 0x2c … 0x03 0x04; … ; 0xad 0xf6 … 0x02 0x08; 0xbc 0xe4 … 0x05 0x04]),false)
+
+julia> plot(cor(samples, data))
+```
+![Start of round 5 correlation plot](https://raw.githubusercontent.com/Riscure/Jlsca/master/images/r5startcorrelation.png)
 
 
 
