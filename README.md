@@ -133,6 +133,10 @@ round5leak (generic function with 1 method)
 
 julia> globstate = zeros(UInt8, 16)
 
+julia> # expand the "known key" for this trace set
+
+julia> expkey=KeyExpansion(hex2bytes("0fec9ca47fb2f2fd4df14dcb93aa4967"), 10, 4)
+
 julia> # Then, we define a pass that returns the start of round 5 data for each trace
 
 julia> mypass(data) = (leakstate = zeros(UInt8, 16)
