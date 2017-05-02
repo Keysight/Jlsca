@@ -32,11 +32,11 @@ type CondReduce <: Cond
   # deliberatly not initialized with new in the constructor below
   state::BitCompress
 
-  function CondReduce(trs::Trace, logfile::Nullable{String}=Nullable())
+  function CondReduce(trs::Trace, logfile::Nullable{String}=Nullable{String}())
     CondReduce(NoSplit(), trs, logfile)
   end
 
-  function CondReduce(worksplit::WorkSplit, trs::Trace, logfile::Nullable{String}=Nullable())
+  function CondReduce(worksplit::WorkSplit, trs::Trace, logfile::Nullable{String}=Nullable{String}())
     mask = Dict{Int,BitVector}()
     traceIdx = Dict{Int,Dict{Int,Int}}()
     # @printf("Conditional bitwise sample reduction, split %s\n", worksplit)
@@ -172,7 +172,7 @@ function get(c::CondReduce)
   end
 
   (keptnondups, keptnondupsandinvcols) = stats(c.state)
-  Log.writecsvheader(c.logfile, "#traces, global dups", "global inv dups", map(x -> "cond sample red kb $x", 1:length(keys(c.mask)))...)
+  Log.writecsvheader(c.logfile, "#traces","global dups", "global inv dups", map(x -> "cond sample red kb $x", 1:length(keys(c.mask)))...)
   Log.writecsv(c.logfile, c.globcounter, keptnondups, keptnondupsandinvcols)
 
   for k in sort(collect(keys(c.traceIdx)))

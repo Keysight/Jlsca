@@ -11,6 +11,10 @@ type SimpleCSV
     headerWritten::Bool
     needcomma::Bool
 
+    function SimpleCSV()
+        SimpleCSV(Nullable{String}())
+    end
+
     function SimpleCSV(fname::String)
         SimpleCSV(Nullable(fname))
     end 
@@ -21,7 +25,7 @@ type SimpleCSV
             truncate(f, 0)
             close(f)
         end
-        new(fname, false)
+        new(fname, false, false)
     end
 end
 

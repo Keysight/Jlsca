@@ -5,6 +5,7 @@
 using ..Dpa
 using ..Lra
 using ..Trs
+using ..Log
 
 export Attack,Analysis,LRA,DPA,IncrementalCPA
 export analysis,attack
@@ -24,9 +25,10 @@ type DPA <: NonIncrementalAnalysis
   leakageFunctions::Vector{Function}
   postProcess::Vector{Function}
   maxCols::Nullable{Int}
+  logfile::SimpleCSV
 
   function DPA()
-    return new(cor, [hw], [abs], Nullable())
+    return new(cor, [hw], [abs], Nullable(), SimpleCSV())
   end
 end
 
@@ -34,13 +36,14 @@ type LRA <: NonIncrementalAnalysis
   basisModel::Function
   postProcess::Vector{Function}
   maxCols::Nullable{Int}
+  logfile::SimpleCSV
 
   function LRA(basisModel)
-    return new(basisModel, [])
+    return new(basisModel, [], Nullable(), SimpleCSV())
   end
 
   function LRA()
-    return new(basisModelSingleBits, [], Nullable())
+    return new(basisModelSingleBits, [], Nullable(), SimpleCSV())
   end
 end
 
@@ -48,9 +51,10 @@ type IncrementalCPA <: Analysis
   leakageFunctions::Vector{Function}
   postProcess::Vector{Function}
   reducer::Function
+  logfile::SimpleCSV
 
   function IncrementalCPA()
-    return new([hw], [abs], x -> max(abs(x)))
+    return new([hw], [abs], x -> max(abs(x)), SimpleCSV())
   end
 end
 
@@ -86,7 +90,9 @@ end
 
 function attack(a::NonIncrementalAnalysis, attackfun::Function, trs::Trace, range::Range, keyByteOffsets::Vector{Int}, dataFunction::Function, dataFunctionReturnType::DataType, kbvals::Vector, scoresAndOffsets)
 
-  ((data, samples), eof) = @time readTraces(trs, range)
+  (((data, samples), eof),elapsedtime,totalbytesallocated,garbagecollectiontime,alloccounters) = @timed readTraces(trs, range)
+
+  Log.writecsv(a.logfile, elapsedtime)
 
   if data == nothing || samples == nothing
     return
@@ -101,12 +107,18 @@ function attack(a::NonIncrementalAnalysis, attackfun::Function, trs::Trace, rang
       kbdata = reshape(data[:,kb], size(data)[1], 1)
     end
 
-    cols = size(kbsamples)[2]
+    (rows,samplecols) = size(kbsamples)
+    (rows,datacols) = size(kbdata)
+
+    Log.writecsv(a.logfile, rows, samplecols, datacols * getNrLeakageFunctions(a) * length(kbvals))
+
     # FIXME: need to pick something sane here
     maxCols = get(a.maxCols, 10000)
 
-    for sr in 1:maxCols:cols
-      srEnd = min(sr+maxCols-1, cols)
+    totalelapsedtime = 0.0
+
+    for sr in 1:maxCols:samplecols
+      srEnd = min(sr+maxCols-1, samplecols)
       @printf("%s on samples shape %s (range %s) and data shape %s\n", string(typeof(a).name.name), size(kbsamples), string(sr:srEnd), size(kbdata))
       if size(kbsamples)[2] == 0
         @printf("no samples!\n")
@@ -115,7 +127,9 @@ function attack(a::NonIncrementalAnalysis, attackfun::Function, trs::Trace, rang
       end
 
       # run the attack
-      @time C = attackfun(kbdata, kbsamples[:,sr:srEnd], [keyByteOffsets[kb]])
+      (C,elapsedtime,totalbytesallocated,garbagecollectiontime,alloccounters) = @timed attackfun(kbdata, kbsamples[:,sr:srEnd], [keyByteOffsets[kb]])
+
+      totalelapsedtime += elapsedtime
 
       # nop the nans
       C[isnan(C)] = 0
@@ -123,6 +137,9 @@ function attack(a::NonIncrementalAnalysis, attackfun::Function, trs::Trace, rang
       # get the scores for all leakage functions
       updateScoresAndOffsets!(scoresAndOffsets, C, 1, kb, getNrLeakageFunctions(a), a.postProcess, length(kbvals))
     end
+
+    Log.writecsv(a.logfile, totalelapsedtime)
+
   end
 end
 
@@ -143,10 +160,19 @@ function attack(a::IncrementalCPA, trs::Trace, range::Range, keyByteOffsets::Vec
     init(trs.postProcInstance, keyByteOffsets, dataFunction, kbvals, a.leakageFunctions)
   end
 
-  @time (C,eof) = readTraces(trs, range)
+  ((C,eof),elapsedtime,totalbytesallocated,garbagecollectiontime,alloccounters) = @timed readTraces(trs, range)
+
+  rows = length(range)
+  (samplecols,hypocols) = size(C) 
+
+  Log.writecsv(a.logfile, elapsedtime)
 
   for kb in 1:length(keyByteOffsets)
     updateScoresAndOffsets!(scoresAndOffsets, C, kb, kb, length(a.leakageFunctions), a.postProcess, length(kbvals))
+
+    Log.writecsv(a.logfile, rows, samplecols, hypocols)
+
+    Log.writecsv(a.logfile, 0)    
   end
 end
 
@@ -165,6 +191,8 @@ function analysis(params::Attack, phase::Enum, trs::Trace, firstTrace::Int, numb
     scoresAndOffsets = allocateScoresAndOffsets(getNrLeakageFunctions(params.analysis), length(kbVals), length(keyByteOffsets))
     eof = false
 
+    Log.writecsvheader(params.analysis.logfile, "#traces","#sec prep",map(x -> "#rows kb $x, #cols samples kb $x, #cols hypo kb $x, #secs kb $x", 1:length(keyByteOffsets))...)
+
     for offset in firstTrace:stepSize:numberOfTraces
       range = offset:(offset+min(stepSize, numberOfTraces - offset + 1)-1)
 
@@ -172,9 +200,13 @@ function analysis(params::Attack, phase::Enum, trs::Trace, firstTrace::Int, numb
         break
       end
       
+      Log.writecsv(params.analysis.logfile, length(firstTrace:range[end]))
+
       clearScoresAndOffsets!(scoresAndOffsets)
 
       attack(params.analysis, trs, range, keyByteOffsets, targetFunction, targetFunctionType, kbVals, scoresAndOffsets)
+
+      Log.writecsvnewline(params.analysis.logfile)
 
       # let somebody do something with the scores for these traces
       produce(INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs), length(keyByteOffsets), keyByteOffsets, !isnull(params.knownKey) ? getCorrectRoundKeyMaterial(params, phase) : Nullable()))
