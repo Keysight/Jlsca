@@ -117,3 +117,14 @@ function bitcompress(state::BitCompress, input::AbstractArray)
     end
   end
 end
+
+function bitcompress(m::BitArray{2})
+  (rows,cols) = size(m)
+  state = BitCompress(cols)
+  for r in 1:rows
+    bitcompress(state, m[r,:])
+  end
+
+  colstokeep = toMask(state)
+  return m[:,colstokeep]
+end
