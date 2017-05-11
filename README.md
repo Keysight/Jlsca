@@ -40,7 +40,7 @@ It's written for fun by me (Cees-Bart Breunesse), and Ilya Kizhvatov contributed
 
 1. Install Julia (0.5.1 is tested) and make sure the `julia` executable is in your path (notably for Windows users). Start he Julia REPL by executing `julia`.
 
-2. In the REPL type `Pkg.add("https://github.com/Riscure/Jlsca")`
+2. In the REPL type `Pkg.clone("https://github.com/Riscure/Jlsca")`
 
 You can now close the Julia prompt, or start using Jlsca interactively (see "Running in the REPL")
 
