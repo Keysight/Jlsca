@@ -2,6 +2,7 @@
 using Jlsca.Sca
 using Jlsca.Trs
 using Jlsca.Align
+using Jlsca.Aes
 
 gf2dot(xx::Array{UInt8}, y::UInt8) = map(x -> gf2dot(x,y), xx)
 
