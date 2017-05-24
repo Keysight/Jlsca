@@ -17,7 +17,15 @@ function gofaster()
     params = AesSboxAttack()
   end
 
-  params.analysis.leakageFunctions = [bit3, bit0]
+  if isa(params, AesMCAttack)
+    params.analysis.leakageFunctions = [x -> (x .>> i) & 1 for i in 0:31]
+  else
+    if isa(params, AesSboxAttack)
+      params.analysis.leakageFunctions = [x -> (x .>> i) & 1 for i in 0:7]
+    elseif isa(params, DesSboxAttack)
+      params.analysis.leakageFunctions = [x -> (x .>> i) & 1 for i in 0:3]
+    end
+  end
 
   numberOfAverages = length(params.keyByteOffsets)
   numberOfCandidates = getNumberOfCandidates(params)
