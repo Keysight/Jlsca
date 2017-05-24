@@ -79,19 +79,37 @@ function printParameters(params::DesSboxAttack)
   end
 end
 
+function getIdx(sixbits::Union{UInt16, UInt8})
+  idx = (sixbits >> 5)
+  idx = idx << 1
+  idx = idx | (sixbits & 1)
+  idx = idx << 4
+  idx = idx | ((sixbits >> 1) & 0xf)
+  return idx
+end
+
 # works on columns of data
 function getIdx(sixbits::Union{Vector{UInt16}, Vector{UInt8}})
-	idx = (sixbits .>> 5)
-	idx = idx .<< 1
-	idx = idx | (sixbits & 1)
-	idx = idx .<< 4
-	idx = idx | ((sixbits .>> 1) & 0xf)
-	return idx
+  return map(getIdx, sixbits)
+end
+
+# target functions
+
+# works on single data byte, vector of keys
+function desSboxOut(sixbits::Union{UInt16, UInt8}, sbidx::Int, kbs::Vector{UInt8})
+  return map(i -> Sbox(sbidx)[i + 1], getIdx((sixbits & 0x3f) $ kbs))
 end
 
 # works on columns of data
 function desSboxOut(sixbits::Union{Vector{UInt16}, Vector{UInt8}}, sbidx::Int, kb::UInt8)
   return map(i -> Sbox(sbidx)[i + 1], getIdx((sixbits & 0x3f) $ kb))
+end
+
+# works on single data byte, vector of keys
+function desSboxOutXORin(sixbits::Union{UInt16, UInt8}, sbidx::Int, kbs::Vector{UInt8})
+  inp =  ((sixbits & 0x3f) $ kbs) & 0xf
+  outp = desSboxOut(sixbits,sbidx,kbs)
+  return inp $ outp
 end
 
 # works on columns of data
@@ -101,10 +119,17 @@ function desSboxOutXORin(sixbits::Union{Vector{UInt16}, Vector{UInt8}}, sbidx::I
   return inp $ outp
 end
 
+# works on single data byte, vector of keys
+function roundOut(tenbits::UInt16, sbidx::Int, kbs::Vector{UInt8})
+  return desSboxOut(tenbits, sbidx, kbs) $ (tenbits >> 6)
+end
+
 # works on columns of data
 function roundOut(tenbits::Vector{UInt16}, sbidx::Int, kb::UInt8)
   return desSboxOut(tenbits, sbidx, kb) $ (tenbits .>> 6)
 end
+
+# round functions
 
 # works on rows of data, returns either a vector of UInt8, or UInt16
 function round1(input::Vector{UInt8}, params::DesSboxAttack)

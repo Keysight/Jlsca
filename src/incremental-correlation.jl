@@ -10,7 +10,7 @@ export IncrementalCorrelation,init
 type IncrementalCorrelation <: PostProcessor
   worksplit::WorkSplit
   counter::Int
-  covXY::Dict{Int,IncrementalCovariance}
+  covXY::Dict{Int,IncrementalCovarianceTiled}
   meanXinitialized::Bool
   meanX::IncrementalMeanVariance
   keyByteOffsets::Vector{Int}
@@ -23,7 +23,7 @@ type IncrementalCorrelation <: PostProcessor
   end
 
   function IncrementalCorrelation(w::WorkSplit)
-    return new(w, 0, Dict{Int,IncrementalCovariance}(), false)
+    return new(w, 0, Dict{Int,IncrementalCovarianceTiled}(), false)
   end
 end
 
@@ -35,19 +35,22 @@ function init(c::IncrementalCorrelation, keyByteOffsets::Vector{Int}, dataFuncti
 end
 
 function reset(c::IncrementalCorrelation)
-  c.covXY = Dict{Int,IncrementalCovariance}()
+  c.covXY = Dict{Int,IncrementalCovarianceTiled}()
   c.meanXinitialized = false
 end
 
-function toLeakages!(c::IncrementalCorrelation, hypo, idx::Int, input::Integer)
+function toLeakages!(c::IncrementalCorrelation, hypo::Vector{UInt8}, idx::Int, input::Union{UInt8,UInt16})
   kbOffset = c.keyByteOffsets[idx]
   nrOfKbVals = length(c.kbvals)
+  nrOfFuns = length(c.leakageFunctions)
 
-  for (k,kb) in enumerate(c.kbvals)
-    target = c.dataFunction([input], kbOffset, kb)[1]
-    for (l,lfun) in enumerate(c.leakageFunctions)
-      hypo[(l-1)*nrOfKbVals+k] = lfun(target)
-    end
+
+  targets = c.dataFunction(input, kbOffset, c.kbvals)
+
+  @inbounds for l in 1:nrOfFuns
+    lfun = c.leakageFunctions[l]
+    hypoidx = (l-1)*nrOfKbVals+1
+    hypo[hypoidx:(hypoidx+nrOfKbVals-1)] = lfun(targets)
   end
 
   return hypo
@@ -77,10 +80,10 @@ function add(c::IncrementalCorrelation, worksplit::SplitByData, trs::Trace, trac
       continue
     end
 
-    hypo = toLeakages!(c, hypo, idx, val)
+    toLeakages!(c, hypo, idx, val)
 
     if !haskey(c.covXY, idx)
-      c.covXY[idx] = IncrementalCovariance(length(samples), length(hypo))
+      c.covXY[idx] = IncrementalCovarianceTiled(length(samples), length(hypo))
     end
 
     add!(c.covXY[idx], samples, hypo)
@@ -106,15 +109,15 @@ function add(c::IncrementalCorrelation, worksplit::Union{NoSplit,SplitByTraces},
   end
 
   samplesN = samples .- c.meanX.mean
-  hypo = zeros(UInt8, length(c.leakageFunctions) * length(c.kbvals))
 
   for idx in eachindex(data)
     val = data[idx]
 
-    hypo = toLeakages!(c, hypo, idx, val)
+    hypo = zeros(UInt8, length(c.leakageFunctions) * length(c.kbvals))
+    toLeakages!(c, hypo, idx, val)
 
     if !haskey(c.covXY, idx)
-      c.covXY[idx] = IncrementalCovariance(c.meanX, IncrementalMeanVariance(length(hypo)))
+      c.covXY[idx] = IncrementalCovarianceTiled(c.meanX, IncrementalMeanVariance(length(hypo)))
     end
 
     add!(c.covXY[idx], samples, hypo, samplesN, false)

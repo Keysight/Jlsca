@@ -96,11 +96,15 @@ function invMcOut(a::AesMCAttack, x::UInt8, keyByte::UInt8, position::Int, const
     return ret
 end
 
+function invMcOut(a::AesMCAttack, data::UInt8, dataColumn, keyBytes::Vector{UInt8}, position::Int, constant::UInt8)
+    ret = map(keyByte -> invMcOut(a,data,keyByte,position,constant), keyBytes)
+    return ret
+end
+
 function invMcOut(a::AesMCAttack, data::Array{UInt8}, dataColumn, keyByte::UInt8, position::Int, constant::UInt8)
     ret = map(x -> invMcOut(a,x,keyByte,position,constant), data)
     return ret
 end
-
 
 function mcOut(a::AesMCAttack, x::UInt8, keyByte::UInt8, position::Int, constant::UInt8)
     mcIn = fill(constant, 4)
@@ -111,6 +115,11 @@ function mcOut(a::AesMCAttack, x::UInt8, keyByte::UInt8, position::Int, constant
       ret <<= 8
       ret |= mcOut[i]
     end
+    return ret
+end
+
+function mcOut(a::AesMCAttack, data::UInt8, dataColumn, keyBytes::Vector{UInt8}, position::Int, constant::UInt8)
+    ret = map(keyByte -> mcOut(a,data,keyByte,position,constant), keyBytes)
     return ret
 end
 
@@ -131,31 +140,54 @@ function mcOutXORIn(a::AesMCAttack, x::UInt8, keyByte::UInt8, position::Int, con
     return ret
 end
 
+function mcOutXORIn(a::AesMCAttack, data::UInt8, dataColumn, keyBytes::Vector{UInt8}, position::Int, constant::UInt8)
+    ret = map(keyByte -> mcOutXORIn(a,data,keyByte,position,constant), keyBytes)
+    return ret
+end
+
 function mcOutXORIn(a::AesMCAttack, data::Array{UInt8}, dataColumn, keyByte::UInt8, position::Int, constant::UInt8)
     ret = map(x -> mcOutXORIn(a,x,keyByte,position,constant), data)
     return ret
 end
 
-function sboxOut(a::AesSboxAttack, data::Array{UInt8}, dataColumn, keyByte::UInt8)
+function sboxOut(a::AesSboxAttack, data::UInt8, dataColumn::Int, keyBytes::Vector{UInt8})
+    return map(x -> a.sbox[(data $ x) + 1], keyBytes)
+end
+
+function sboxOut(a::AesSboxAttack, data::Array{UInt8}, dataColumn::Int, keyByte::UInt8)
     ret = map(x -> a.sbox[(x $ keyByte) + 1], data)
     return ret
 end
 
-function invSboxOut(a::AesSboxAttack, data::Array{UInt8}, dataColumn, keyByte::UInt8)
+function invSboxOut(a::AesSboxAttack, data::UInt8, dataColumn::Int, keyBytes::Vector{UInt8})
+    ret = map(x -> a.invsbox[(data $ x) + 1], keyBytes)
+    return ret
+end
+
+function invSboxOut(a::AesSboxAttack, data::Array{UInt8}, dataColumn::Int, keyByte::UInt8)
     ret = map(x -> a.invsbox[(x $ keyByte) + 1], data)
     return ret
 end
 
-function sboxOutXORIn(a::AesSboxAttack, data::Array{UInt8}, dataColumn, keyByte::UInt8)
+function sboxOutXORIn(a::AesSboxAttack, data::UInt8, dataColumn::Int, keyBytes::Vector{UInt8})
+    ret = map(keyByte -> data $ keyByte $ a.sbox[(data $ keyByte) + 1], keyBytes)
+    return ret
+end
+
+function sboxOutXORIn(a::AesSboxAttack, data::Array{UInt8}, dataColumn::Int, keyByte::UInt8)
     ret = map(x -> x $ keyByte $ a.sbox[(x $ keyByte) + 1], data)
     return ret
 end
 
-function invSboxOutXORIn(a::AesSboxAttack, data::Array{UInt8}, dataColumn, keyByte::UInt8)
-    ret = map(x -> x $ keyByte $ a.invsbox[(x $ keyByte) + 1], data)
+function invSboxOutXORIn(a::AesSboxAttack, data::UInt8, dataColumn::Int, keyBytes::Vector{UInt8})
+    ret = map(keyByte -> data $ keyByte $ a.invsbox[(data $ keyByte) + 1], keyBytes)
     return ret
 end
 
+function invSboxOutXORIn(a::AesSboxAttack, data::Array{UInt8}, dataColumn::Int, keyByte::UInt8)
+    ret = map(x -> x $ keyByte $ a.invsbox[(x $ keyByte) + 1], data)
+    return ret
+end
 
 # some round functions
 function invRound(output::Matrix, roundkey::Matrix)
@@ -410,6 +442,8 @@ function scatask(trs::Trace, params::AesSboxAttack, firstTrace=1, numberOfTraces
   knownKey = params.knownKey
   updateInterval = params.updateInterval
   targetFunction = (x...) -> getTargetFunction(params)(params, x...)
+
+  # targetFunction = (data::Union{UInt8,Vector{UInt8}}, dataColumn::Int, keyByte::UInt8) -> getTargetFunction(params)(params, data, dataColumn, keyByte)
 
 
   local key, scores

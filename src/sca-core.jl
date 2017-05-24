@@ -231,7 +231,7 @@ for s in instances(Status); @eval export $(Symbol(s)); end
 
 # generic sca function, this one is called in all the unit tests and the main functions
 function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=length(trs), printSubs::Bool=false, scoresCallBack::Nullable{Function}=Nullable{Function}())
-  @printf("\nJlsca running in Julia version: %s, %d processes/%d workers\n\n", VERSION, nprocs(), nworkers())
+  @printf("\nJlsca running in Julia version: %s, %d processes/%d workers/%d threads per worker\n\n", VERSION, nprocs(), nworkers(), Threads.nthreads())
 
   printParameters(params)
 

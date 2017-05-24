@@ -4,8 +4,10 @@
 #
 # Implements algorithms from this fine Sandia paper:
 # http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.214.8508&rep=rep1&type=pdf
+# 
+# Threaded, cached & tiled in IncrementalCovarianceTiled.
 
-export IncrementalMeanVariance,IncrementalCovariance,add!,getVariance,getStdDev,getCov,getCorr
+export IncrementalMeanVariance,IncrementalCovariance,IncrementalCovarianceTiled,add!,getVariance,getStdDev,getCov,getCorr
 
 type IncrementalMeanVariance
   mean::Vector{Float64}
@@ -15,9 +17,13 @@ type IncrementalMeanVariance
   function IncrementalMeanVariance(x::Int)
     new(zeros(Float64, x), zeros(Float64, x), 0)
   end
+
+  function IncrementalMeanVariance(mean::Vector{Float64}, var::Vector{Float64})
+    new(mean, var, 0)
+  end
 end
 
-function add!(state::IncrementalMeanVariance, data::Vector, y1::Vector=data.-state.mean)
+function add!(state::IncrementalMeanVariance, data::AbstractVector, y1::AbstractVector=data.-state.mean)
   state.n += 1
   @inbounds for x in eachindex(state.mean)
     state.mean[x] = state.mean[x] + (data[x] - state.mean[x]) / state.n
@@ -53,21 +59,80 @@ type IncrementalCovariance
   end
 
   function IncrementalCovariance(meanVarX::IncrementalMeanVariance, meanVarY::IncrementalMeanVariance)
-    new(meanVarX, meanVarY, zeros(Float64, (length(meanVarX.mean), length(meanVarY.mean))), 0)
+    IncrementalCovariance(meanVarX, meanVarY, zeros(Float64, (length(meanVarX.mean), length(meanVarY.mean))))
+  end
+
+  function IncrementalCovariance(meanVarX::IncrementalMeanVariance, meanVarY::IncrementalMeanVariance, cov::AbstractArray{Float64,2})
+    new(meanVarX, meanVarY, cov, 0)
   end
 end
 
-function add!(state::IncrementalCovariance, dataX::Vector, dataY::Vector, dataXn::Vector=dataX.-state.meanVarX.mean, updateMeanX::Bool=true, dataYn::Vector=dataY.-state.meanVarY.mean, updateMeanY::Bool=true)
-  @assert((length(dataX),length(dataY)) == size(state.cov))
-
-  state.n += 1
-  n = state.n
-  @inbounds for y in eachindex(dataYn)
-    dataYny = dataYn[y]
-    for x in eachindex(dataXn)
-      state.cov[x,y] += (n-1)/n * dataXn[x]*dataYny
+function updateCovCacheFuckExample(cov::Matrix{Float64}, dataXn::AbstractVector, dataYn::AbstractVector, ndiv::Float64)
+  for x in eachindex(dataXn)
+    @inbounds dataXnx = dataXn[x] * ndiv
+      for y in eachindex(dataYn)
+      @inbounds cov[x,y] += dataYn[y]*dataXnx
     end
   end
+end
+
+# function updateCov!(cov::Matrix{Float64}, dataXn::AbstractVector, dataYn::AbstractVector, ndiv::Float64)
+#   for y in eachindex(dataYn)
+#     @inbounds dataYny = dataYn[y] * ndiv
+#     for x in eachindex(dataXn)
+#       @inbounds cov[x,y] += dataXn[x]*dataYny
+#     end
+#   end  
+# end
+
+
+# function add!(state::IncrementalCovariance, dataX::AbstractVector, dataY::AbstractVector, dataXn::AbstractVector=dataX.-state.meanVarX.mean, updateMeanX::Bool=true, dataYn::AbstractVector=dataY.-state.meanVarY.mean, updateMeanY::Bool=true)
+#   @assert((length(dataX),length(dataY)) == size(state.cov))
+
+#   state.n += 1
+#   const n = state.n
+#   const ndiv::Float64 = (n-1)/n
+
+#   updateCov!(state.cov, dataXn, dataYn, ndiv)
+
+#   if updateMeanX
+#     add!(state.meanVarX, dataX, dataXn)
+#   end
+
+#   if updateMeanY
+#     add!(state.meanVarY, dataY, dataYn)
+#   end
+
+# end
+
+@inline function updateCov!(cov::Matrix{Float64}, dataXn::AbstractVector, dataYn::AbstractVector, ndiv::Float64)
+  updateCov!(cov, dataXn, 1, length(dataXn), dataYn, 1, length(dataYn), ndiv)
+end
+
+function updateCov!(cov::Matrix{Float64}, dataXn::AbstractVector, minX::Int, maxX::Int, dataYn::AbstractVector, minY::Int, maxY::Int, ndiv::Float64)
+  for y in minY:maxY
+    @inbounds dataYny = dataYn[y] * ndiv
+    ypos = y-minY+1
+    for x in minX:maxX
+      @inbounds cov[x-minX+1,ypos] += dataXn[x]*dataYny
+    end
+  end  
+end
+
+@inline function add!(state::IncrementalCovariance, dataX::AbstractVector, dataY::AbstractVector, dataXn::AbstractVector=dataX.-state.meanVarX.mean, updateMeanX::Bool=true, dataYn::AbstractVector=dataY.-state.meanVarY.mean, updateMeanY::Bool=true)
+
+  add!(state, dataX, 1, length(dataX), dataY, 1, length(dataY), dataXn, updateMeanX, dataYn, updateMeanY)
+
+end
+
+function add!(state::IncrementalCovariance, dataX::AbstractVector, minX::Int, maxX::Int, dataY::AbstractVector, minY::Int, maxY::Int, dataXn::AbstractVector=dataX.-state.meanVarX.mean, updateMeanX::Bool=true, dataYn::AbstractVector=dataY.-state.meanVarY.mean, updateMeanY::Bool=true)
+  # @assert((length(dataX),length(dataY)) == size(state.cov))
+
+  state.n += 1
+  const n = state.n
+  const ndiv::Float64 = (n-1)/n
+
+  updateCov!(state.cov, dataXn, minX, maxX, dataYn, minY, maxY, ndiv)
 
   if updateMeanX
     add!(state.meanVarX, dataX, dataXn)
@@ -76,15 +141,25 @@ function add!(state::IncrementalCovariance, dataX::Vector, dataY::Vector, dataXn
   if updateMeanY
     add!(state.meanVarY, dataY, dataYn)
   end
+
 end
 
 function add!(this::IncrementalCovariance, other::IncrementalCovariance, updateMeanX::Bool=true, updateMeanY::Bool=true)
+  const (covX,covY) = size(this.cov)
+
+  add!(this, other, 1, 1, updateMeanX, updateMeanY)
+end
+
+function add!(this::IncrementalCovariance, other::IncrementalCovariance, minX::Int, minY::Int, updateMeanX::Bool=true, updateMeanY::Bool=true)
   deltaX = this.meanVarX.mean .- other.meanVarX.mean
   deltaY = this.meanVarY.mean .- other.meanVarY.mean
   n = this.n + other.n
-  @inbounds for y in eachindex(deltaY)
-    for x in eachindex(deltaX)
-      this.cov[x,y] = this.cov[x,y] .+ other.cov[x,y] + (this.n*other.n^2 + other.n*this.n^2) / n^2 .* deltaX[x] .* deltaY[y]
+
+  const (covX,covY) = size(this.cov)
+
+  @inbounds for y in 1:covY
+    for x in 1:covX
+      this.cov[x,y] = this.cov[x,y] .+ other.cov[x,y] + (this.n*other.n^2 + other.n*this.n^2) / n^2 .* deltaX[minX+x-1] .* deltaY[minY+y-1]
     end
   end
 
@@ -99,8 +174,176 @@ function add!(this::IncrementalCovariance, other::IncrementalCovariance, updateM
   end
 end
 
+
+type IncrementalCovarianceTiled
+  numberOfX::Int
+  numberOfY::Int
+  tilesizeX::Int
+  tilesizeY::Int
+  meanVarX::IncrementalMeanVariance
+  meanVarY::IncrementalMeanVariance
+  covXY::Matrix{IncrementalCovariance}
+  cacheXn::Vector{Vector}
+  cacheYn::Vector{Vector}
+  cacheCount::Int
+  cacheMax::Int
+
+  function IncrementalCovarianceTiled(numberOfX::Int, numberOfY::Int, tilesizeX::Int=128, tilesizeY::Int=128, caches::Int=10)
+    meanVarX = IncrementalMeanVariance(numberOfX)
+    meanVarY = IncrementalMeanVariance(numberOfY)
+
+    IncrementalCovarianceTiled(meanVarX, meanVarY, tilesizeX, tilesizeY, caches)
+  end
+
+  function IncrementalCovarianceTiled(meanVarX::IncrementalMeanVariance, meanVarY::IncrementalMeanVariance, tilesizeX::Int=128, tilesizeY::Int=128, caches::Int=10)
+    numberOfX = length(meanVarX.mean)
+    numberOfY = length(meanVarY.mean)
+    nrTilesX = div(numberOfX+tilesizeX-1, tilesizeX)
+    nrTilesY = div(numberOfY+tilesizeY-1, tilesizeY)
+    covXY = Matrix{IncrementalCovariance}(nrTilesX, nrTilesY)
+
+    # @printf("#threads %d, numberOfX %d, numberOfY %d, nrTilesX %d, nrTilesY %d\n", Threads.nthreads(), numberOfX, numberOfY, nrTilesX, nrTilesY)
+
+    for y in 1:nrTilesY
+      minY = (y-1)*tilesizeY+1
+      maxY = min(tilesizeY, numberOfY-(y-1)*tilesizeY)
+
+      for x in 1:nrTilesX
+        minX = (x-1)*tilesizeX+1
+        maxX = min(tilesizeX, numberOfX-(x-1)*tilesizeX)
+
+        covXY[x,y] = IncrementalCovariance(meanVarX, meanVarY, zeros(Float64, maxX, maxY))
+      end
+    end
+
+    new(numberOfX, numberOfY, tilesizeX, tilesizeY, meanVarX, meanVarY, covXY, Vector{Vector}(caches), Vector{Vector}(caches), 0, caches)
+  end
+end
+
+function flushcache!(state::IncrementalCovarianceTiled)
+  if state.cacheCount == 0
+    return
+  end
+
+  const (nrTilesX,nrTilesY) = size(state.covXY)
+  const tilesizeX = state.tilesizeX
+  const tilesizeY = state.tilesizeY
+  const numberOfX = state.numberOfX
+  const numberOfY = state.numberOfY
+
+  Threads.@threads for y in 1:nrTilesY
+    minY = (y-1)*tilesizeY+1
+    maxY = min(minY+tilesizeY-1, numberOfY)
+    for x in 1:nrTilesX
+      minX = (x-1)*tilesizeX+1
+      maxX = min(minX+tilesizeX-1, numberOfX)
+
+      for t in 1:state.cacheCount
+        dataXn = state.cacheXn[t]
+        dataYn = state.cacheYn[t]
+
+
+        # add!(state.covXY[x,y], dataXn, minX, maxX, dataYn, minY, maxY, false,)
+
+        state.covXY[x,y].n += 1
+        const n = state.covXY[x,y].n
+        const ndiv::Float64 = (n-1)/n
+
+        updateCov!(state.covXY[x,y].cov, dataXn, minX, maxX, dataYn, minY, maxY, ndiv)
+      end
+    end
+  end
+
+  state.cacheCount = 0
+end
+
+function add!(state::IncrementalCovarianceTiled, dataX::AbstractVector, dataY::AbstractVector, dataXn::AbstractVector=dataX.-state.meanVarX.mean, updateMeanX::Bool=true, dataYn::AbstractVector=dataY.-state.meanVarY.mean, updateMeanY::Bool=true)
+  @assert((length(dataX),length(dataY)) == (state.numberOfX,state.numberOfY))
+
+  state.cacheCount += 1
+  const cacheCount = state.cacheCount
+  state.cacheXn[cacheCount] = dataXn
+  state.cacheYn[cacheCount] = dataYn
+
+  if updateMeanX
+    add!(state.meanVarX, dataX, dataXn)
+  end
+
+  if updateMeanY
+    add!(state.meanVarY, dataY, dataYn)
+  end
+
+  if cacheCount < state.cacheMax
+    return
+  end
+
+  flushcache!(state)
+
+end
+
+function add!(this::IncrementalCovarianceTiled, other::IncrementalCovarianceTiled, updateMeanX::Bool=true, updateMeanY::Bool=true)
+  @assert(length(this.covXY) == length(other.covXY))
+
+  flushcache!(this)
+  flushcache!(other)
+
+  const (nrTilesX,nrTilesY) = size(this.covXY)
+  const tilesizeX = this.tilesizeX
+  const tilesizeY = this.tilesizeY
+  const numberOfX = this.numberOfX
+  const numberOfY = this.numberOfY
+
+  for y in 1:nrTilesY
+    minY = (y-1)*tilesizeY+1
+    for x in 1:nrTilesX
+      minX = (x-1)*tilesizeX+1
+
+      add!(this.covXY[x,y], other.covXY[x,y], minX, minY, false, false)
+    end
+  end
+
+  if updateMeanX
+    add!(this.meanVarX, other.meanVarX)
+  end
+
+  if updateMeanY
+    add!(this.meanVarY, other.meanVarY)
+  end
+
+end
+
+
 function getCov(state::IncrementalCovariance)
   return 1/(state.n-1) .* state.cov
+end
+
+function getCov(state::IncrementalCovarianceTiled)
+  flushcache!(state)
+  cov = zeros(Float64, state.numberOfX, state.numberOfY)
+
+  numberOfY = state.numberOfY
+  numberOfX = state.numberOfX
+  nrTilesX = size(state.covXY)[1]
+  nrTilesY = size(state.covXY)[2]
+  tilesizeY = state.tilesizeY
+  tilesizeX = state.tilesizeX
+  
+  for y in 1:nrTilesY
+    minY = (y-1)*tilesizeY+1
+    maxY = minY + min(tilesizeY, numberOfY-(y-1)*tilesizeY) - 1
+
+    for x in 1:nrTilesX
+      minX = (x-1)*tilesizeX+1
+      maxX = minX + min(tilesizeX, numberOfX-(x-1)*tilesizeX) - 1
+
+      cov[minX:maxX,minY:maxY] = state.covXY[x,y].cov
+    end
+  end
+
+  n = state.covXY[1,1].n
+  cov .*= 1/(n-1)
+
+  return cov
 end
 
 function getCorr(state::IncrementalCovariance)
@@ -112,6 +355,44 @@ function getCorr(state::IncrementalCovariance)
   for y in 1:size(corr)[2]
     for x in 1:size(corr)[1]
       corr[x,y] = 1/(state.n-1) * state.cov[x,y] / (xstddev[x] * ystddev[y])
+    end
+  end
+
+  return corr
+end
+
+function getCorr(state::IncrementalCovarianceTiled)
+  flushcache!(state)
+
+  corr = zeros(Float64, state.numberOfX, state.numberOfY)
+
+  xstddev = getStdDev(state.meanVarX)
+  ystddev = getStdDev(state.meanVarY)
+
+  numberOfY = state.numberOfY
+  numberOfX = state.numberOfX
+  nrTilesX = size(state.covXY)[1]
+  nrTilesY = size(state.covXY)[2]
+  tilesizeY = state.tilesizeY
+  tilesizeX = state.tilesizeX
+  
+  for y in 1:nrTilesY
+    minY = (y-1)*tilesizeY+1
+    maxY = minY + min(tilesizeY, numberOfY-(y-1)*tilesizeY) - 1
+
+    for x in 1:nrTilesX
+      minX = (x-1)*tilesizeX+1
+      maxX = minX + min(tilesizeX, numberOfX-(x-1)*tilesizeX) - 1
+
+      corr[minX:maxX,minY:maxY] = state.covXY[x,y].cov
+    end
+  end
+
+  n = state.covXY[1,1].n
+
+  for y in 1:size(corr)[2]
+    for x in 1:size(corr)[1]
+      corr[x,y] = 1/(n-1) * corr[x,y] / (xstddev[x] * ystddev[y])
     end
   end
 
