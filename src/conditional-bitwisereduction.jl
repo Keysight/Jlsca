@@ -29,19 +29,21 @@ type CondReduce <: Cond
   trs::Trace
   bitcompressedInitialized::Bool
   logfile::SimpleCSV
+  usesamplescache::Bool
+  samplescache::Dict{Int,Dict{Int,BitVector}}
   # deliberatly not initialized with new in the constructor below
   state::BitCompress
 
-  function CondReduce(trs::Trace, logfile::Nullable{String}=Nullable{String}())
-    CondReduce(NoSplit(), trs, logfile)
+  function CondReduce(trs::Trace, logfile::Nullable{String}=Nullable{String}(), usesamplescache=true)
+    CondReduce(NoSplit(), trs, logfile, usesamplescache)
   end
 
-  function CondReduce(worksplit::WorkSplit, trs::Trace, logfile::Nullable{String}=Nullable{String}())
+  function CondReduce(worksplit::WorkSplit, trs::Trace, logfile::Nullable{String}=Nullable{String}(), usesamplescache=true)
     mask = Dict{Int,BitVector}()
     traceIdx = Dict{Int,Dict{Int,Int}}()
     # @printf("Conditional bitwise sample reduction, split %s\n", worksplit)
 
-    new(mask, traceIdx, 0, worksplit, trs, false, SimpleCSV(logfile))
+    new(mask, traceIdx, 0, worksplit, trs, false, SimpleCSV(logfile), usesamplescache, Dict{Int,Dict{Int,BitVector}}())
   end
 end
 
@@ -50,6 +52,9 @@ function reset(c::CondReduce)
   c.traceIdx = Dict{Int,Dict{Int,Int}}()
   c.globcounter = 0
   c.bitcompressedInitialized = true
+  if c.usesamplescache
+    c.samplescache = Dict{Int,Dict{Int,BitVector}}()
+  end
 end
 
 # only works on samples of BitVector type, do addSamplePass(trs, tobits)
@@ -86,21 +91,32 @@ function add(c::CondReduce, trs::Trace, traceIdx::Int)
     if !haskey(c.mask, idx)
       c.mask[idx] = trues(length(get(samples)))
       c.traceIdx[idx] = Dict{Int,Int}()
+      if c.usesamplescache
+        c.samplescache[idx] = Dict{Int,BitVector}()
+      end
     end
 
     if !haskey(c.traceIdx[idx], val)
       c.traceIdx[idx][val] = traceIdx
+      if c.usesamplescache
+        c.samplescache[idx][val] = get(samples)
+      end
       continue
     end
 
-    cachedreftrace = getSamples(trs, c.traceIdx[idx][val])
-    cachedsamples = get(samples)
+    if c.usesamplescache
+      reftrace = c.samplescache[idx][val]
+    else
+      reftrace = getSamples(trs, c.traceIdx[idx][val])
+    end
 
-    cachedreftrace $= cachedsamples
-    c.mask[idx][:] &= !(c.mask[idx] & cachedreftrace)
-    cachedsamples = nothing
-    cachedreftrace = nothing
+    c.mask[idx][:] &= !(reftrace $ get(samples))
 
+    # blocks = length(c.mask[idx].chunks)
+
+    # for i in 1:blocks
+    #   c.mask[idx].chunks[i] &= ~(cachedreftrace.chunks[i] $ cachedsamples.chunks[i]) 
+    # end
   end
 
   c.globcounter += 1

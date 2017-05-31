@@ -26,11 +26,12 @@ type InspectorTrace <: Trace
   filePosition
   writeable::Bool
   lengthPosition::Int
+  bitshack::Bool
 
   # to open an existing file
-  function InspectorTrace(filename::String, bits::Bool = false)
-    (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, fileDescriptor) = readInspectorTrsHeader(filename, bits)
-    new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, Union, 0, filename, traceBlockPosition, false, lengthPosition)
+  function InspectorTrace(filename::String, bitshack::Bool = false)
+    (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, fileDescriptor) = readInspectorTrsHeader(filename, bitshack)
+    new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, Union, 0, filename, traceBlockPosition, false, lengthPosition, bitshack)
   end
 
   # to create a new one
@@ -38,7 +39,7 @@ type InspectorTrace <: Trace
     !isfile(filename) || throw(ErrorException(@sprintf("file %s exists!", filename)))
 
     (titleSpace, traceBlockPosition, lengthPosition, fileDescriptor) = writeInspectorTrsHeader(filename, dataSpace, sampleType, numberOfSamplesPerTrace)
-    new(titleSpace, Nullable(0), dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, Union, 0, filename, traceBlockPosition, true, lengthPosition)
+    new(titleSpace, Nullable(0), dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, Union, 0, filename, traceBlockPosition, true, lengthPosition, false)
   end
 end
 
@@ -69,7 +70,7 @@ skip(fd::Base.PipeEndpoint, x::Integer) = read(fd, x)
 length(trs::InspectorTrace) = isnull(trs.numberOfTraces) ? typemax(Int) : get(trs.numberOfTraces)
 
 # read the header of a Riscure Inspector trace set (TRS)
-function readInspectorTrsHeader(filename, bits::Bool)
+function readInspectorTrsHeader(filename, bitshack::Bool)
     if filename != "-"
       f = open(filename, "r")
     else
@@ -150,13 +151,13 @@ function readInspectorTrsHeader(filename, bits::Bool)
         end
       end
 
-      if bits
+      if bitshack
         if (numberOfSamplesPerTrace * sampleSpace) % 8 != 0
-          throw(ErrorException("samples needs to be 8 byte aligned in order to force sample type to UInt64!!!1\n"))
+          @printf("Warning: bithack enabled: ignoring trailing %d samples that are not 8 byte aligned !!!1\n", (numberOfSamplesPerTrace * sampleSpace) % 8)
         end
-        numberOfSamplesPerTrace = div((sampleSpace * numberOfSamplesPerTrace), 8)
-        sampleType = UInt64
-        sampleSpace = 8
+        # numberOfSamplesPerTrace = div((sampleSpace * numberOfSamplesPerTrace), 8)
+        # sampleType = UInt64
+        # sampleSpace = 8
       end
 
       @printf("Opened %s, #traces %s, #samples %d (%s), #data %d\n", filename, isnull(numberOfTraces) ? "unknown" : @sprintf("%d", get(numberOfTraces)), numberOfSamplesPerTrace, sampleType, dataSpace)
@@ -220,17 +221,23 @@ end
 
 # read samples for a single trace from an Inspector trace set
 function readSamples(trs::InspectorTrace, idx)
-  position = calcFilePositionForIdx(trs, idx)
-  position += trs.titleSpace
-  position += trs.dataSpace
+  pos = calcFilePositionForIdx(trs, idx)
+  pos += trs.titleSpace
+  pos += trs.dataSpace
 
-  if trs.filePosition != position
+  if trs.filePosition != pos
     # this is going to throw an exception when reading from stdin
-    seek(trs.fileDescriptor, position)
-    trs.filePosition = position
+    seek(trs.fileDescriptor, pos)
+    trs.filePosition = pos
   end
 
-  samples = read(trs.fileDescriptor, trs.sampleType, trs.numberOfSamplesPerTrace)
+  if trs.bitshack
+    samples = Vector{UInt64}(div(trs.numberOfSamplesPerTrace * trs.sampleSpace, 8))
+    read!(trs.fileDescriptor, samples)
+    trs.filePosition = position(trs.fileDescriptor)
+  else
+    samples = read(trs.fileDescriptor, trs.sampleType, trs.numberOfSamplesPerTrace)
+  end
   trs.filePosition += trs.numberOfSamplesPerTrace * trs.sampleSpace
 
   if trs.sampleType != UInt8
