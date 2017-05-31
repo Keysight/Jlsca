@@ -237,8 +237,8 @@ function readSamples(trs::InspectorTrace, idx)
     trs.filePosition = position(trs.fileDescriptor)
   else
     samples = read(trs.fileDescriptor, trs.sampleType, trs.numberOfSamplesPerTrace)
+    trs.filePosition += trs.numberOfSamplesPerTrace * trs.sampleSpace
   end
-  trs.filePosition += trs.numberOfSamplesPerTrace * trs.sampleSpace
 
   if trs.sampleType != UInt8
     if ltoh(ENDIAN_BOM) != ENDIAN_BOM
