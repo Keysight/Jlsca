@@ -31,9 +31,7 @@ type CondReduce <: Cond
   logfile::SimpleCSV
   usesamplescache::Bool
   samplescache::Dict{Int,Dict{Int,BitVector}}
-  # deliberatly not initialized with new in the constructor below
-  state::BitCompress
-
+  
   function CondReduce(trs::Trace, logfile::Nullable{String}=Nullable{String}(), usesamplescache=true)
     CondReduce(NoSplit(), trs, logfile, usesamplescache)
   end
@@ -54,6 +52,14 @@ function reset(c::CondReduce)
   c.bitcompressedInitialized = true
   if c.usesamplescache
     c.samplescache = Dict{Int,Dict{Int,BitVector}}()
+  end
+end
+
+function getSamplesCached(c::CondReduce, idx::Int, val::Integer) 
+  if c.usesamplescache && haskey(c.samplescache, idx) && haskey(c.samplescache[idx], val)
+    reftrace = c.samplescache[idx][val]
+  else
+    reftrace = getSamples(c.trs, c.traceIdx[idx][val])
   end
 end
 
@@ -79,13 +85,6 @@ function add(c::CondReduce, trs::Trace, traceIdx::Int)
      if length(get(samples)) == 0
        return
      end
-
-     if !c.bitcompressedInitialized
-       c.state = BitCompress(length(get(samples)))
-       c.bitcompressedInitialized = true
-     end
-
-     bitcompress(c.state, get(samples))
     end
 
     if !haskey(c.mask, idx)
@@ -104,12 +103,7 @@ function add(c::CondReduce, trs::Trace, traceIdx::Int)
       continue
     end
 
-    if c.usesamplescache
-      reftrace = c.samplescache[idx][val]
-    else
-      reftrace = getSamples(trs, c.traceIdx[idx][val])
-    end
-
+    reftrace = getSamplesCached(c, idx, val)
     c.mask[idx][:] &= !(reftrace $ get(samples))
 
     # blocks = length(c.mask[idx].chunks)
@@ -131,23 +125,18 @@ function merge(this::CondReduce, other::CondReduce)
     if !haskey(this.traceIdx, idx)
       this.traceIdx[idx] = dictofavgs
       this.mask[idx] = other.mask[idx]
-      this.state = other.state
     else
       this.mask[idx][:] &= other.mask[idx]
       for (val, avg) in dictofavgs
         if val in keys(this.traceIdx[idx])
           if this.traceIdx[idx][val] != other.traceIdx[idx][val]
-            cachedreftrace = getSamples(this.trs, this.traceIdx[idx][val])
-            cachedsamples = getSamples(this.trs, other.traceIdx[idx][val])
+            cachedreftrace = getSamples(this.trs, other.traceIdx[idx][val])
+            cachedsamples = getSamples(this.trs, this.traceIdx[idx][val])
 
-            cachedreftrace $= cachedsamples
-            this.mask[idx][:] &= !(this.mask[idx] & cachedreftrace)
-
-            bitcompress(this.state, cachedsamples)
+            this.mask[idx][:] &= !(cachedreftrace $ cachedsamples)
           end
         else
           cachedsamples = getSamples(this.trs, other.traceIdx[idx][val])
-          bitcompress(this.state, cachedsamples)
 
           this.traceIdx[idx][val] = other.traceIdx[idx][val]
         end
@@ -169,7 +158,6 @@ function get(c::CondReduce)
     end
   end
 
-  globalmask = toMask(c.state)
 
   datas = Matrix[]
   reducedsamples = Matrix[]
@@ -179,6 +167,22 @@ function get(c::CondReduce)
     maxVal = max(maxVal, findmax(keys(c.traceIdx[k]))[1])
   end
 
+  traceIdxes = IntSet()
+  nrOfSamples = length(c.mask[1])
+  bc = BitCompress(nrOfSamples)
+  for idx in collect(keys(c.traceIdx))
+    valdict = c.traceIdx[idx]
+    for val in collect(keys(valdict))
+      traceIdx = valdict[val]
+      if traceIdx in traceIdxes
+        continue
+      end
+      push!(traceIdxes, traceIdx)
+      bitcompress(bc, getSamplesCached(c, idx, val))
+    end
+  end
+  globalmask = toMask(bc)
+
   if maxVal <= 2^8
     dataType = UInt8
   elseif maxVal <= 2^16
@@ -187,7 +191,7 @@ function get(c::CondReduce)
     throw(Exception("Unsupported and not recommended ;)"))
   end
 
-  (keptnondups, keptnondupsandinvcols) = stats(c.state)
+  (keptnondups, keptnondupsandinvcols) = stats(bc)
   Log.writecsvheader(c.logfile, "#traces","global dups", "global inv dups", map(x -> "cond sample red kb $x", 1:length(keys(c.mask)))...)
   Log.writecsv(c.logfile, c.globcounter, keptnondups, keptnondupsandinvcols)
 
@@ -199,8 +203,7 @@ function get(c::CondReduce)
     Log.writecsv(c.logfile, length(idxes))
 
     for j in 1:length(dataSnap)
-      trsIndex = c.traceIdx[k][dataSnap[j]]
-      samples = getSamples(c.trs, trsIndex)
+      samples = getSamplesCached(c, k, dataSnap[j])
       sampleSnap[j,:] = samples[idxes]
     end
 

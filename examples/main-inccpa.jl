@@ -51,6 +51,10 @@ function gofaster()
   end
 
   numberOfTraces = @fetch length(Main.trs)
+  if length(ARGS) > 1
+    numberOfTraces = min(parse(ARGS[2]), numberOfTraces)
+  end
+
 
   ret = sca(DistributedTrace(), params, 1, numberOfTraces)
 

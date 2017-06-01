@@ -49,7 +49,7 @@ function gofaster()
   numberOfAverages = length(params.keyByteOffsets)
   numberOfCandidates = getNumberOfCandidates(params)
 
-  toBitsEfficient = false
+  toBitsEfficient = true
 
   localtrs = InspectorTrace(filename, toBitsEfficient)
   addSamplePass(localtrs, tobits)
