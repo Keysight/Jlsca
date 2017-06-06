@@ -44,6 +44,8 @@ It's written for fun by me (Cees-Bart Breunesse), and Ilya Kizhvatov contributed
 
 You can now close the Julia prompt, or start using Jlsca interactively (see "Running in the REPL")
 
+There are several ways to interact with Jlsca. You can run scripts from command line, interactive through Julia's REPL or via Jupyter notebooks. The first two are described in the this README. The elegant and powerful Jupyter approach is described [here](https://github.com/ikizhvatov/jlsca-tutorials), and includes a solution for Riscure's [RHME2](https://github.com/Riscure/RHme-2015) SCA challenges.  
+
 # Running from cmd line
 
 Step 2 in the installation performed a git clone of Jlsca in your Julia's user directory. For me, it's in ~/.julia/v0.5/Jlsca. Jlsca is a library, but there are a few script files in Jlsca's `examples` directory. These scripts perform the various attacks and combination of settings supported by Jlsca. Some attack parameters, for example the "known key", are extracted from the file name, and some hard coded attack defaults are used (i.e. CPA, single bit0 or HW attack). You can change all this by editing the main files only: the library code under `src` need not be touched for that.
