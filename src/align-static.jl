@@ -15,7 +15,7 @@ type CorrelationAlignNaive
 end
 
 type CorrelationAlignFFT
-  reversereference0mean::Vector
+  reversereference0mean::Vector{Float64}
   referenceOffset::Int
   maxShift::Int
   square_sum_x2::Float64
@@ -47,7 +47,7 @@ function correlationAlign(samples::Vector, state::CorrelationAlignNaive)
 
   window = max(1, referenceOffset - maxShift):(min(referenceOffset + maxShift + length(reference), length(samples)) - length(reference) + 1)
 
-  for o in window
+  @inbounds for o in window
     e = o + length(reference) - 1
     corr = cor(samples[o:e], reference)
     if corr > maxCorr
@@ -86,6 +86,7 @@ function myconv{T<:Base.LinAlg.BlasFloat}(u::StridedVector{T}, v::StridedVector{
     return y[1:n]
 end
 
+using Base.Threads
 # http://scribblethink.org/Work/nvisionInterface/nip.html (thx Jasper van Woudenberg)
 function correlationAlign(samples::Vector, state::CorrelationAlignFFT)
   align::Int = 0
@@ -108,11 +109,11 @@ function correlationAlign(samples::Vector, state::CorrelationAlignFFT)
   sums_y2 = get(state.sums_y2)
 
   # compute convolution (sums of squares between ref and samples)
-  cv = myconv(reversereference0mean, float(samples[window]), plans)
+  cv::Vector{Float64} = myconv(reversereference0mean, float(samples[window]), plans)
 
   # pre-compute the sums and sums of squares of samples
   idx = 2
-  for i in window
+  @inbounds for i in window
     s::Float64 = samples[i]
     sums_y[idx] = sums_y[idx-1] + s
     sums_y2[idx] = sums_y2[idx-1] + (s ^ 2)
@@ -120,7 +121,7 @@ function correlationAlign(samples::Vector, state::CorrelationAlignFFT)
   end
 
   # compute pearson's correlation
-  for i in 1:(length(window)-n+1)
+  @inbounds for i in 1:(length(window)-n+1)
     sum_x_y = cv[n+i-1]
     sum_y2 = sums_y2[i+n] - sums_y2[i]
     sum_y = sums_y[i+n] - sums_y[i]
