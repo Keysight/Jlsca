@@ -44,7 +44,7 @@ It's written for fun by me (Cees-Bart Breunesse), and Ilya Kizhvatov contributed
 
 You can now close the Julia prompt, or start using Jlsca interactively (see "Running in the REPL")
 
-There are several ways to interact with Jlsca. You can run scripts from command line, interactive through Julia's REPL or via Jupyter notebooks. The first two are described in the this README. The elegant and powerful Jupyter approach is described [here](https://github.com/ikizhvatov/jlsca-tutorials), and includes a solution for Riscure's [RHME2](https://github.com/Riscure/RHme-2015) SCA challenges.  
+There are several ways to interact with Jlsca. You can run scripts from command line, interactive through Julia's REPL or via Jupyter notebooks. The first two are described in the this README. The elegant and powerful Jupyter approach is described [here](https://github.com/ikizhvatov/jlsca-tutorials), and includes a solution for Riscure's [RHME2](https://github.com/Riscure/Rhme-2016) SCA challenges from 2016.  
 
 # Running from cmd line
 
