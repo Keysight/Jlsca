@@ -34,11 +34,11 @@ It runs standalone or inside Riscure's Inspector as a module, so you would want 
 
 # Who wrote it?
 
-It's written for fun by me (Cees-Bart Breunesse), and Ilya Kizhvatov contributed some python example code I shamelessly copied and adapted. Ruben Muijrers contributed the bit compression for whiteboxes used in conditional bitwise sample reduction. This toolbox is not a Riscure product, and Riscure does not support or maintain this code. If it crashes or you have feature requests, Github allows you to contact the authors, or you do a pull request ;-) It's the first code I ever wrote in Julia so if you have comments about how to make it faster or less of a hack (try the parallelization code), by all means contact me.
+It's written for fun by me (Cees-Bart Breunesse) and Ilya Kizhvatov (whose [pysca](https://github.com/ikizhvatov/pysca) I shamelessly used as a baseline). Ruben Muijrers contributed the bit compression for whiteboxes used in conditional bitwise sample reduction. This toolbox is not a Riscure product, and Riscure does not support or maintain this code. If it crashes or you have feature requests, Github allows you to contact the authors, or you do a pull request ;-) It's the first code I ever wrote in Julia so if you have comments about how to make it faster or less of a hack (try the parallelization code), by all means contact me.
 
 # Installation
 
-1. Install Julia (0.5.1 is tested) and make sure the `julia` executable is in your path (notably for Windows users). Start he Julia REPL by executing `julia`.
+1. Install Julia (0.5.2 is tested) and make sure the `julia` executable is in your path (notably for Windows users). Start he Julia REPL by executing `julia`.
 
 2. In the REPL type `Pkg.clone("https://github.com/Riscure/Jlsca")`
 
