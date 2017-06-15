@@ -226,11 +226,11 @@ end
 
 using Base.Threads
 
-function speedtesttiled(rows, nrX, nrY, tilesX, tilesY)
+function speedtesttiled(rows, nrX, nrY, tilesX, tilesY,cache)
 
   meanVarX = IncrementalMeanVariance(nrX)
   meanVarY = IncrementalMeanVariance(nrY)
-  covXY = IncrementalCovarianceTiled(meanVarX, meanVarY, tilesX, tilesY, 10)
+  covXY = IncrementalCovarianceTiled(meanVarX, meanVarY, tilesX, tilesY, cache)
 
   for r in 1:rows
     x = rand(Float64, nrX)
@@ -295,15 +295,16 @@ test1n()
 test2()
 
 const rows = 500
-const nrX = 512
+const nrX = 1500
 const nrY = 16*8*256
 const tilesX = 128
 const tilesY = 128
+const cache = 32
 
 
 # @time speedtest(rows,nrX,nrY)
 # @time speedtest(rows,nrX,nrY)
-# @time speedtesttiled(rows,nrX,nrY,tilesX,tilesY)
-# @time speedtesttiled(rows,nrX,nrY,tilesX,tilesY)
+# @time speedtesttiled(rows,nrX,nrY,tilesX,tilesY,cache)
+# @time speedtesttiled(rows,nrX,nrY,tilesX,tilesY,cache)
 
 # dumpasm()

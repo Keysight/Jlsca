@@ -188,14 +188,14 @@ type IncrementalCovarianceTiled
   cacheCount::Int
   cacheMax::Int
 
-  function IncrementalCovarianceTiled(numberOfX::Int, numberOfY::Int, tilesizeX::Int=128, tilesizeY::Int=128, caches::Int=10)
+  function IncrementalCovarianceTiled(numberOfX::Int, numberOfY::Int, tilesizeX::Int=128, tilesizeY::Int=128, caches::Int=32)
     meanVarX = IncrementalMeanVariance(numberOfX)
     meanVarY = IncrementalMeanVariance(numberOfY)
 
     IncrementalCovarianceTiled(meanVarX, meanVarY, tilesizeX, tilesizeY, caches)
   end
 
-  function IncrementalCovarianceTiled(meanVarX::IncrementalMeanVariance, meanVarY::IncrementalMeanVariance, tilesizeX::Int=128, tilesizeY::Int=128, caches::Int=10)
+  function IncrementalCovarianceTiled(meanVarX::IncrementalMeanVariance, meanVarY::IncrementalMeanVariance, tilesizeX::Int=128, tilesizeY::Int=128, caches::Int=32)
     numberOfX = length(meanVarX.mean)
     numberOfY = length(meanVarY.mean)
     nrTilesX = div(numberOfX+tilesizeX-1, tilesizeX)
