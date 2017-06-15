@@ -46,6 +46,12 @@ You can now close the Julia prompt, or start using Jlsca interactively (see "Run
 
 There are several ways to interact with Jlsca. You can run scripts from command line, interactive through Julia's REPL or via Jupyter notebooks. The first two are described in the this README. The elegant and powerful Jupyter approach is described [here](https://github.com/ikizhvatov/jlsca-tutorials), and includes a solution for Riscure's [RHME2](https://github.com/Riscure/Rhme-2016) SCA challenges from 2016.  
 
+# Multi-threading versus multi-processing
+
+Various components (conditional averaging, conditional sample reduction, incremental correlation) in Jlsca can be split and run in *parallel* in different worker processes. Only one component in Jlsca in currently *threaded*, and that is the incremental correlation statistics. On a single CPU with multiple cores, running incremental correlation with multiple threads in a single process will probably outperform splitting the work over multiple processes that use a single thread. The reason for this is that parallel processes on a single CPU will thrash the cache. The threaded implementation of incremental correlation is tiled and cache friendly. Usually, choosing #workers == #CPUs and #threads  == #hardware cores in a single CPU is the preferred way, but of course your milage may vary. Julia by default uses a single worker, and a single thead (per worker). To change this run as `julia -p 2` to give Julia 2 workers (== 3 processes, 1 master process and 2 workers, on the same machine), and `JULIA_NUM_THREADS=2 julia` to give the Julia process 2 threads. It's a bit unfortunate that this interface is not unified ..  
+
+I parallelized components in Jlsca is because I wanted to run and split over multiple machines, but so far I haven't found the time to experiment with that. On my TODO list is to create a small cluster with 2+ nodes, each with a dual-Xeon CPU and a fast shared filesystem, since the input trace sets need to be accessible for each worker. A small, lean and simple implementation of a cluster would be Linux + NFS + SSH on each node. Julia can then be deployed to these nodes using the `--machinefile` option, as described [here](https://docs.julialang.org/en/stable/manual/parallel-computing). This would be the easiest way to unleash Jlsca's parallel abilities. 
+
 # Running from cmd line
 
 Step 2 in the installation performed a git clone of Jlsca in your Julia's user directory. For me, it's in ~/.julia/v0.5/Jlsca. Jlsca is a library, but there are a few script files in Jlsca's `examples` directory. These scripts perform the various attacks and combination of settings supported by Jlsca. Some attack parameters, for example the "known key", are extracted from the file name, and some hard coded attack defaults are used (i.e. CPA, single bit0 or HW attack). You can change all this by editing the main files only: the library code under `src` need not be touched for that.
@@ -59,29 +65,30 @@ julia examples/main-noninc.jl destraces/tdes2_enc_9084b0087a1a1270587c146ccc60a2
 
 ### File `main-condavg.jl`
 
-This file performs vanilla correlation statistics but will first run the conditional averager over the trace set input. This can be parallelized, for example the following will use three local processes to perform the conditional averaging.
+This file performs vanilla correlation statistics but will first run the conditional averager over the trace set input. This job can be parallelized to, for example, 2 processes by adding `-p 2` to the command line.
 ```
-julia -p3 examples/main-condavg.jl aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs
+julia examples/main-condavg.jl aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs
 ```
 
 ### File `main-condred.jl`
 
-This file perform vanilla correlation statistics over conditionally sample reduced trace sets. Check the source of `conditional-bitwisereduction.jl` if you want to know more; this is only useful for whiteboxes, since it works on bit vector sample data, not on floating points. This process can be parallelized, for example on three processes as demonstrated here:
+This file perform vanilla correlation statistics over conditionally sample reduced trace sets. Check the source of `conditional-bitwisereduction.jl` if you want to know more; this is only useful for whiteboxes, since it works on bit vector sample data, not on floating points. This process can be parallelized.
 ```
-julia -p3 examples/main-condred.jl destraces/des_enc_1c764a2af6e0322e.trs
+julia examples/main-condred.jl destraces/des_enc_1c764a2af6e0322e.trs
 ```
+
 ### File `main-condred-wbaes.jl`
 
 This file combines Klemsa's [leakage models](https://eprint.iacr.org/2013/794.pdf) for tackling Dual AES with the conditional bit wise reduction. Can be parallelized. In `main-condred-wbaes.jl` the attack params are hardcoded for AES128 trace sets, so you'll need to edit the main file if you want pass it something else, like AES192 or 256. If you want to apply this on your own whitebox data make sure the `params.dataOffset` in `main-condred-wbaes.jl` point to the input (if `params.direction == FORWARD`) or output (if `params.direction == BACKWARD`). Can parallelized, for example:
 ```
-julia -p3 examples/main-condred-wbaes.jl aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs
+julia examples/main-condred-wbaes.jl aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs
 ```
 
 ### File `main-inccpa.jl`
 
-Last but not least, this file will perform a correlation attack using incremental correlation statistics. This is what Inspector also implements in its "first order" attack modules. You can parallelize this attack. For example:
+Last but not least, this file will perform a correlation attack using incremental correlation statistics. This is what Inspector also implements in its "first order" attack modules. You can parallelize or multi-thread this attack. For example:
 ```
-julia -p3 examples/main-inccpa.jl aestraces/aes128_mc_invciph_da6339e783ee690017b8604aaeed3a6d.trs
+JULIA_NUM_THREADS=2 julia examples/main-inccpa.jl aestraces/aes128_mc_invciph_da6339e783ee690017b8604aaeed3a6d.trs
 ```
 
 # Running in the REPL
