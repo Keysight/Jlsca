@@ -127,7 +127,7 @@ function test(a::BitArray{2})
 
   
   for i in 1:c
-    n = getNode(duplicateroot, ~a[:,i])
+    n = getNode(duplicateroot, .~a[:,i])
     if n == nothing    
       if (i in reportedinverses)
         @printf("bad3: col %i has no inverse but reported as inverse\n", i)

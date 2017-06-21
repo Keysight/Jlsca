@@ -22,13 +22,13 @@ function test1()
     for i in 1:rows
         (shift,corval) = correlationAlign(dataM[i,:], fftwalignstate)
         @test shift == -shifts[i]
-        @test_approx_eq corval 1
+        @test corval ≈ 1
     end
 
     for i in 1:rows
         (shift,corval) = correlationAlign(dataM[i,:], naivealignstate)
         @test shift == -shifts[i]
-        @test_approx_eq corval 1
+        @test corval ≈ 1
     end
 
 end

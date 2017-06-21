@@ -12,7 +12,7 @@ import Base.start, Base.done, Base.next, Base.endof
 export Trace,readTraces,addSamplePass,popSamplePass,addDataPass,popDataPass,hasPostProcessor,reset,getCounter,setPostProcessor
 export start,done,next,endof,setindex!
 
-abstract Trace
+abstract type Trace end
 
 # overloading these to implement an iterator
 start(trs::Trace) = 1

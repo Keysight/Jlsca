@@ -13,7 +13,7 @@ export AesSboxAttack,AesMCAttack,AesKeyLength,AesMode
 for s in instances(AesMode); @eval export $(Symbol(s)); end
 for s in instances(AesKeyLength); @eval export $(Symbol(s)); end
 
-abstract AesAttack <: Attack
+abstract type AesAttack <: Attack end
 
 # two types of attacks: sbox or mixcolumn
 type AesSboxAttack <: AesAttack
@@ -86,7 +86,7 @@ function toShortString(params::Union{AesSboxAttack,AesMCAttack})
 # target functions
 function invMcOut(a::AesMCAttack, x::UInt8, keyByte::UInt8, position::Int, constant::UInt8)
     mcIn = fill(constant, 4)
-    mcIn[position] = a.invsbox[(x $ keyByte) + 1]
+    mcIn[position] = a.invsbox[(x ⊻ keyByte) + 1]
     mcOut = Aes.InvMixColumn(mcIn)
     ret::UInt32 = 0
     for i in 1:4
@@ -108,7 +108,7 @@ end
 
 function mcOut(a::AesMCAttack, x::UInt8, keyByte::UInt8, position::Int, constant::UInt8)
     mcIn = fill(constant, 4)
-    mcIn[position] = a.sbox[(x $ keyByte) + 1]
+    mcIn[position] = a.sbox[(x ⊻ keyByte) + 1]
     mcOut = Aes.MixColumn(mcIn)
     ret::UInt32 = 0
     for i in 1:4
@@ -130,8 +130,8 @@ end
 
 function mcOutXORIn(a::AesMCAttack, x::UInt8, keyByte::UInt8, position::Int, constant::UInt8)
     mcIn = fill(constant, 4)
-    mcIn[position] = a.sbox[(x $ keyByte) + 1]
-    mcOut = Aes.MixColumn(mcIn) $ mcIn
+    mcIn[position] = a.sbox[(x ⊻ keyByte) + 1]
+    mcOut = Aes.MixColumn(mcIn) ⊻ mcIn
     ret::UInt32 = 0
     for i in 1:4
       ret <<= 8
@@ -151,41 +151,41 @@ function mcOutXORIn(a::AesMCAttack, data::Array{UInt8}, dataColumn, keyByte::UIn
 end
 
 function sboxOut(a::AesSboxAttack, data::UInt8, dataColumn::Int, keyBytes::Vector{UInt8})
-    return map(x -> a.sbox[(data $ x) + 1], keyBytes)
+    return map(x -> a.sbox[(data ⊻ x) + 1], keyBytes)
 end
 
 function sboxOut(a::AesSboxAttack, data::Array{UInt8}, dataColumn::Int, keyByte::UInt8)
-    ret = map(x -> a.sbox[(x $ keyByte) + 1], data)
+    ret = map(x -> a.sbox[(x ⊻ keyByte) + 1], data)
     return ret
 end
 
 function invSboxOut(a::AesSboxAttack, data::UInt8, dataColumn::Int, keyBytes::Vector{UInt8})
-    ret = map(x -> a.invsbox[(data $ x) + 1], keyBytes)
+    ret = map(x -> a.invsbox[(data ⊻ x) + 1], keyBytes)
     return ret
 end
 
 function invSboxOut(a::AesSboxAttack, data::Array{UInt8}, dataColumn::Int, keyByte::UInt8)
-    ret = map(x -> a.invsbox[(x $ keyByte) + 1], data)
+    ret = map(x -> a.invsbox[(x ⊻ keyByte) + 1], data)
     return ret
 end
 
 function sboxOutXORIn(a::AesSboxAttack, data::UInt8, dataColumn::Int, keyBytes::Vector{UInt8})
-    ret = map(keyByte -> data $ keyByte $ a.sbox[(data $ keyByte) + 1], keyBytes)
+    ret = map(keyByte -> data ⊻ keyByte ⊻ a.sbox[(data ⊻ keyByte) + 1], keyBytes)
     return ret
 end
 
 function sboxOutXORIn(a::AesSboxAttack, data::Array{UInt8}, dataColumn::Int, keyByte::UInt8)
-    ret = map(x -> x $ keyByte $ a.sbox[(x $ keyByte) + 1], data)
+    ret = map(x -> x ⊻ keyByte ⊻ a.sbox[(x ⊻ keyByte) + 1], data)
     return ret
 end
 
 function invSboxOutXORIn(a::AesSboxAttack, data::UInt8, dataColumn::Int, keyBytes::Vector{UInt8})
-    ret = map(keyByte -> data $ keyByte $ a.invsbox[(data $ keyByte) + 1], keyBytes)
+    ret = map(keyByte -> data ⊻ keyByte ⊻ a.invsbox[(data ⊻ keyByte) + 1], keyBytes)
     return ret
 end
 
 function invSboxOutXORIn(a::AesSboxAttack, data::Array{UInt8}, dataColumn::Int, keyByte::UInt8)
-    ret = map(x -> x $ keyByte $ a.invsbox[(x $ keyByte) + 1], data)
+    ret = map(x -> x ⊻ keyByte ⊻ a.invsbox[(x ⊻ keyByte) + 1], data)
     return ret
 end
 
@@ -339,7 +339,7 @@ end
 
 
 # the mixcolumns attack
-function scatask(trs::Trace, params::AesMCAttack, firstTrace=1, numberOfTraces=length(trs), phase::Phase=PHASE1, phaseInput=Nullable{Vector{UInt8}}())
+function scatask(super::Task, trs::Trace, params::AesMCAttack, firstTrace=1, numberOfTraces=length(trs), phase::Phase=PHASE1, phaseInput=Nullable{Vector{UInt8}}())
   params.keyLength == KL128 || throw(ErrorException("AesMCAttack only supported for 128 bits keys"))
   params.direction == FORWARD || throw(ErrorException("AesMCAttack only supported in FORWARD direction"))
 
@@ -384,7 +384,7 @@ function scatask(trs::Trace, params::AesMCAttack, firstTrace=1, numberOfTraces=l
   addDataPass(trs, x -> filterConstantInput(offsets, x, constant))
 
   # do the attack
-  scores = analysis(params, phase, trs, firstTrace, numberOfTraces, myfn, UInt32, collect(UInt8, 0:255), offsets)
+  scores = analysis(super, params, phase, trs, firstTrace, numberOfTraces, myfn, UInt32, collect(UInt8, 0:255), offsets)
 
   popDataPass(trs)
   popDataPass(trs)
@@ -403,9 +403,9 @@ function scatask(trs::Trace, params::AesMCAttack, firstTrace=1, numberOfTraces=l
   end
 
   if phase == PHASE4
-    produce(FINISHED, recoverKey(get(phaseInput), mode, direction))
+    yieldto(super, (FINISHED, recoverKey(get(phaseInput), mode, direction)))
   else
-    produce(PHASERESULT, phaseInput)
+    yieldto(super, (PHASERESULT, phaseInput))
   end
 
 end
@@ -434,7 +434,7 @@ function getRoundFunction(phase::Phase, params::AesSboxAttack, phaseInput::Nulla
 end
 
 # the sbox attack
-function scatask(trs::Trace, params::AesSboxAttack, firstTrace=1, numberOfTraces=length(trs), phase::Phase=PHASE1, phaseInput=Nullable{Vector{UInt8}}())
+function scatask(super::Task, trs::Trace, params::AesSboxAttack, firstTrace=1, numberOfTraces=length(trs), phase::Phase=PHASE1, phaseInput=Nullable{Vector{UInt8}}())
   mode = params.mode
   keyLength = params.keyLength
   direction = params.direction
@@ -479,7 +479,7 @@ function scatask(trs::Trace, params::AesSboxAttack, firstTrace=1, numberOfTraces
   end
 
   # do the attack
-  scores = analysis(params, phase, trs, firstTrace, numberOfTraces, targetFunction, UInt8, collect(UInt8, 0:255), params.keyByteOffsets)
+  scores = analysis(super, params, phase, trs, firstTrace, numberOfTraces, targetFunction, UInt8, collect(UInt8, 0:255), params.keyByteOffsets)
 
   # if we added a round function on the input data, now we need to remove it
   if !isnull(roundfn)
@@ -496,7 +496,7 @@ function scatask(trs::Trace, params::AesSboxAttack, firstTrace=1, numberOfTraces
 
   if notAllKeyBytes
     # not enough key bytes to continue
-    produce(FINISHED, nothing)
+    yieldto(super, (FINISHED, nothing))
     return
   end
 
@@ -507,7 +507,7 @@ function scatask(trs::Trace, params::AesSboxAttack, firstTrace=1, numberOfTraces
     # we're done now
 
     key = recoverKey(roundkey, mode, direction)
-    produce(FINISHED, key)
+    yieldto(super, (FINISHED, key))
   elseif phase == PHASE1
     # we need another round
 
@@ -519,7 +519,7 @@ function scatask(trs::Trace, params::AesSboxAttack, firstTrace=1, numberOfTraces
     end
 
     prevroundkey = Nullable(roundkey)
-    produce(PHASERESULT, prevroundkey)
+    yieldto(super, (PHASERESULT, prevroundkey))
 
   elseif phase == PHASE2
     # done, just some key fiddling left
@@ -539,6 +539,6 @@ function scatask(trs::Trace, params::AesSboxAttack, firstTrace=1, numberOfTraces
     end
 
     key = recoverKey(keymaterial, mode, direction)
-    produce(FINISHED, key)
+    yieldto(super, (FINISHED, key))
   end
 end

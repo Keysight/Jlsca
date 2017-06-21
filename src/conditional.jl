@@ -4,4 +4,4 @@
 
 export Cond,add,get
 
-abstract Cond <: PostProcessor
+abstract type Cond <: PostProcessor end

@@ -21,14 +21,14 @@ function test1()
   end
 
   for c in 1:size(x)[2]
-    @test_approx_eq mean(x[:,c]) meanVarX.mean[c]
-    @test_approx_eq mean(y[:,c]) meanVarY.mean[c]
-    @test_approx_eq var(y[:,c]) getVariance(meanVarY)[c]
-    @test_approx_eq var(x[:,c]) getVariance(meanVarX)[c]
+    @test mean(x[:,c]) ≈ meanVarX.mean[c]
+    @test mean(y[:,c]) ≈ meanVarY.mean[c]
+    @test var(y[:,c]) ≈ getVariance(meanVarY)[c]
+    @test var(x[:,c]) ≈ getVariance(meanVarX)[c]
   end
 
-  @test_approx_eq cov(x,y) getCov(covXY)
-  @test_approx_eq cor(x,y) getCorr(covXY)
+  @test cov(x,y) ≈ getCov(covXY)
+  @test cor(x,y) ≈ getCorr(covXY)
 
 end
 
@@ -46,14 +46,14 @@ function test1tiled()
   end
 
   for c in 1:size(x)[2]
-    @test_approx_eq mean(x[:,c]) meanVarX.mean[c]
-    @test_approx_eq mean(y[:,c]) meanVarY.mean[c]
-    @test_approx_eq var(y[:,c]) getVariance(meanVarY)[c]
-    @test_approx_eq var(x[:,c]) getVariance(meanVarX)[c]
+    @test mean(x[:,c]) ≈ meanVarX.mean[c]
+    @test mean(y[:,c]) ≈ meanVarY.mean[c]
+    @test var(y[:,c]) ≈ getVariance(meanVarY)[c]
+    @test var(x[:,c]) ≈ getVariance(meanVarX)[c]
   end
 
-  @test_approx_eq cov(x,y) getCov(covXY)
-  @test_approx_eq cor(x,y) getCorr(covXY)
+  @test cov(x,y) ≈ getCov(covXY)
+  @test cor(x,y) ≈ getCorr(covXY)
 
 end
 
@@ -74,14 +74,14 @@ function test1n()
   end
 
   for c in 1:size(x)[2]
-    @test_approx_eq mean(x[:,c]) meanVarX.mean[c]
-    @test_approx_eq mean(y[:,c]) meanVarY.mean[c]
-    @test_approx_eq var(y[:,c]) getVariance(meanVarY)[c]
-    @test_approx_eq var(x[:,c]) getVariance(meanVarX)[c]
+    @test mean(x[:,c]) ≈ meanVarX.mean[c]
+    @test mean(y[:,c]) ≈ meanVarY.mean[c]
+    @test var(y[:,c]) ≈ getVariance(meanVarY)[c]
+    @test var(x[:,c]) ≈ getVariance(meanVarX)[c]
   end
 
-  @test_approx_eq cov(x,y) getCov(covXY)
-  @test_approx_eq cor(x,y) getCorr(covXY)
+  @test cov(x,y) ≈ getCov(covXY)
+  @test cor(x,y) ≈ getCorr(covXY)
 
 end
 
@@ -102,14 +102,14 @@ function test1ntiled()
   end
 
   for c in 1:size(x)[2]
-    @test_approx_eq mean(x[:,c]) meanVarX.mean[c]
-    @test_approx_eq mean(y[:,c]) meanVarY.mean[c]
-    @test_approx_eq var(y[:,c]) getVariance(meanVarY)[c]
-    @test_approx_eq var(x[:,c]) getVariance(meanVarX)[c]
+    @test mean(x[:,c]) ≈ meanVarX.mean[c]
+    @test mean(y[:,c]) ≈ meanVarY.mean[c]
+    @test var(y[:,c]) ≈ getVariance(meanVarY)[c]
+    @test var(x[:,c]) ≈ getVariance(meanVarX)[c]
   end
 
-  @test_approx_eq cov(x,y) getCov(covXY)
-  @test_approx_eq cor(x,y) getCorr(covXY)
+  @test cov(x,y) ≈ getCov(covXY)
+  @test cor(x,y) ≈ getCorr(covXY)
 
 end
 
@@ -147,17 +147,17 @@ function test2()
   add!(covXY1, covXY2)
 
   for c in 1:size(x)[2]
-    @test_approx_eq mean(x[:,c]) meanVarX1.mean[c]
-    @test_approx_eq mean(y[:,c]) meanVarY1.mean[c]
-    @test_approx_eq var(y[:,c]) getVariance(meanVarY1)[c]
-    @test_approx_eq var(x[:,c]) getVariance(meanVarX1)[c]
+    @test mean(x[:,c]) ≈ meanVarX1.mean[c]
+    @test mean(y[:,c]) ≈ meanVarY1.mean[c]
+    @test var(y[:,c]) ≈ getVariance(meanVarY1)[c]
+    @test var(x[:,c]) ≈ getVariance(meanVarX1)[c]
   end
 
-  @test_approx_eq cov(x,y) getCov(covXY1)
-  @test_approx_eq cor(x,y) getCorr(covXY1)
+  @test cov(x,y) ≈ getCov(covXY1)
+  @test cor(x,y) ≈ getCorr(covXY1)
 
-  @test_approx_eq getCov(covXY3) getCov(covXY1)
-  @test_approx_eq getCorr(covXY3) getCorr(covXY1)
+  @test getCov(covXY3) ≈ getCov(covXY1)
+  @test getCorr(covXY3) ≈ getCorr(covXY1)
 end
 
 # combining covariances
@@ -194,17 +194,17 @@ function test2tiled()
   add!(covXY1, covXY2)
 
   for c in 1:size(x)[2]
-    @test_approx_eq mean(x[:,c]) meanVarX1.mean[c]
-    @test_approx_eq mean(y[:,c]) meanVarY1.mean[c]
-    @test_approx_eq var(y[:,c]) getVariance(meanVarY1)[c]
-    @test_approx_eq var(x[:,c]) getVariance(meanVarX1)[c]
+    @test mean(x[:,c]) ≈ meanVarX1.mean[c]
+    @test mean(y[:,c]) ≈ meanVarY1.mean[c]
+    @test var(y[:,c]) ≈ getVariance(meanVarY1)[c]
+    @test var(x[:,c]) ≈ getVariance(meanVarX1)[c]
   end
 
-  @test_approx_eq cov(x,y) getCov(covXY1)
-  @test_approx_eq cor(x,y) getCorr(covXY1)
+  @test cov(x,y) ≈ getCov(covXY1)
+  @test cor(x,y) ≈ getCorr(covXY1)
 
-  @test_approx_eq getCov(covXY3) getCov(covXY1)
-  @test_approx_eq getCorr(covXY3) getCorr(covXY1)
+  @test getCov(covXY3) ≈ getCov(covXY1)
+  @test getCorr(covXY3) ≈ getCorr(covXY1)
 end
 
 function speedtest(rows, nrX, nrY)

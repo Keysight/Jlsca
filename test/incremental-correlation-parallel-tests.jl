@@ -57,8 +57,8 @@ function IncrementalCPATest(splitmode)
 
     @test sandoIdx == 3
 
-    @test_approx_eq sando[1][1] sando[2][1]
-    @test_approx_eq sando[1][2] sando[2][2]
+    @test sando[1][1] ≈ sando[2][1]
+    @test sando[1][2] ≈ sando[2][2]
 end
 
 function ParallelIncrementalCPATest(splitmode)
@@ -109,7 +109,7 @@ function ParallelIncrementalCPATest(splitmode)
 
     @test sandoIdx == 3
 
-    @test_approx_eq sando[1][1] sando[2][1]
+    @test sando[1][1] ≈ sando[2][1]
     @test sando[1][2] == sando[2][2]
 end
 
@@ -164,7 +164,7 @@ function ParallelIncrementalCPATestWithInterval()
     @test sandoIdx == numberOfScas*2+1
 
     for s in 1:numberOfScas
-      @test_approx_eq sando[s][1] sando[s+numberOfScas][1]
+      @test sando[s][1] ≈ sando[s+numberOfScas][1]
       # TODO: This test fails for the given trace set because two samples
       # have approx the same correlation and a different sample wins when
       # updateing the scores. Doesn't matter for correctness, but I should

@@ -104,13 +104,7 @@ function add(c::CondReduce, trs::Trace, traceIdx::Int)
     end
 
     reftrace = getSamplesCached(c, idx, val)
-    c.mask[idx][:] &= !(reftrace $ get(samples))
-
-    # blocks = length(c.mask[idx].chunks)
-
-    # for i in 1:blocks
-    #   c.mask[idx].chunks[i] &= ~(cachedreftrace.chunks[i] $ cachedsamples.chunks[i]) 
-    # end
+    c.mask[idx][:] .&= .!(reftrace .⊻ get(samples))
   end
 
   c.globcounter += 1
@@ -126,14 +120,14 @@ function merge(this::CondReduce, other::CondReduce)
       this.traceIdx[idx] = dictofavgs
       this.mask[idx] = other.mask[idx]
     else
-      this.mask[idx][:] &= other.mask[idx]
+      this.mask[idx][:] .&= other.mask[idx]
       for (val, avg) in dictofavgs
         if val in keys(this.traceIdx[idx])
           if this.traceIdx[idx][val] != other.traceIdx[idx][val]
             cachedreftrace = getSamples(this.trs, other.traceIdx[idx][val])
             cachedsamples = getSamples(this.trs, this.traceIdx[idx][val])
 
-            this.mask[idx][:] &= !(cachedreftrace $ cachedsamples)
+            this.mask[idx][:] .&= !(cachedreftrace .⊻ cachedsamples)
           end
         else
           cachedsamples = getSamples(this.trs, other.traceIdx[idx][val])
@@ -197,7 +191,7 @@ function get(c::CondReduce)
 
   for k in sort(collect(keys(c.traceIdx)))
     dataSnap = sort(collect(dataType, keys(c.traceIdx[k])))
-    idxes = find(c.mask[k] & globalmask)
+    idxes = find(c.mask[k] .& globalmask)
     sampleSnap = BitArray{2}(length(dataSnap), length(idxes))
     @printf("Reduction for %d: %d left after global dup col removal, %d left after removing the inv dup cols, %d left after sample reduction\n", k, keptnondups, keptnondupsandinvcols, length(idxes))
     Log.writecsv(c.logfile, length(idxes))
@@ -236,6 +230,7 @@ function tobits(x::Vector{UInt64})
   return a
 end
 
+# please don't use this, it's fucking slow.
 function tobits(x::Vector{UInt8})
   ret = falses(length(x)*8)
   for i in 1:length(x)

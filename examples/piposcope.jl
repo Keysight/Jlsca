@@ -21,7 +21,6 @@
 
 using ProgressMeter
 
-include("aes.jl")
 using Jlsca.Aes
 
 using LibSerialPort
@@ -421,11 +420,11 @@ function hellopinata()
   rng = MersenneTwister(1)
 
   for a in 1:400000
-    # cmd[2:17] = inputgenSB(rng)
-    # @printf("=> %s\n", bytes2hex(cmd))
+    cmd[2:17] = inputgenSB(rng)
+    @printf("=> %s\n", bytes2hex(cmd))
     sp_blocking_write(s.ref, cmd, 0)
     sp_blocking_read!(s.ref, res, 1000)
-    # @printf("<= %s\n\n", bytes2hex(res))
+    @printf("<= %s\n\n", bytes2hex(res))
   end
 
   close(s)

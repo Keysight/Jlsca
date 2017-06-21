@@ -58,9 +58,9 @@ function testKeyExpansionBackwards()
 	rk2 = getK(cd, rk2num)
 
 	# try some bit errors and see what KeyExpansionBackwards does! It helps the user, yeah for real!
-	# rk1[1] $= 1
-	# rk2[6*6+2] $= 1
-	# rk2[6*6+1] $= 1
+	# rk1[1] ⊻= 1
+	# rk2[6*6+2] ⊻= 1
+	# rk2[6*6+1] ⊻= 1
 	recoveredkey = KeyExpansionBackwards(rk1, rk1num, rk2, rk2num)
 
 	@test key == recoveredkey

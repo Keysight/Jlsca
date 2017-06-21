@@ -16,7 +16,7 @@ for s in instances(DesTargetType); @eval export $(Symbol(s)); end
 const left = 1:32
 const right = 33:64
 
-abstract DesAttack <: Attack
+abstract type DesAttack <: Attack end
 
 type DesSboxAttack <: DesAttack
   mode::DesMode
@@ -97,36 +97,36 @@ end
 
 # works on single data byte, vector of keys
 function desSboxOut(sixbits::Union{UInt16, UInt8}, sbidx::Int, kbs::Vector{UInt8})
-  return map(i -> Sbox(sbidx)[i + 1], getIdx((sixbits & 0x3f) $ kbs))
+  return map(i -> Sbox(sbidx)[i + 1], getIdx((sixbits & 0x3f) .⊻ kbs))
 end
 
 # works on columns of data
 function desSboxOut(sixbits::Union{Vector{UInt16}, Vector{UInt8}}, sbidx::Int, kb::UInt8)
-  return map(i -> Sbox(sbidx)[i + 1], getIdx((sixbits & 0x3f) $ kb))
+  return map(i -> Sbox(sbidx)[i + 1], getIdx((sixbits .& 0x3f) .⊻ kb))
 end
 
 # works on single data byte, vector of keys
 function desSboxOutXORin(sixbits::Union{UInt16, UInt8}, sbidx::Int, kbs::Vector{UInt8})
-  inp =  ((sixbits & 0x3f) $ kbs) & 0xf
+  inp =  ((sixbits & 0x3f) .⊻ kbs) .& 0xf
   outp = desSboxOut(sixbits,sbidx,kbs)
-  return inp $ outp
+  return inp .⊻ outp
 end
 
 # works on columns of data
 function desSboxOutXORin(sixbits::Union{Vector{UInt16}, Vector{UInt8}}, sbidx::Int, kb::UInt8)
-  inp =  ((sixbits & 0x3f) $ kb) & 0xf
+  inp =  ((sixbits .& 0x3f) .⊻ kb) .& 0xf
   outp = desSboxOut(sixbits,sbidx,kb)
-  return inp $ outp
+  return inp .⊻ outp
 end
 
 # works on single data byte, vector of keys
 function roundOut(tenbits::UInt16, sbidx::Int, kbs::Vector{UInt8})
-  return desSboxOut(tenbits, sbidx, kbs) $ (tenbits >> 6)
+  return desSboxOut(tenbits, sbidx, kbs) .⊻ (tenbits >> 6)
 end
 
 # works on columns of data
 function roundOut(tenbits::Vector{UInt16}, sbidx::Int, kb::UInt8)
-  return desSboxOut(tenbits, sbidx, kb) $ (tenbits .>> 6)
+  return desSboxOut(tenbits, sbidx, kb) .⊻ (tenbits .>> 6)
 end
 
 # round functions
@@ -154,7 +154,7 @@ end
 # works on rows of data, returns either a vector of UInt8, or UInt16
 function round2(input::Vector{UInt8}, rk1::BitVector, params::DesSboxAttack)
   state = IP(toBits(input))
-  state[1:64] = [state[right]; f(state[right],rk1) $ state[left]]
+  state[1:64] = [state[right]; f(state[right],rk1) .⊻ state[left]]
 
   if params.targetType == ROUNDOUT
     invplefts = toNibbles(invP(state[left]))[params.keyByteOffsets]
@@ -311,7 +311,7 @@ function getCorrectRoundKeyMaterial(params::DesSboxAttack, phase::Phase)
 
 end
 
-function scatask(trs::Trace, params::DesSboxAttack, firstTrace=1, numberOfTraces=length(trs), phase::Phase=PHASE1, phaseInput=params.phaseInput)
+function scatask(super::Task, trs::Trace, params::DesSboxAttack, firstTrace=1, numberOfTraces=length(trs), phase::Phase=PHASE1, phaseInput=params.phaseInput)
 
   targetFunction = getTargetFunction(params)
 
@@ -327,7 +327,7 @@ function scatask(trs::Trace, params::DesSboxAttack, firstTrace=1, numberOfTraces
   end
 
   # do the attack
-  scores = analysis(params, phase, trs, firstTrace, numberOfTraces, targetFunction, UInt8, collect(UInt8, 0:63), params.keyByteOffsets)
+  scores = analysis(super, params, phase, trs, firstTrace, numberOfTraces, targetFunction, UInt8, collect(UInt8, 0:63), params.keyByteOffsets)
 
   # if we added a round function on the input data, now we need to remove it
   if !isnull(roundfn)
@@ -337,7 +337,7 @@ function scatask(trs::Trace, params::DesSboxAttack, firstTrace=1, numberOfTraces
   popDataPass(trs)
 
   if length(params.keyByteOffsets) < 8
-    produce(FINISHED, nothing)
+    yieldto(super, (FINISHED, nothing))
     return
   end
 
@@ -356,37 +356,37 @@ function scatask(trs::Trace, params::DesSboxAttack, firstTrace=1, numberOfTraces
   # we're not done: determine what more to do
   if phase == PHASE1
     # produce a roundkey
-    produce(PHASERESULT, Nullable(roundkey))
+    yieldto(super, (PHASERESULT, Nullable(roundkey)))
   elseif phase == PHASE2
     # produce key
     key = recoverKey(params, phase, get(phaseInput), roundkey)
     if params.mode == DES || params.mode == TDES1
-      produce(FINISHED, key)
+      yieldto(super, (FINISHED, key))
     else
-      produce(PHASERESULT, Nullable(key))
+      yieldto(super, (PHASERESULT, Nullable(key)))
     end
   elseif phase == PHASE3
     # produce key + roundkey
-    produce(PHASERESULT, Nullable([get(phaseInput);roundkey]))
+    yieldto(super, (PHASERESULT, Nullable([get(phaseInput);roundkey])))
   elseif phase == PHASE4
     # produce key + key
     key = recoverKey(params, phase, get(phaseInput)[end-7:end], roundkey)
     nextPhaseInput = [get(phaseInput)[1:end-8]; key]
     if params.mode == TDES2
-      produce(FINISHED, nextPhaseInput)
+      yieldto(super, (FINISHED, nextPhaseInput))
     else
-      produce(PHASERESULT, Nullable(nextPhaseInput))
+      yieldto(super, (PHASERESULT, Nullable(nextPhaseInput)))
     end
   elseif phase == PHASE5
     # produce key + key + roundkey
-    produce(PHASERESULT, Nullable([get(phaseInput);roundkey]))
+    yieldto(super, (PHASERESULT, Nullable([get(phaseInput);roundkey])))
   elseif phase == PHASE6
     # produce key + key + key
     key = recoverKey(params, phase, get(phaseInput)[end-7:end], roundkey)
     if (params.encrypt && params.direction == FORWARD) || (!params.encrypt && params.direction == BACKWARD)
-      produce(FINISHED, [get(phaseInput)[1:end-8]; key])
+      yieldto(super, (FINISHED, [get(phaseInput)[1:end-8]; key]))
     else
-      produce(FINISHED, [key;get(phaseInput)[9:16];get(phaseInput)[1:8]])
+      yieldto(super, (FINISHED, [key;get(phaseInput)[9:16];get(phaseInput)[1:8]]))
     end
   end
 end

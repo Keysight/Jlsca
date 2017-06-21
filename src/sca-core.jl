@@ -16,8 +16,8 @@ export printParameters,getParameters
 export Direction,Phase
 export getNumberOfCandidates
 
-abstract Analysis
-abstract NonIncrementalAnalysis <: Analysis
+abstract type Analysis end
+abstract type NonIncrementalAnalysis <: Analysis end
 
 # two types of analysis methods: DPA and LRA
 type DPA <: NonIncrementalAnalysis
@@ -28,7 +28,7 @@ type DPA <: NonIncrementalAnalysis
   logfile::SimpleCSV
 
   function DPA()
-    return new(cor, [hw], [abs], Nullable(), SimpleCSV())
+    return new(cor, [hw], [x -> abs.(x)], Nullable(), SimpleCSV())
   end
 end
 
@@ -54,7 +54,7 @@ type IncrementalCPA <: Analysis
   logfile::SimpleCSV
 
   function IncrementalCPA()
-    return new([hw], [abs], x -> max(abs(x)), SimpleCSV())
+    return new([hw], [x -> abs.(x)], x -> max(abs.(x)), SimpleCSV())
   end
 end
 
@@ -75,7 +75,7 @@ getNrLeakageFunctions(a::LRA) = 1
 getNrLeakageFunctions(a::DPA) = length(a.leakageFunctions)
 getNrLeakageFunctions(a::IncrementalCPA) = length(a.leakageFunctions)
 
-abstract Attack
+abstract type Attack end
 
 # currently supported: LRA and DPA
 
@@ -132,7 +132,7 @@ function attack(a::NonIncrementalAnalysis, attackfun::Function, trs::Trace, rang
       totalelapsedtime += elapsedtime
 
       # nop the nans
-      C[isnan(C)] = 0
+      C[isnan.(C)] = 0
 
       # get the scores for all leakage functions
       updateScoresAndOffsets!(scoresAndOffsets, C, 1, kb, getNrLeakageFunctions(a), a.postProcess, length(kbvals))
@@ -177,7 +177,7 @@ function attack(a::IncrementalCPA, trs::Trace, range::Range, keyByteOffsets::Vec
 end
 
 # does the attack & analysis per xxx traces, should be called from an scatask
-function analysis(params::Attack, phase::Enum, trs::Trace, firstTrace::Int, numberOfTraces::Int, targetFunction::Function, targetFunctionType::Type, kbVals::Vector{UInt8}, keyByteOffsets::Vector{Int})
+function analysis(super::Task, params::Attack, phase::Enum, trs::Trace, firstTrace::Int, numberOfTraces::Int, targetFunction::Function, targetFunctionType::Type, kbVals::Vector{UInt8}, keyByteOffsets::Vector{Int})
     local scoresAndOffsets
 
     if !isnull(params.updateInterval) && !hasPostProcessor(trs)
@@ -209,7 +209,7 @@ function analysis(params::Attack, phase::Enum, trs::Trace, firstTrace::Int, numb
       Log.writecsvnewline(params.analysis.logfile)
 
       # let somebody do something with the scores for these traces
-      produce(INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs), length(keyByteOffsets), keyByteOffsets, !isnull(params.knownKey) ? getCorrectRoundKeyMaterial(params, phase) : Nullable()))
+      yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs), length(keyByteOffsets), keyByteOffsets, !isnull(params.knownKey) ? getCorrectRoundKeyMaterial(params, phase) : Nullable())))
     end
 
     # reset the state of trace post processor (conditional averager)
@@ -223,7 +223,7 @@ end
 
 @enum Direction FORWARD=1 BACKWARD=2
 @enum Phase PHASE1 PHASE2 PHASE3 PHASE4 PHASE5 PHASE6
-@enum Status FINISHED PHASERESULT INTERMEDIATESCORES INTERMEDIATESCORESANDOFFSETS INTERMEDIATECORRELATION
+@enum Status FINISHED PHASERESULT INTERMEDIATESCORES INTERMEDIATESCORESANDOFFSETS INTERMEDIATECORRELATION BREAK
 
 for s in instances(Direction); @eval export $(Symbol(s)); end
 for s in instances(Phase); @eval export $(Symbol(s)); end
@@ -258,12 +258,15 @@ function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=
 
     @printf("\nphase: %s\n\n", phase)
 
-    # function scatask is overloaded for the params type
-    t::Task = @task scatask(trs, params, firstTrace, numberOfTraces, phase, phaseInput)
+    ct = current_task()
+
+    # create the task that puts stuff in the channel
+    t = @task (scatask(ct, trs, params, firstTrace, numberOfTraces, phase, phaseInput); yieldto(ct, (BREAK,0)))
 
     try
-      # iterate through whatever scatask is producing
-      for (status, statusData) in t
+      while !istaskdone(t)
+        (status, statusData) = yieldto(t)
+
         if status == FINISHED
           finished = true
           key = statusData
@@ -289,6 +292,8 @@ function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=
           if !isnull(phaseInput)
             @printf("next phase input: %s\n", bytes2hex(get(phaseInput)))
           end
+        elseif status == BREAK
+          break
         else
           @printf("WARNING: don't know how to handle %s produced by scatask for %s\n", string(status), string(params))
         end
@@ -307,10 +312,7 @@ function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=
     @printf("KKA output in %s\n", get(params.outputkka))
   end
 
-  if status == FINISHED
-    # tests rely on the recovered key being returned
-    return key
-  end
+  return key
 end
 
 

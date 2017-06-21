@@ -38,7 +38,7 @@ It's written for fun by me (Cees-Bart Breunesse) and Ilya Kizhvatov (whose [pysc
 
 # Installation
 
-1. Install Julia (0.5.2 is tested) and make sure the `julia` executable is in your path (notably for Windows users). Start he Julia REPL by executing `julia`.
+1. Install Julia (0.6.0 is tested, everything prior is *no longer compatible*) and make sure the `julia` executable is in your path (notably for Windows users). Start he Julia REPL by executing `julia`.
 
 2. In the REPL type `Pkg.clone("https://github.com/Riscure/Jlsca")`
 
@@ -50,7 +50,7 @@ There are several ways to interact with Jlsca. You can run scripts from command 
 
 Various components (conditional averaging, conditional sample reduction, incremental correlation) in Jlsca can be split and run in *parallel* in different worker processes. Only one component in Jlsca in currently *threaded*, and that is the incremental correlation statistics. On a single CPU with multiple cores, running incremental correlation with multiple threads in a single process will probably outperform splitting the work over multiple processes that use a single thread. The reason for this is that parallel processes on a single CPU will thrash the cache. The threaded implementation of incremental correlation is tiled and cache friendly. Usually, choosing #workers == #CPUs and #threads  == #hardware cores in a single CPU is the preferred way, but of course your milage may vary. Julia by default uses a single worker, and a single thead (per worker). To change this run as `julia -p 2` to give Julia 2 workers (== 3 processes, 1 master process and 2 workers, on the same machine), and `JULIA_NUM_THREADS=2 julia` to give the Julia process 2 threads. It's a bit unfortunate that this interface is not unified ..  
 
-I parallelized components in Jlsca is because I wanted to run and split over multiple machines, but so far I haven't found the time to experiment with that. On my TODO list is to create a small cluster with 2+ nodes, each with a dual-Xeon CPU and a fast shared filesystem, since the input trace sets need to be accessible for each worker. A small, lean and simple implementation of a cluster would be Linux + NFS + SSH on each node. Julia can then be deployed to these nodes using the `--machinefile` option, as described [here](https://docs.julialang.org/en/stable/manual/parallel-computing). This would be the easiest way to unleash Jlsca's parallel abilities. 
+I parallelized components in Jlsca because I wanted to run and split over multiple machines, but so far I haven't found the time to experiment with that. On my TODO list is to create a small cluster with 2+ nodes, each with a dual-Xeon CPU and a fast shared filesystem, since the input trace sets need to be accessible for each worker. A small, lean and simple implementation of a cluster would be Linux + NFS + SSH on each node. Julia can then be deployed to these nodes using the `--machinefile` option, as described [here](https://docs.julialang.org/en/stable/manual/parallel-computing). This would be the easiest way to unleash Jlsca's parallel abilities. 
 
 # Running from cmd line
 

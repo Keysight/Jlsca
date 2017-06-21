@@ -1,11 +1,11 @@
 
 export sha1,hmacsha1,sha1init,update,final
 
-Ch(x::UInt32,y::UInt32,z::UInt32) = (x & y) $ (~x & z)
-Maj(x::UInt32,y::UInt32,z::UInt32) = (x & y) $ (x & z) $ (y & z)
+Ch(x::UInt32,y::UInt32,z::UInt32) = (x & y) ⊻ (~x & z)
+Maj(x::UInt32,y::UInt32,z::UInt32) = (x & y) ⊻ (x & z) ⊻ (y & z)
 rotl(value::UInt32, count::Int) = (value<<count) | (value>>( (-count) & 0b11111 ))
 rotr(value::UInt32, count::Int) = (value>>count) | (value<<( (-count) & 0b11111 ))
-Parity(x::UInt32,y::UInt32,z::UInt32) = x $ y $ z
+Parity(x::UInt32,y::UInt32,z::UInt32) = x ⊻ y ⊻ z
 
 function f(t)
 	if 0 <= t <= 19
@@ -64,7 +64,7 @@ function calcW(Mi)
 	end
 
 	for t in 17:80
-		W[t] = rotl(W[t-3] $ W[t-8] $ W[t-14] $ W[t-16], 1) 
+		W[t] = rotl(W[t-3] ⊻ W[t-8] ⊻ W[t-14] ⊻ W[t-16], 1) 
 	end
 
 	return W
@@ -169,11 +169,11 @@ end
 
 function hmacsha1(key::Vector{UInt8}, msg::Vector{UInt8})
 	innerstate = sha1init()
-	innerkey = K0(key) $ 0x36
+	innerkey = K0(key) .⊻ 0x36
 	update(innerstate, innerkey)
 	update(innerstate, msg)
 	outerstate = sha1init()
-	outerkey = K0(key) $ 0x5c
+	outerkey = K0(key) .⊻ 0x5c
 	update(outerstate, [outerkey; final(innerstate)])
 	return final(outerstate)
 

@@ -46,7 +46,7 @@ function bytes(words::UInt32...)
 end
 
 word(a::UInt8, b::UInt8, c::UInt8, d::UInt8) = (UInt32(a) << 24) | (UInt32(b) << 16) | (UInt32(c) << 8) | d
-xtime(x::UInt8) = x << 1 $ (x >> 7 == 1 ? 0x1b : 0x0)
+xtime(x::UInt8) = x << 1 ⊻ (x >> 7 == 1 ? 0x1b : 0x0)
 
 RotWord(x::UInt32) = (x >> 24) | (x << 8)
 
@@ -119,7 +119,7 @@ function gf8_mul(x::UInt8, y::UInt8)
 
     while e <= y
         if (y & e) == e
-            ret $= x
+            ret ⊻= x
         end
         x = xtime(x)
         e <<= 1
@@ -156,7 +156,7 @@ function gf2_dot(x::BitVector, y::BitVector)
     res::Bool = false
 
     for i in 1:length(x)
-        res $= (x[i] & y[i])
+        res ⊻= (x[i] & y[i])
     end
 
     return res
@@ -226,7 +226,7 @@ function makeSbox()
     sbox = zeros(UInt8, 256)
 
     for i in collect(UInt8, 0:255)
-        sbox[UInt(i)+1] = Amul(gf8_inv(i)) $ gf8_square(0x63, squares)
+        sbox[UInt(i)+1] = Amul(gf8_inv(i)) ⊻ gf8_square(0x63, squares)
     end
 
     return sbox
@@ -267,12 +267,12 @@ function KeyExpansionBackwards(key::Vector{UInt8}, Nr, Nk, offset=Nb*(Nr+1)-Nk)
     while (i >= Nk)
         temp = w[i-1+1]
         if i % Nk == 0
-            temp = SubWord(RotWord(temp)) $ Rcon(UInt32(div(i,Nk)))
+            temp = SubWord(RotWord(temp)) ⊻ Rcon(UInt32(div(i,Nk)))
         elseif Nk > 6 && i % Nk == 4
             temp = SubWord(temp)
         end
 
-        w[i-Nk+1] = w[i+1] $ temp
+        w[i-Nk+1] = w[i+1] ⊻ temp
         i = i - 1
     end
 
@@ -293,12 +293,12 @@ function KeyExpansion(key::Vector{UInt8}, Nr, Nk)
     while (i < Nb * (Nr+1))
         temp = w[i-1+1]
         if i % Nk == 0
-            temp = SubWord(RotWord(temp)) $ Rcon(UInt32(div(i,Nk)))
+            temp = SubWord(RotWord(temp)) ⊻ Rcon(UInt32(div(i,Nk)))
         elseif Nk > 6 && i % Nk == 4
             temp = SubWord(temp)
         end
 
-        w[i+1] = w[i-Nk+1] $ temp
+        w[i+1] = w[i-Nk+1] ⊻ temp
         i = i + 1
     end
 
@@ -324,24 +324,24 @@ function InvSubBytes(state::Array)
 end
 
 function AddRoundKey(state::Matrix, k::Matrix)
-    return state $ k
+    return state .⊻ k
 end
 
 function MixColumn(s::Vector{UInt8})
     s_p = zeros(UInt8, 4)
-    s_p[1] = gf8_mul(s[1], gf8_square(0x2, squares)) $ gf8_mul(s[2], gf8_square(0x3, squares)) $ s[3] $ s[4]
-    s_p[2] = s[1] $ gf8_mul(s[2], gf8_square(0x2, squares)) $ gf8_mul(s[3], gf8_square(0x3, squares)) $ s[4]
-    s_p[3] = s[1] $ s[2] $ gf8_mul(s[3], gf8_square(0x2, squares)) $ gf8_mul(s[4], gf8_square(0x3, squares))
-    s_p[4] = gf8_mul(s[1], gf8_square(0x3, squares)) $ s[2] $ s[3] $ gf8_mul(s[4], gf8_square(0x2, squares))
+    s_p[1] = gf8_mul(s[1], gf8_square(0x2, squares)) ⊻ gf8_mul(s[2], gf8_square(0x3, squares)) ⊻ s[3] ⊻ s[4]
+    s_p[2] = s[1] ⊻ gf8_mul(s[2], gf8_square(0x2, squares)) ⊻ gf8_mul(s[3], gf8_square(0x3, squares)) ⊻ s[4]
+    s_p[3] = s[1] ⊻ s[2] ⊻ gf8_mul(s[3], gf8_square(0x2, squares)) ⊻ gf8_mul(s[4], gf8_square(0x3, squares))
+    s_p[4] = gf8_mul(s[1], gf8_square(0x3, squares)) ⊻ s[2] ⊻ s[3] ⊻ gf8_mul(s[4], gf8_square(0x2, squares))
     return s_p
 end
 
 function InvMixColumn(s::Vector{UInt8})
     s_p = zeros(UInt8, 4)
-    s_p[1] = gf8_mul(s[1], gf8_square(0xe, squares)) $ gf8_mul(s[2], gf8_square(0xb, squares)) $ gf8_mul(s[3], gf8_square(0xd, squares)) $ gf8_mul(s[4], gf8_square(0x9, squares))
-    s_p[2] = gf8_mul(s[1], gf8_square(0x9, squares)) $ gf8_mul(s[2], gf8_square(0xe, squares)) $ gf8_mul(s[3], gf8_square(0xb, squares)) $ gf8_mul(s[4], gf8_square(0xd, squares))
-    s_p[3] = gf8_mul(s[1], gf8_square(0xd, squares)) $ gf8_mul(s[2], gf8_square(0x9, squares)) $ gf8_mul(s[3], gf8_square(0xe, squares)) $ gf8_mul(s[4], gf8_square(0xb, squares))
-    s_p[4] = gf8_mul(s[1], gf8_square(0xb, squares)) $ gf8_mul(s[2], gf8_square(0xd, squares)) $ gf8_mul(s[3], gf8_square(0x9, squares)) $ gf8_mul(s[4], gf8_square(0xe, squares))
+    s_p[1] = gf8_mul(s[1], gf8_square(0xe, squares)) ⊻ gf8_mul(s[2], gf8_square(0xb, squares)) ⊻ gf8_mul(s[3], gf8_square(0xd, squares)) ⊻ gf8_mul(s[4], gf8_square(0x9, squares))
+    s_p[2] = gf8_mul(s[1], gf8_square(0x9, squares)) ⊻ gf8_mul(s[2], gf8_square(0xe, squares)) ⊻ gf8_mul(s[3], gf8_square(0xb, squares)) ⊻ gf8_mul(s[4], gf8_square(0xd, squares))
+    s_p[3] = gf8_mul(s[1], gf8_square(0xd, squares)) ⊻ gf8_mul(s[2], gf8_square(0x9, squares)) ⊻ gf8_mul(s[3], gf8_square(0xe, squares)) ⊻ gf8_mul(s[4], gf8_square(0xb, squares))
+    s_p[4] = gf8_mul(s[1], gf8_square(0xb, squares)) ⊻ gf8_mul(s[2], gf8_square(0xd, squares)) ⊻ gf8_mul(s[3], gf8_square(0x9, squares)) ⊻ gf8_mul(s[4], gf8_square(0xe, squares))
     return s_p
 end
 
@@ -401,7 +401,7 @@ function Cipher(i::Matrix{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y)
         prevstate = state
         state = SubBytes(state)
         state = leak(@sprintf("r%d.s_box", round), state)
-        leak(@sprintf("r%d.s_boxXORin", round), state $ prevstate)
+        leak(@sprintf("r%d.s_boxXORin", round), state .⊻ prevstate)
 
         state = ShiftRows(state)
         state = leak(@sprintf("r%d.s_row", round), state)
@@ -409,7 +409,7 @@ function Cipher(i::Matrix{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y)
         prevstate = state
         state = MixColumns(state)
         state = leak(@sprintf("r%d.m_col", round), state)
-        leak(@sprintf("r%d.m_colXORin", round), state $ prevstate)
+        leak(@sprintf("r%d.m_colXORin", round), state .⊻ prevstate)
 
         roundkey = reshape(w[round*Nb*wz+1:(round+1)*Nb*wz], (4,Nb))
         leak(@sprintf("r%d.k_sch", round), roundkey)
@@ -422,7 +422,7 @@ function Cipher(i::Matrix{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y)
     prevstate = state
     state = SubBytes(state)
     state = leak(@sprintf("r%d.s_box", Nr), state)
-    leak(@sprintf("r%d.s_boxXORin", Nr), state $ prevstate)
+    leak(@sprintf("r%d.s_boxXORin", Nr), state .⊻ prevstate)
 
     state = ShiftRows(state)
     state = leak(@sprintf("r%d.s_row", Nr), state)
@@ -461,7 +461,7 @@ function InvCipher(i::Matrix{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y)
         prevstate = state
         state = InvSubBytes(state)
         state = leak(@sprintf("r%d.is_box", (Nr - round)), state)
-        leak(@sprintf("r%d.is_boxXORin", (Nr - round)), state $ prevstate)
+        leak(@sprintf("r%d.is_boxXORin", (Nr - round)), state .⊻ prevstate)
 
         roundkey = reshape(w[round*Nb*wz+1:(round+1)*Nb*wz], (4,Nb))
         leak(@sprintf("r%d.ik_sch", (Nr - round)), roundkey)
@@ -471,7 +471,7 @@ function InvCipher(i::Matrix{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y)
 
         prevstate = state
         state = InvMixColumns(state)
-        leak(@sprintf("r%d.im_colXORin", (Nr - round)), state $ prevstate)
+        leak(@sprintf("r%d.im_colXORin", (Nr - round)), state .⊻ prevstate)
     end
 
     state = leak(@sprintf("r%d.istart", Nr), state)
@@ -482,7 +482,7 @@ function InvCipher(i::Matrix{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y)
     prevstate = state
     state = InvSubBytes(state)
     state = leak(@sprintf("r%d.is_box", Nr), state)
-    leak(@sprintf("r%d.is_boxXORin", Nr), state $ prevstate)
+    leak(@sprintf("r%d.is_boxXORin", Nr), state .⊻ prevstate)
 
     roundkey = reshape(w[1:Nb*wz], (4,Nb))
     leak(@sprintf("r%d.ik_sch", Nr), roundkey)
@@ -515,7 +515,7 @@ function EqInvCipher(i::Matrix{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y
         prevstate = state
         state = InvSubBytes(state)
         state = leak(@sprintf("r%d.is_box", (Nr - round)), state)
-        leak(@sprintf("r%d.is_boxXORin", (Nr - round)), state $ prevstate)
+        leak(@sprintf("r%d.is_boxXORin", (Nr - round)), state .⊻ prevstate)
 
         state = InvShiftRows(state)
         state = leak(@sprintf("r%d.is_row", (Nr - round)), state)
@@ -523,7 +523,7 @@ function EqInvCipher(i::Matrix{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y
         prevstate = state
         state = InvMixColumns(state)
         state = leak(@sprintf("r%d.im_col", (Nr - round)), state)
-        leak(@sprintf("r%d.im_colXORin", (Nr - round)), state $ prevstate)
+        leak(@sprintf("r%d.im_colXORin", (Nr - round)), state .⊻ prevstate)
 
         roundkey = reshape(w[round*Nb*wz+1:(round+1)*Nb*wz], (4,Nb))
         leak(@sprintf("r%d.ik_sch", (Nr - round)), roundkey)
@@ -536,7 +536,7 @@ function EqInvCipher(i::Matrix{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y
     prevstate = state
     state = InvSubBytes(state)
     state = leak(@sprintf("r%d.is_box", Nr), state)
-    leak(@sprintf("r%d.is_boxXORin", Nr), state $ prevstate)
+    leak(@sprintf("r%d.is_boxXORin", Nr), state .⊻ prevstate)
 
     state = InvShiftRows(state)
     state = leak(@sprintf("r%d.is_row", Nr), state)

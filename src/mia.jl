@@ -19,7 +19,7 @@ type MiaColumnData{T}
   p::Dict{T, Float64}
   numobs::Int
 
-  function MiaColumnData(X::Vector{T})
+  function MiaColumnData{T}(X::Vector{T}) where T
     uniques = Set{T}()
     where = Dict{T,IntSet}()
     p = Dict{T, Float64}()

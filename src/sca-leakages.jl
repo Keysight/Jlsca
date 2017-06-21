@@ -10,7 +10,7 @@ export basisModelSingleBits
 
 # some leakages for CPA
 
-bit(x,i) = (x .>> i) & 1
+bit(x,i) = (x .>> i) .& 1
 bit0(x) = bit(x,0)
 bit1(x) = bit(x,1)
 bit2(x) = bit(x,2)

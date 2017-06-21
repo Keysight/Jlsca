@@ -45,7 +45,7 @@ function getVariance(state::IncrementalMeanVariance)
 end
 
 function getStdDev(state::IncrementalMeanVariance)
-  return sqrt(getVariance(state))
+  return sqrt.(getVariance(state))
 end
 
 type IncrementalCovariance

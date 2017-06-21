@@ -274,7 +274,7 @@ function testCipher128TVLA()
     rx_s_row = ShiftRows(rx_s_box)
     rx_m_col = MixColumns(rx_s_row)
     rx_k_sch = reshape([invsbox[1] for x in 1:16], (4,Nb))
-    rx_k_sch $= rx_m_col
+    rx_k_sch .⊻= rx_m_col
 
     key = KeyExpansionBackwards(vec(rx_k_sch), 10, 4, 5*4)[1:16]
 
@@ -297,12 +297,12 @@ function testCipher192TVLA()
     rx_s_row = ShiftRows(rx_s_box)
     rx_m_col = MixColumns(rx_s_row)
     rx_k_sch = reshape([invsbox[1] for x in 1:16], (4,Nb))
-    rx_k_sch $= rx_m_col
-    ry_s_sbox = SubBytes(rx_m_col $ rx_k_sch)
+    rx_k_sch .⊻= rx_m_col
+    ry_s_sbox = SubBytes(rx_m_col .⊻ rx_k_sch)
     ry_s_row = ShiftRows(ry_s_sbox)
     ry_m_col = MixColumns(ry_s_row)
     ry_k_sch = reshape([invsbox[1] for x in 1:16], (4,Nb))
-    ry_k_sch $= ry_m_col
+    ry_k_sch .⊻= ry_m_col
 
     key = KeyExpansionBackwards(vcat(vec(rx_k_sch),vec(ry_k_sch)[1:8]), 12, 6, 5*4)[1:32]
 
@@ -325,12 +325,12 @@ function testCipher256TVLA()
     rx_s_row = ShiftRows(rx_s_box)
     rx_m_col = MixColumns(rx_s_row)
     rx_k_sch = reshape([invsbox[1] for x in 1:16], (4,Nb))
-    rx_k_sch $= rx_m_col
-    ry_s_sbox = SubBytes(rx_m_col $ rx_k_sch)
+    rx_k_sch .⊻= rx_m_col
+    ry_s_sbox = SubBytes(rx_m_col .⊻ rx_k_sch)
     ry_s_row = ShiftRows(ry_s_sbox)
     ry_m_col = MixColumns(ry_s_row)
     ry_k_sch = reshape([invsbox[1] for x in 1:16], (4,Nb))
-    ry_k_sch $= ry_m_col
+    ry_k_sch .⊻= ry_m_col
 
     key = KeyExpansionBackwards(vcat(vec(rx_k_sch),vec(ry_k_sch)), 14, 8, 5*4)[1:32]
 
@@ -357,7 +357,7 @@ function lol()
     a = [UInt8(rand(0:255)) for i in 1:4]
     b = [UInt8(rand(0:255)) for i in 1:4]
 
-    @test(InvMixColumn(a $ b) == InvMixColumn(a) $ InvMixColumn(b))
+    @test(InvMixColumn(a .⊻ b) == InvMixColumn(a) .⊻ InvMixColumn(b))
 end
 
 function lol2()
@@ -373,7 +373,7 @@ function lol2()
     for b in 0:255
         c[r3] = UInt8(b)
         d[r3] = UInt8(b)
-        mask = MixColumn(c) $ MixColumn(d)
+        mask = MixColumn(c) .⊻ MixColumn(d)
         if prevmask != nothing
             # @printf("mask %s\n", bytes2hex(mask))
             @test mask == prevmask

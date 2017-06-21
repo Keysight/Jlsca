@@ -68,7 +68,7 @@ function ParallelCondReduceTest(splitmode)
     @test size(sando[1][2]) == size(sando[2][2])
 
 
-    @test_approx_eq sando[1][1] sando[2][1]
+    @test sando[1][1] ≈ sando[2][1]
     @test sando[1][2] == sando[2][2]
 end
 
@@ -131,7 +131,7 @@ function ParallelCondReduceTestWithInterval()
     @test sandoIdx == numberOfScas*2+1
 
     for s in 1:numberOfScas
-      @test_approx_eq sando[s][1] sando[s+numberOfScas][1]
+      @test sando[s][1] ≈ sando[s+numberOfScas][1]
       @test sando[s][2] == sando[s+numberOfScas][2]
       @test sando[s][3] == sando[s+numberOfScas][3]
     end

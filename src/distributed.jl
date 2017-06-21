@@ -4,7 +4,7 @@
 
 export WorkSplit,NoSplit,SplitByData,SplitByTraces,SplitByTracesSliced,SplitByTracesBlock
 
-abstract WorkSplit
+abstract type WorkSplit end
 
 type NoSplit <: WorkSplit
 end
@@ -40,7 +40,7 @@ function splitRange(numberOfAverages::Int, numberOfCandidates::Int, workers::Int
   return workerranges
 end
 
-abstract SplitByTraces <: WorkSplit
+abstract type SplitByTraces <: WorkSplit end
 
 type SplitByTracesSliced <: SplitByTraces
   worker::Int

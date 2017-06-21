@@ -1,6 +1,6 @@
 module Trs
 
-abstract PostProcessor
+abstract type PostProcessor end
 
 export PostProcessor
 export getData,getSamples,writeData,writeSamples
