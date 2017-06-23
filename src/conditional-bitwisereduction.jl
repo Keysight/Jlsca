@@ -127,7 +127,7 @@ function merge(this::CondReduce, other::CondReduce)
             cachedreftrace = getSamples(this.trs, other.traceIdx[idx][val])
             cachedsamples = getSamples(this.trs, this.traceIdx[idx][val])
 
-            this.mask[idx][:] .&= !(cachedreftrace .⊻ cachedsamples)
+            this.mask[idx][:] .&= .!(cachedreftrace .⊻ cachedsamples)
           end
         else
           cachedsamples = getSamples(this.trs, other.traceIdx[idx][val])
