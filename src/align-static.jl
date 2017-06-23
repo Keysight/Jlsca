@@ -86,9 +86,12 @@ function myconv{T<:Base.LinAlg.BlasFloat}(u::StridedVector{T}, v::StridedVector{
     return y[1:n]
 end
 
-using Base.Threads
+function correlationAlign(samples::Vector{Float32}, state::CorrelationAlignFFT)
+  correlationAlign(map(Float64, samples), state)
+end
+
 # http://scribblethink.org/Work/nvisionInterface/nip.html (thx Jasper van Woudenberg)
-function correlationAlign(samples::Vector, state::CorrelationAlignFFT)
+function correlationAlign(samples::Vector{Float64}, state::CorrelationAlignFFT)
   align::Int = 0
   maxCorr::Float64 = 0
 
@@ -109,7 +112,7 @@ function correlationAlign(samples::Vector, state::CorrelationAlignFFT)
   sums_y2 = get(state.sums_y2)
 
   # compute convolution (sums of squares between ref and samples)
-  cv::Vector{Float64} = myconv(reversereference0mean, float(samples[window]), plans)
+  cv::Vector{Float64} = myconv(reversereference0mean, samples[window], plans)
 
   # pre-compute the sums and sums of squares of samples
   idx = 2

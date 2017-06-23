@@ -281,6 +281,7 @@ function sp_blocking_read!(port::Port, buffer::Array{UInt8}, timeout_ms::Integer
     nb = Int(ret)
     if nb != length(buffer)
       @printf("serial timed out: %d expected %d!!!! bAD, you don't want to see this ever!\n", nb, length(buffer))
+      throw(ErrorException("bad!"))
     end
     return nb
 end
@@ -414,18 +415,24 @@ function hellopinata()
   print_port_settings(s)
   flush(s, buffer=SP_BUF_BOTH)
 
-  cmd::Vector{UInt8} = hex2bytes("CA000102030405060708090A0B0C0D0E0F")
+  cmd::Vector{UInt8} = hex2bytes("41000102030405060708090A0B0C0D0E0F")
   res::Vector{UInt8} = Vector{UInt8}(16)
 
   rng = MersenneTwister(1)
 
-  for a in 1:400000
+  iterations = 4000
+  progress = Progress(iterations, 1, @sprintf("Running %d iterations ..", iterations))
+
+  for a in 1:iterations
     cmd[2:17] = inputgenSB(rng)
-    @printf("=> %s\n", bytes2hex(cmd))
+    # @printf("=> %s\n", bytes2hex(cmd))
     sp_blocking_write(s.ref, cmd, 0)
     sp_blocking_read!(s.ref, res, 1000)
-    @printf("<= %s\n\n", bytes2hex(res))
+    # @printf("<= %s\n\n", bytes2hex(res))
+    next!(progress)
   end
+
+  finish!(progress)
 
   close(s)
 
