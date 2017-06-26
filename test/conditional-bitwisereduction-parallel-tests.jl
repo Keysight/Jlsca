@@ -18,9 +18,8 @@ function ParallelCondReduceTest(splitmode)
     direction = FORWARD
     params = getParameters(fullfilename, direction)
 
-    params.analysis = DPA()
-    params.analysis.statistic = cor
-    params.analysis.leakageFunctions = [bit0]
+    params.analysis = CPA()
+    params.analysis.leakages = [Bit(0)]
 
     numberOfAverages = length(params.keyByteOffsets)
     numberOfCandidates = getNumberOfCandidates(params)
@@ -50,9 +49,8 @@ function ParallelCondReduceTest(splitmode)
 
     @test(key == get(params.knownKey))
 
-    params.analysis = DPA()
-    params.analysis.statistic = cor
-    params.analysis.leakageFunctions = [bit0]
+    params.analysis = CPA()
+    params.analysis.leakages = [Bit(0)]
 
     trs = InspectorTrace(fullfilename, true)
     addSamplePass(trs, tobits)
@@ -83,9 +81,8 @@ function ParallelCondReduceTestWithInterval()
     direction = FORWARD
     params = getParameters(fullfilename, direction)
 
-    params.analysis = DPA()
-    params.analysis.statistic = cor
-    params.analysis.leakageFunctions = [bit0]
+    params.analysis = CPA()
+    params.analysis.leakages = [Bit(0)]
     params.updateInterval = Nullable(updateInterval)
 
     numberOfAverages = length(params.keyByteOffsets)
@@ -111,9 +108,8 @@ function ParallelCondReduceTestWithInterval()
 
     @test(key == get(params.knownKey))
 
-    params.analysis = DPA()
-    params.analysis.statistic = cor
-    params.analysis.leakageFunctions = [bit0]
+    params.analysis = CPA()
+    params.analysis.leakages = [Bit(0)]
     params.updateInterval = Nullable()
 
     for s in 1:numberOfScas

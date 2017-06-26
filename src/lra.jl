@@ -2,11 +2,10 @@
 #
 # Authors: Cees-Bart Breunesse, Ilya Kizhvatov
 
-module Lra
 export lra
 
 # LRA for normal Matrix input
-function lra(data::Matrix, samples::Matrix, keyByteOffsets::Vector{Int}, intermediateFunction::Function, basisFunction::Function, keyChunkValues=collect(UInt8, 0:255))
+function lra(data::Matrix, samples::AbstractArray{Float64}, keyByteOffsets::Vector{Int}, target::Target, basisFunction::Function, keyChunkValues::Vector{UInt8})
     (rs,cs) = size(samples)
     (rd,cd) = size(data)
 
@@ -14,21 +13,21 @@ function lra(data::Matrix, samples::Matrix, keyByteOffsets::Vector{Int}, interme
 
     for i in 1:cd
         o = (i-1)*length(keyChunkValues)+1
-        R2[:,o:o+length(keyChunkValues)-1] = lra(data[:,i], keyByteOffsets[i], samples, intermediateFunction, basisFunction, keyChunkValues)
+        R2[:,o:o+length(keyChunkValues)-1] = lra(data[:,i], keyByteOffsets[i], samples, target, basisFunction, keyChunkValues)
     end
 
     return R2
 end
 
 # LRA for a single data column
-function lra(data::Vector, dataColumn::Int, samples::Matrix, intermediateFunction::Function, basisFunction::Function, keyChunkValues=collect(UInt8, 0:255))
+function lra(data::Vector{In}, dataColumn::Int, samples::AbstractArray{Float64}, t::Target{In,Out}, basisFunction::Function, keyChunkValues::Vector{UInt8}) where {In,Out}
     (rs, cs) = size(samples)
 
     SStot = sum((samples .- mean(samples, 1)) .^ 2, 1)'
     SSreg = zeros(Float64, (cs,length(keyChunkValues)))
 
     for k in keyChunkValues
-        M = mapreduce(basisFunction, hcat, intermediateFunction(data, dataColumn, k))'
+        M = mapreduce(basisFunction, hcat, target.(t, data, dataColumn, k))'
 
         E = (M * inv(M' * M) * M' * samples - samples) .^ 2
 
@@ -40,4 +39,3 @@ function lra(data::Vector, dataColumn::Int, samples::Matrix, intermediateFunctio
     return R2
 end
 
-end

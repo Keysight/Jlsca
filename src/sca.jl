@@ -4,10 +4,17 @@
 
 module Sca
 
-include("sca-core.jl")
 include("sca-leakages.jl")
+include("sca-core.jl")
 include("sca-scoring.jl")
+
+include("dpa.jl")
+include("lra.jl")
+include("mia.jl")
+
 include("attackaes-core.jl")
 include("attackdes-core.jl")
+
+include("incremental-correlation.jl")
 
 end

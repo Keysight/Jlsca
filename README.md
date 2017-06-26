@@ -29,8 +29,8 @@ It runs standalone or inside Riscure's Inspector as a module, so you would want 
 	* [non-profiled LRA](https://eprint.iacr.org/2013/794.pdf)
  	* [Conditional averaging](https://eprint.iacr.org/2013/794.pdf)
 	* Conditional sample reduction for attacking whiteboxes (see conditional-bitwisereduction.jl for what that means)
-	* Superduper fast parallization of conditional averaging, conditional bitwise sample reduction, and incremental correlation statistics!
-	* Mutual Information Analysis (MIA)
+	* Superduper fast parallization of conditional averaging, conditional bitwise sample reduction, and [incremental correlation statistics](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.214.8508&rep=rep1&type=pdf)!
+	* [Mutual Information Analysis](https://eprint.iacr.org/2007/198.pdf) (MIA)
 
 # Who wrote it?
 
@@ -42,7 +42,9 @@ It's written for fun by me (Cees-Bart Breunesse) and Ilya Kizhvatov (whose [pysc
 
 2. In the REPL type `Pkg.clone("https://github.com/Riscure/Jlsca")`
 
-You can now close the Julia prompt, or start using Jlsca interactively (see "Running in the REPL")
+You can now close the Julia prompt. 
+
+# Running 
 
 There are several ways to interact with Jlsca. You can run scripts from command line, interactive through Julia's REPL or via Jupyter notebooks. The first two are described in the this README. The elegant and powerful Jupyter approach is described [here](https://github.com/ikizhvatov/jlsca-tutorials), and includes a solution for Riscure's [RHME2](https://github.com/Riscure/Rhme-2016) SCA challenges from 2016.  
 
@@ -170,8 +172,6 @@ julia> plot(cor(samples, data))
 ```
 ![Start of round 5 correlation plot](https://raw.githubusercontent.com/Riscure/Jlsca/master/images/r5startcorrelation.png)
 
-
-
 # Running from Inspector
 
 First of all, you're currently missing out on the parallelization when you're running Jlsca from Inspector. This is because from Inspector to Jlsca the trace set data and samples are transported over a pipe, since I thought it was cool to be able to run Jlsca in an Inspector chain. The implementation of parallelization in Jlsca now assumes seekable files for each process, so the pipe is no longer an option. I have not come around to fix the Inspector module to safely pass the temp file data to Inspector. This is TBD.
@@ -201,17 +201,12 @@ params = AesSboxAttack()
 params.mode = CIPHER
 params.keyLength = KL128
 params.direction = FORWARD
-params.analysis = DPA()
-params.analysis.statistic = cor
-params.analysis.leakageFunctions = [x -> ((x .>> i) & 1) for i in 0:7 ]
+params.analysis = CPA()
+params.analysis.leakages = [Bit(i) for i in 0:7]
 ```
-If you'd like to attack with HW instead, write this:
+What's put in params.analysis.leakages is a list of objects with a type that inherits from `Leakage` and implements a `leak` function. Look in `sca-leakages.jl` on how to see HW and Bit type leakges are implemented. If you'd like to attack with HW instead, write this:
 ```julia
-params.analysis.leakageFunctions = [hw]
-```
-If you want all bits, do this:
-```julia
-params.analysis.leakageFunctions = [x -> ((x .>> i) & 1) for i in 0:7]
+params.analysis.leakages = [HW()]
 ```
 If you want to attack the HD between S-box in and out, set this:
 ```julia
@@ -239,7 +234,14 @@ If we want LRA instead of CPA, we do this:
 params.analysis = LRA()
 params.analysis.basisModel = basisModelSingleBits
 ```
-Big fat disclaimer: currently LRA only supports only a 9 bit model, even if you do a AES MC attack! I need to understand some more about this attack, since choosing a 33 bit basis model results in non-invertible matrices (and a crash).
+Big fat disclaimer: currently LRA only supports only a 9 bit model, even if you do a AES MC attack! I need to understand some more about this attack, since choosing a 33 bit basis model results in non-invertible matrices (and a crash). If we want MIA instead of LRA, we do this:
+```julia
+params.analysis = MIA()
+params.analysis.sampleBuckets = 9
+params.analysis.leakages = [HW()]
+
+```
+The `sampleBuckets` value is the number of buckets in which samples (observations) will be split, but only if the sample type is a real number. If your samples aren't floats, you should add a sample pass like this `addSamplePass(trs, float)`. Like LRA, MIA is a bit hacky, and subject to change ;-)
 
 ## Passing attack phase data
 

@@ -967,7 +967,7 @@ public class Jlsca4InspectorModule extends Module implements ModuleInChain {
       }
 
       if(analysisGroup.getSelection().getActionCommand() == CPA) {
-        s += "params.analysis = Sca.DPA(); params.analysis.statistic = cor; ";
+        s += "params.analysis = Sca.CPA(); ";
         if(leakagesModel.getSelectedItem() == ALLBITS) {
           int bits = 0;
           if(algoGroup.getSelection().getActionCommand() == AES) {
@@ -979,13 +979,13 @@ public class Jlsca4InspectorModule extends Module implements ModuleInChain {
           else {
             bits = 3;
           }
-          s += String.format("params.analysis.leakageFunctions = [x -> ((x .>> i) & 1) for i in 0:%d ]; ", bits);
+          s += String.format("params.analysis.leakages = [Bit(i) for i in 0:%d ]; ", bits);
         }
         else if(leakagesModel.getSelectedItem() == BIT0) {
-          s += String.format("params.analysis.leakageFunctions = [x -> x & 1]; ", updateInterval);
+          s += String.format("params.analysis.leakages = [Bit(0)]; ", updateInterval);
         }
         else if(leakagesModel.getSelectedItem() == HW) {
-          s += String.format("params.analysis.leakageFunctions = [Sca.hw]; ", updateInterval);
+          s += String.format("params.analysis.leakages = [HW()]; ", updateInterval);
         }
       }
       else if(analysisGroup.getSelection().getActionCommand() == LRA) {

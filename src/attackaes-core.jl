@@ -5,6 +5,8 @@
 using ..Aes
 using ..Trs
 
+import Base.show
+
 export AesSboxAttack,AesMCAttack,AesKeyLength,AesMode
 
 @enum AesMode CIPHER=1 INVCIPHER=2 EQINVCIPHER=3
@@ -14,6 +16,10 @@ for s in instances(AesMode); @eval export $(Symbol(s)); end
 for s in instances(AesKeyLength); @eval export $(Symbol(s)); end
 
 abstract type AesAttack <: Attack end
+
+nrKeyByteValues(a::AesAttack) = 256
+keyByteValues(a::AesAttack) = collect(UInt8,0:255)
+
 
 # two types of attacks: sbox or mixcolumn
 type AesSboxAttack <: AesAttack
@@ -33,8 +39,8 @@ type AesSboxAttack <: AesAttack
   invsbox::Vector{UInt8}
 
   function AesSboxAttack()
-    leakageFunctions = [bit0, bit1, bit2, bit3, bit4, bit5, bit6, bit7]
-    return new(CIPHER, KL128, FORWARD, 1, collect(1:16), Nullable(), DPA(), false, Nullable(), [], Nullable(), Nullable(), Aes.sbox, Aes.invsbox)
+    leakageFunctions = [Bit(0), Bit(1), Bit(2), Bit(3), Bit(4), Bit(5), Bit(6), Bit(7)]
+    return new(CIPHER, KL128, FORWARD, 1, collect(1:16), Nullable(), CPA(), false, Nullable(), [], Nullable(), Nullable(), Aes.sbox, Aes.invsbox)
   end
 end
 
@@ -63,8 +69,8 @@ type AesMCAttack <: AesAttack
   invsbox::Vector{UInt8}
 
   function AesMCAttack()
-    leakageFunctions = [bit0]
-    return new(CIPHER, KL128, FORWARD, 1, collect(1:16), Nullable(), DPA(), false, Nullable(), [], Nullable(), Nullable(), Aes.sbox, Aes.invsbox)
+    leakageFunctions = [Bit(0)]
+    return new(CIPHER, KL128, FORWARD, 1, collect(1:16), Nullable(), CPA(), false, Nullable(), [], Nullable(), Nullable(), Aes.sbox, Aes.invsbox)
   end
 end
 
@@ -78,15 +84,21 @@ function toShortString(params::Union{AesSboxAttack,AesMCAttack})
   modeStr = string(params.mode)
   lengthStr = string(params.keyLength)
   directionStr = string(params.direction)
-  analysisStr = (isa(params.analysis, DPA) ? "DPA" : "LRA")
+  analysisStr = (isa(params.analysis, CPA) ? "CPA" : "LRA")
 
   return @sprintf("%s_%s_%s_%s_%s", typeStr, modeStr, lengthStr, analysisStr, directionStr)
  end
 
 # target functions
-function invMcOut(a::AesMCAttack, x::UInt8, keyByte::UInt8, position::Int, constant::UInt8)
-    mcIn = fill(constant, 4)
-    mcIn[position] = a.invsbox[(x ⊻ keyByte) + 1]
+type InvMcOut <: Target{UInt8,UInt32}
+  invsbox::Vector{UInt8}
+  constant::UInt8
+  position::Int
+end
+
+function target(a::InvMcOut, x::UInt8, col::Int, keyByte::UInt8)
+    mcIn = fill(a.constant, 4)
+    mcIn[a.position] = a.invsbox[(x ⊻ keyByte) + 1]
     mcOut = Aes.InvMixColumn(mcIn)
     ret::UInt32 = 0
     for i in 1:4
@@ -96,19 +108,18 @@ function invMcOut(a::AesMCAttack, x::UInt8, keyByte::UInt8, position::Int, const
     return ret
 end
 
-function invMcOut(a::AesMCAttack, data::UInt8, dataColumn, keyBytes::Vector{UInt8}, position::Int, constant::UInt8)
-    ret = map(keyByte -> invMcOut(a,data,keyByte,position,constant), keyBytes)
-    return ret
+show(io::IO, a::InvMcOut) = print(io, "Inverse MC out")
+
+
+type McOut <: Target{UInt8,UInt32}
+  sbox::Vector{UInt8}
+  constant::UInt8
+  position::Int
 end
 
-function invMcOut(a::AesMCAttack, data::Array{UInt8}, dataColumn, keyByte::UInt8, position::Int, constant::UInt8)
-    ret = map(x -> invMcOut(a,x,keyByte,position,constant), data)
-    return ret
-end
-
-function mcOut(a::AesMCAttack, x::UInt8, keyByte::UInt8, position::Int, constant::UInt8)
-    mcIn = fill(constant, 4)
-    mcIn[position] = a.sbox[(x ⊻ keyByte) + 1]
+function target(a::McOut, x::UInt8, col::Int, keyByte::UInt8)
+    mcIn = fill(a.constant, 4)
+    mcIn[a.position] = a.sbox[(x ⊻ keyByte) + 1]
     mcOut = Aes.MixColumn(mcIn)
     ret::UInt32 = 0
     for i in 1:4
@@ -118,19 +129,17 @@ function mcOut(a::AesMCAttack, x::UInt8, keyByte::UInt8, position::Int, constant
     return ret
 end
 
-function mcOut(a::AesMCAttack, data::UInt8, dataColumn, keyBytes::Vector{UInt8}, position::Int, constant::UInt8)
-    ret = map(keyByte -> mcOut(a,data,keyByte,position,constant), keyBytes)
-    return ret
+show(io::IO, a::McOut) = print(io, "MC out")
+
+type McOutXORIn <: Target{UInt8,UInt32}
+  sbox::Vector{UInt8}
+  constant::UInt8
+  position::Int
 end
 
-function mcOut(a::AesMCAttack, data::Array{UInt8}, dataColumn, keyByte::UInt8, position::Int, constant::UInt8)
-    ret = map(x -> mcOut(a,x,keyByte,position,constant), data)
-    return ret
-end
-
-function mcOutXORIn(a::AesMCAttack, x::UInt8, keyByte::UInt8, position::Int, constant::UInt8)
+function target(a::McOutXORIn, x::UInt8, col::Int, keyByte::UInt8)
     mcIn = fill(constant, 4)
-    mcIn[position] = a.sbox[(x ⊻ keyByte) + 1]
+    mcIn[a.position] = a.sbox[(x ⊻ keyByte) + 1]
     mcOut = Aes.MixColumn(mcIn) ⊻ mcIn
     ret::UInt32 = 0
     for i in 1:4
@@ -140,54 +149,35 @@ function mcOutXORIn(a::AesMCAttack, x::UInt8, keyByte::UInt8, position::Int, con
     return ret
 end
 
-function mcOutXORIn(a::AesMCAttack, data::UInt8, dataColumn, keyBytes::Vector{UInt8}, position::Int, constant::UInt8)
-    ret = map(keyByte -> mcOutXORIn(a,data,keyByte,position,constant), keyBytes)
-    return ret
+show(io::IO, a::McOutXORIn) = print(io, "Inverse MC out, XOR'ed w/ input")
+
+type SboxOut <: Target{UInt8,UInt8}
+  sbox::Vector{UInt8}
 end
 
-function mcOutXORIn(a::AesMCAttack, data::Array{UInt8}, dataColumn, keyByte::UInt8, position::Int, constant::UInt8)
-    ret = map(x -> mcOutXORIn(a,x,keyByte,position,constant), data)
-    return ret
+target(a::SboxOut, data::UInt8, col::Int, keyByte::UInt8) = a.sbox[(data ⊻ keyByte) + 1]
+show(io::IO, a::SboxOut) = print(io, "Sbox out")
+
+type InvSboxOut <: Target{UInt8,UInt8}
+  invsbox::Vector{UInt8}
 end
 
-function sboxOut(a::AesSboxAttack, data::UInt8, dataColumn::Int, keyBytes::Vector{UInt8})
-    return map(x -> a.sbox[(data ⊻ x) + 1], keyBytes)
+target(a::InvSboxOut, data::UInt8, col::Int, keyByte::UInt8) = a.invsbox[(data ⊻ keyByte) + 1]
+show(io::IO, a::InvSboxOut) = print(io, "Inverse sbox out")
+
+type SboxOutXORIn <: Target{UInt8,UInt8}
+  sbox::Vector{UInt8}
 end
 
-function sboxOut(a::AesSboxAttack, data::Array{UInt8}, dataColumn::Int, keyByte::UInt8)
-    ret = map(x -> a.sbox[(x ⊻ keyByte) + 1], data)
-    return ret
+target(a::SboxOutXORIn, data::UInt8, col::Int, keyByte::UInt8) = data ⊻ keyByte ⊻ a.sbox[(data ⊻ keyByte) + 1]
+show(io::IO, a::SboxOutXORIn) = print(io, "Sbox out, xor'ed w/ input")
+
+type InvSboxOutXORIn <: Target{UInt8,UInt8}
+  sbox::Vector{UInt8}
 end
 
-function invSboxOut(a::AesSboxAttack, data::UInt8, dataColumn::Int, keyBytes::Vector{UInt8})
-    ret = map(x -> a.invsbox[(data ⊻ x) + 1], keyBytes)
-    return ret
-end
-
-function invSboxOut(a::AesSboxAttack, data::Array{UInt8}, dataColumn::Int, keyByte::UInt8)
-    ret = map(x -> a.invsbox[(x ⊻ keyByte) + 1], data)
-    return ret
-end
-
-function sboxOutXORIn(a::AesSboxAttack, data::UInt8, dataColumn::Int, keyBytes::Vector{UInt8})
-    ret = map(keyByte -> data ⊻ keyByte ⊻ a.sbox[(data ⊻ keyByte) + 1], keyBytes)
-    return ret
-end
-
-function sboxOutXORIn(a::AesSboxAttack, data::Array{UInt8}, dataColumn::Int, keyByte::UInt8)
-    ret = map(x -> x ⊻ keyByte ⊻ a.sbox[(x ⊻ keyByte) + 1], data)
-    return ret
-end
-
-function invSboxOutXORIn(a::AesSboxAttack, data::UInt8, dataColumn::Int, keyBytes::Vector{UInt8})
-    ret = map(keyByte -> data ⊻ keyByte ⊻ a.invsbox[(data ⊻ keyByte) + 1], keyBytes)
-    return ret
-end
-
-function invSboxOutXORIn(a::AesSboxAttack, data::Array{UInt8}, dataColumn::Int, keyByte::UInt8)
-    ret = map(x -> x ⊻ keyByte ⊻ a.invsbox[(x ⊻ keyByte) + 1], data)
-    return ret
-end
+target(a::InvSboxOutXORIn, data::UInt8, col::Int, keyByte::UInt8) =  data ⊻ keyByte ⊻ a.invsbox[(data ⊻ keyByte) + 1]
+show(io::IO, a::InvSboxOutXORIn) = print(io, "Inverse Sbox out, xor'ed w/ input")
 
 # some round functions
 function invRound(output::Matrix, roundkey::Matrix)
@@ -222,18 +212,18 @@ function getNumberOfCandidates(params::AesAttack)
   return 256
 end
 
-function getTargetFunction(params::AesMCAttack)
+function getTarget(params::AesMCAttack)
   if (params.direction == FORWARD && params.mode == CIPHER) || (params.direction == BACKWARD && params.mode != CIPHER)
     if params.xor
-      targetfn = mcOutXORIn
+      targetfn = McOutXORIn(params.sbox, 0x0, 1)
     else
-      targetfn = mcOut
+      targetfn = McOut(params.sbox, 0x0, 1)
     end
   else
     if params.xor
-      targetfn = invMcOutXORIn
+      targetfn = InvMcOutXORIn(params.invsbox, 0x0, 1)
     else
-      targetfn = invMcOut
+      targetfn = InvMcOut(params.invsbox, 0x0, 1)
     end
   end
 
@@ -241,18 +231,18 @@ function getTargetFunction(params::AesMCAttack)
 end
 
 
-function getTargetFunction(params::AesSboxAttack)
+function getTarget(params::AesSboxAttack)
   if (params.direction == FORWARD && params.mode == CIPHER) || (params.direction == BACKWARD && params.mode != CIPHER)
     if params.xor
-      targetfn = sboxOutXORIn
+      targetfn = SboxOutXORIn(params.sbox)
     else
-      targetfn = sboxOut
+      targetfn = SboxOut(params.sbox)
     end
   else
     if params.xor
-      targetfn = invSboxOutXORIn
+      targetfn = InvSboxOutXORIn(params.invsbox)
     else
-      targetfn = invSboxOut
+      targetfn = InvSboxOut(params.invsbox)
     end
   end
 
@@ -261,7 +251,7 @@ end
 
 
 function printParameters(params::Union{AesSboxAttack,AesMCAttack})
-  targetFunction = getTargetFunction(params)
+  target = getTarget(params)
 
   attackStr = (isa(params, AesSboxAttack) ? "Sbox" : "Mixcolumn")
   analysisStr = string(typeof(params.analysis).name.name)
@@ -271,7 +261,7 @@ function printParameters(params::Union{AesSboxAttack,AesMCAttack})
   @printf("mode:       %s\n", string(params.mode))
   @printf("key length: %s\n", string(params.keyLength))
   @printf("direction:  %s\n", string(params.direction))
-  @printf("target:     %s\n", string(targetFunction))
+  @printf("target:     %s\n", string(target))
   @printf("data at:    %s\n", string(params.dataOffset))
   @printf("key bytes:  %s\n", string(params.keyByteOffsets))
   if !isnull(params.knownKey)
@@ -348,7 +338,7 @@ function scatask(super::Task, trs::Trace, params::AesMCAttack, firstTrace=1, num
   direction = params.direction
   # dataOffsets = params.dataOffsets
   knownKey = params.knownKey
-  targetFunction = getTargetFunction(params)
+  target = getTarget(params)
 
   local scores
 
@@ -362,7 +352,7 @@ function scatask(super::Task, trs::Trace, params::AesMCAttack, firstTrace=1, num
     throw(Exception("Only KL128 supported for MC attack"))
   end
 
-  myfn = (data,keyBytePosition,keyVal) -> targetFunction(params, data, keyBytePosition, keyVal, 1, constant)
+  # myfn = (data,keyBytePosition,keyVal) -> target(params, data, keyBytePosition, keyVal, 1, constant)
 
   if isnull(phaseInput)
     phaseInput = Nullable(zeros(UInt8, 16))
@@ -384,7 +374,7 @@ function scatask(super::Task, trs::Trace, params::AesMCAttack, firstTrace=1, num
   addDataPass(trs, x -> filterConstantInput(offsets, x, constant))
 
   # do the attack
-  scores = analysis(super, params, phase, trs, firstTrace, numberOfTraces, myfn, UInt32, collect(UInt8, 0:255), offsets)
+  scores = analysis(super, params, phase, trs, firstTrace, numberOfTraces, target, offsets)
 
   popDataPass(trs)
   popDataPass(trs)
@@ -441,9 +431,7 @@ function scatask(super::Task, trs::Trace, params::AesSboxAttack, firstTrace=1, n
   # dataOffsets = params.dataOffsets
   knownKey = params.knownKey
   updateInterval = params.updateInterval
-  targetFunction = (x...) -> getTargetFunction(params)(params, x...)
-
-  # targetFunction = (data::Union{UInt8,Vector{UInt8}}, dataColumn::Int, keyByte::UInt8) -> getTargetFunction(params)(params, data, dataColumn, keyByte)
+  target = getTarget(params)
 
 
   local key, scores
@@ -479,7 +467,7 @@ function scatask(super::Task, trs::Trace, params::AesSboxAttack, firstTrace=1, n
   end
 
   # do the attack
-  scores = analysis(super, params, phase, trs, firstTrace, numberOfTraces, targetFunction, UInt8, collect(UInt8, 0:255), params.keyByteOffsets)
+  scores = analysis(super, params, phase, trs, firstTrace, numberOfTraces, target, params.keyByteOffsets)
 
   # if we added a round function on the input data, now we need to remove it
   if !isnull(roundfn)

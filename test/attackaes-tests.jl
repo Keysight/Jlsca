@@ -10,7 +10,7 @@ using Jlsca.Trs
 function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysis, onetest::Bool=false)
     tracedir = "../aestraces"
     filenames = readdir(tracedir)
-    leakageFunctions = [hw]
+    leakageFunctions = [HW()]
 
     for filename in filenames
         if filename[end-3+1:end] != "trs"
@@ -40,10 +40,10 @@ function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         end
 
         params.analysis = analysis
-        if isa(params, AesSboxAttack) && isa(params.analysis, DPA)
-            params.analysis.leakageFunctions = leakageFunctions
-        elseif isa(params, AesMCAttack) && isa(params.analysis, DPA)
-          params.analysis.leakageFunctions = [bit7]
+        if isa(params, AesSboxAttack) && isa(params.analysis, CPA)
+            params.analysis.leakages = leakageFunctions
+        elseif isa(params, AesMCAttack) && isa(params.analysis, CPA)
+          params.analysis.leakages = [Bit(7)]
         end
 
         if conditional
@@ -60,8 +60,8 @@ function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysi
     end
 end
 
-@time testAesTraces(true, BACKWARD, DPA())
-@time testAesTraces(true, FORWARD, DPA())
-@time testAesTraces(false, BACKWARD, DPA())
-@time testAesTraces(false, FORWARD, DPA())
+@time testAesTraces(true, BACKWARD, CPA())
+@time testAesTraces(true, FORWARD, CPA())
+@time testAesTraces(false, BACKWARD, CPA())
+@time testAesTraces(false, FORWARD, CPA())
 @time testAesTraces(true, FORWARD, LRA(), true)

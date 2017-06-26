@@ -2,12 +2,12 @@
 #
 # Author: Cees-Bart Breunesse
 
-using ..Dpa
-using ..Lra
 using ..Trs
 using ..Log
 
-export Attack,Analysis,LRA,DPA,IncrementalCPA
+import ..Trs.reset
+
+export Attack,Analysis,LRA,MIA,CPA,IncrementalCPA
 export analysis,attack
 export sca
 export scatask
@@ -19,16 +19,29 @@ export getNumberOfCandidates
 abstract type Analysis end
 abstract type NonIncrementalAnalysis <: Analysis end
 
-# two types of analysis methods: DPA and LRA
-type DPA <: NonIncrementalAnalysis
-  statistic::Function
-  leakageFunctions::Vector{Function}
+abstract type Target{In <:Integer, Out <: Integer} end
+
+# three types of analysis methods: CPA and MIA and LRA 
+type CPA <: NonIncrementalAnalysis
+  leakages::Vector{Leakage}
   postProcess::Vector{Function}
   maxCols::Nullable{Int}
   logfile::SimpleCSV
 
-  function DPA()
-    return new(cor, [hw], [x -> abs.(x)], Nullable(), SimpleCSV())
+  function CPA()
+    return new([HW()], [x -> abs.(x)], Nullable(), SimpleCSV())
+  end
+end
+
+type MIA <: NonIncrementalAnalysis
+  leakages::Vector{Leakage}
+  postProcess::Vector{Function}
+  maxCols::Nullable{Int}
+  logfile::SimpleCSV
+  sampleBuckets::Int
+
+  function MIA()
+    return new([HW()], [x -> abs.(x)], Nullable(), SimpleCSV(), 9)
   end
 end
 
@@ -48,47 +61,69 @@ type LRA <: NonIncrementalAnalysis
 end
 
 type IncrementalCPA <: Analysis
-  leakageFunctions::Vector{Function}
+  leakages::Vector{Leakage}
   postProcess::Vector{Function}
   reducer::Function
   logfile::SimpleCSV
 
   function IncrementalCPA()
-    return new([hw], [x -> abs.(x)], x -> max(abs.(x)), SimpleCSV())
+    return new([HW()], [x -> abs.(x)], x -> max(abs.(x)), SimpleCSV())
   end
 end
 
 function printParameters(a::IncrementalCPA)
-  @printf("leakages:   %s\n", a.leakageFunctions)
+  @printf("leakages:   %s\n", a.leakages)
 end
 
 function printParameters(a::LRA)
   @printf("basismodel: %s\n", a.basisModel)
 end
 
-function printParameters(a::DPA)
-  @printf("statistic:  %s\n", a.statistic)
-  @printf("leakages:   %s\n", a.leakageFunctions)
+function printParameters(a::CPA)
+  @printf("leakages:   %s\n", a.leakages)
+end
+
+function printParameters(a::MIA)
+  @printf("leakages:   %s\n", a.leakages)
+  @printf("#buckets:   %d\n", a.sampleBuckets)
 end
 
 getNrLeakageFunctions(a::LRA) = 1
-getNrLeakageFunctions(a::DPA) = length(a.leakageFunctions)
-getNrLeakageFunctions(a::IncrementalCPA) = length(a.leakageFunctions)
+getNrLeakageFunctions(a::CPA) = length(a.leakages)
+getNrLeakageFunctions(a::MIA) = length(a.leakages)
+getNrLeakageFunctions(a::IncrementalCPA) = length(a.leakages)
 
 abstract type Attack end
 
-# currently supported: LRA and DPA
+function computeScores(a::CPA, data::Matrix{In}, samples::AbstractArray{Float64}, keyByteOffsets::Vector{Int}, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
+  (tr,tc) = size(samples)
+  (dr,dc) = size(data)
+  tr == dr || throw(DimensionMismatch())
 
-# (mostly) running a CPA attack, but is not called CPA because it's not necessarly using correlation. You can plug another function in the DPA type "statistic" field. But anyway, it's mostly CPA.
-function attack(a::DPA, trs::Trace, range::Range, keyByteOffsets::Vector{Int}, dataFunction::Function, dataFunctionReturnType::DataType, kbvals::Vector, scoresAndOffsets)
-
-  attackfun = (data, samples, keyByteOffsets) -> dpa(data, samples, keyByteOffsets, dataFunction, a.leakageFunctions, a.statistic, kbvals, dataFunctionReturnType, UInt8)
-
-  attack(convert(NonIncrementalAnalysis, a), attackfun, trs, range, keyByteOffsets, dataFunction, dataFunctionReturnType, kbvals, scoresAndOffsets)
-
+  HL::Matrix{UInt8} = predict(data, keyByteOffsets, target, kbvals, a.leakages)
+  C = cor(samples, HL)
+  return C
 end
 
-function attack(a::NonIncrementalAnalysis, attackfun::Function, trs::Trace, range::Range, keyByteOffsets::Vector{Int}, dataFunction::Function, dataFunctionReturnType::DataType, kbvals::Vector, scoresAndOffsets)
+function computeScores(a::MIA, data::Matrix{In}, samples::AbstractArray{Float64}, keyByteOffsets::Vector{Int}, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
+  (tr,tc) = size(samples)
+  (dr,dc) = size(data)
+  tr == dr || throw(DimensionMismatch())
+
+  HL::Matrix{UInt8} = predict(data, keyByteOffsets, target, kbvals, a.leakages)
+  C = mia(samples, HL, a.sampleBuckets)
+  return C
+end
+
+function computeScores(a::LRA, data::Matrix{In}, samples::AbstractArray{Float64}, keyByteOffsets::Vector{Int}, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
+   C = lra(data, samples, keyByteOffsets, target, a.basisModel, kbvals)
+  return C
+end
+
+function attack(a::NonIncrementalAnalysis, trs::Trace, range::Range, keyByteOffsets::Vector{Int}, target::Target{In,Out}, kbvals::Vector{UInt8}, scoresAndOffsets) where {In,Out}
+
+  local kbsamples::Matrix{Float64}
+  local kbdata::Matrix{In}
 
   (((data, samples), eof),elapsedtime,totalbytesallocated,garbagecollectiontime,alloccounters) = @timed readTraces(trs, range)
 
@@ -126,8 +161,9 @@ function attack(a::NonIncrementalAnalysis, attackfun::Function, trs::Trace, rang
         continue
       end
 
+      v = @view kbsamples[:,sr:srEnd]
       # run the attack
-      (C,elapsedtime,totalbytesallocated,garbagecollectiontime,alloccounters) = @timed attackfun(kbdata, kbsamples[:,sr:srEnd], [keyByteOffsets[kb]])
+      (C,elapsedtime,totalbytesallocated,garbagecollectiontime,alloccounters) = @timed computeScores(a, kbdata, v, [keyByteOffsets[kb]], target, kbvals)
 
       totalelapsedtime += elapsedtime
 
@@ -143,21 +179,13 @@ function attack(a::NonIncrementalAnalysis, attackfun::Function, trs::Trace, rang
   end
 end
 
-# running an LRA attack (I know this is also a DPA attack, I know, but it's a completely different beast from correlation, mia, or difference of means)
-function attack(a::LRA, trs::Trace, range::Range, keyByteOffsets::Vector{Int}, dataFunction::Function, dataFunctionReturnType::DataType, kbvals::Vector, scoresAndOffsets)
-  attackfun = (data, samples, keyByteOffsets) -> lra(data, samples, keyByteOffsets, dataFunction, a.basisModel, kbvals)
-
-  attack(convert(NonIncrementalAnalysis, a), attackfun, trs, range, keyByteOffsets, dataFunction, dataFunctionReturnType, kbvals, scoresAndOffsets)
-end
-
-
-function attack(a::IncrementalCPA, trs::Trace, range::Range, keyByteOffsets::Vector{Int}, dataFunction::Function, dataFunctionReturnType::DataType, kbvals::Vector, scoresAndOffsets)
+function attack(a::IncrementalCPA, trs::Trace, range::Range, keyByteOffsets::Vector{Int}, target::Target, kbvals::Vector{UInt8}, scoresAndOffsets)
   if isa(trs, DistributedTrace)
     @sync for w in workers()
-      @spawnat w init(Main.trs.postProcInstance, keyByteOffsets, dataFunction, kbvals, a.leakageFunctions)
+      @spawnat w init(Main.trs.postProcInstance, keyByteOffsets, target, kbvals, a.leakages)
     end
   else
-    init(trs.postProcInstance, keyByteOffsets, dataFunction, kbvals, a.leakageFunctions)
+    init(trs.postProcInstance, keyByteOffsets, target, kbvals, a.leakages)
   end
 
   ((C,eof),elapsedtime,totalbytesallocated,garbagecollectiontime,alloccounters) = @timed readTraces(trs, range)
@@ -168,7 +196,7 @@ function attack(a::IncrementalCPA, trs::Trace, range::Range, keyByteOffsets::Vec
   Log.writecsv(a.logfile, elapsedtime)
 
   for kb in 1:length(keyByteOffsets)
-    updateScoresAndOffsets!(scoresAndOffsets, C, kb, kb, length(a.leakageFunctions), a.postProcess, length(kbvals))
+    updateScoresAndOffsets!(scoresAndOffsets, C, kb, kb, length(a.leakages), a.postProcess, length(kbvals))
 
     Log.writecsv(a.logfile, rows, samplecols, hypocols)
 
@@ -177,7 +205,7 @@ function attack(a::IncrementalCPA, trs::Trace, range::Range, keyByteOffsets::Vec
 end
 
 # does the attack & analysis per xxx traces, should be called from an scatask
-function analysis(super::Task, params::Attack, phase::Enum, trs::Trace, firstTrace::Int, numberOfTraces::Int, targetFunction::Function, targetFunctionType::Type, kbVals::Vector{UInt8}, keyByteOffsets::Vector{Int})
+function analysis(super::Task, params::Attack, phase::Enum, trs::Trace, firstTrace::Int, numberOfTraces::Int, target::Target, keyByteOffsets::Vector{Int})
     local scoresAndOffsets
 
     if !isnull(params.updateInterval) && !hasPostProcessor(trs)
@@ -188,11 +216,11 @@ function analysis(super::Task, params::Attack, phase::Enum, trs::Trace, firstTra
     offset = firstTrace
     stepSize = min(numberOfTraces, get(params.updateInterval, numberOfTraces))
 
-    scoresAndOffsets = allocateScoresAndOffsets(getNrLeakageFunctions(params.analysis), length(kbVals), length(keyByteOffsets))
+    scoresAndOffsets = allocateScoresAndOffsets(getNrLeakageFunctions(params.analysis), nrKeyByteValues(params), length(keyByteOffsets))
     eof = false
 
     Log.writecsvheader(params.analysis.logfile, "#traces","#sec prep",map(x -> "#rows kb $x, #cols samples kb $x, #cols hypo kb $x, #secs kb $x", 1:length(keyByteOffsets))...)
-
+    
     for offset in firstTrace:stepSize:numberOfTraces
       range = offset:(offset+min(stepSize, numberOfTraces - offset + 1)-1)
 
@@ -204,7 +232,7 @@ function analysis(super::Task, params::Attack, phase::Enum, trs::Trace, firstTra
 
       clearScoresAndOffsets!(scoresAndOffsets)
 
-      attack(params.analysis, trs, range, keyByteOffsets, targetFunction, targetFunctionType, kbVals, scoresAndOffsets)
+      attack(params.analysis, trs, range, keyByteOffsets, target, keyByteValues(params), scoresAndOffsets)
 
       Log.writecsvnewline(params.analysis.logfile)
 
@@ -260,51 +288,52 @@ function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=
 
     ct = current_task()
 
-    # create the task that puts stuff in the channel
-    t = @task (scatask(ct, trs, params, firstTrace, numberOfTraces, phase, phaseInput); yieldto(ct, (BREAK,0)))
-
-    try
-      while !istaskdone(t)
-        (status, statusData) = yieldto(t)
-
-        if status == FINISHED
-          finished = true
-          key = statusData
-          if key != nothing
-            @printf("recovered key: %s\n", bytes2hex(key))
-            if !isnull(params.knownKey)
-              @printf("knownkey match: %s\n", string(key == get(params.knownKey)))
-            end
-          end
-        elseif status == INTERMEDIATESCORES
-          (scoresAndOffsets, numberOfTraces2, dataWidth, keyOffsets, knownKey) = statusData
-          printScores(scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2, (+), knownKey, printSubs,  5)
-
-          if !isnull(params.outputkka) && !isnull(params.knownKey)
-            add2kka(scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2, get(knownKey), kkaFilename)
-          end
-
-          if !isnull(scoresCallBack)
-            get(scoresCallBack)(phase, params, scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2)
-          end
-        elseif status == PHASERESULT
-          phaseInput = statusData
-          if !isnull(phaseInput)
-            @printf("next phase input: %s\n", bytes2hex(get(phaseInput)))
-          end
-        elseif status == BREAK
-          break
-        else
-          @printf("WARNING: don't know how to handle %s produced by scatask for %s\n", string(status), string(params))
+    # create the scatask with some sugar to catch exceptions
+    t = @task begin
+       try
+          scatask(ct, trs, params, firstTrace, numberOfTraces, phase, phaseInput)
+          yieldto(ct, (BREAK,0))
+        catch e
+          bt = catch_backtrace()  
+          showerror(STDERR, e, bt)
+          print(STDERR, "\n")
+          Base.throwto(ct, ErrorException("task dead, look at stack trace above"))
         end
       end
-    catch e
-      if t.exception != nothing
-        # @printf("Task blew up: %s", t.exception)
-        Base.show_backtrace(STDOUT, t.backtrace)
-        @printf("\n")
+
+    while !istaskdone(t) && t.state != :failed
+      (status, statusData) = yieldto(t)
+
+      if status == FINISHED
+        finished = true
+        key = statusData
+        if key != nothing
+          @printf("recovered key: %s\n", bytes2hex(key))
+          if !isnull(params.knownKey)
+            @printf("knownkey match: %s\n", string(key == get(params.knownKey)))
+          end
+        end
+      elseif status == INTERMEDIATESCORES
+        (scoresAndOffsets, numberOfTraces2, dataWidth, keyOffsets, knownKey) = statusData
+        printScores(scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2, (+), knownKey, printSubs,  5)
+
+        if !isnull(params.outputkka) && !isnull(params.knownKey)
+          add2kka(scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2, get(knownKey), kkaFilename)
+        end
+
+        if !isnull(scoresCallBack)
+          get(scoresCallBack)(phase, params, scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2)
+        end
+      elseif status == PHASERESULT
+        phaseInput = statusData
+        if !isnull(phaseInput)
+          @printf("next phase input: %s\n", bytes2hex(get(phaseInput)))
+        end
+      elseif status == BREAK
+        break
+      else
+        @printf("WARNING: don't know how to handle %s produced by scatask for %s\n", string(status), string(params))
       end
-      rethrow(e)
     end
   end
 
@@ -351,8 +380,8 @@ function getParameters(filename::AbstractString, direction::Direction)
   m = match(r"([t]{0,1}des[1-3]{0,1})_([^_]*)_([a-zA-Z0-9]*)", filename)
   if m != nothing
     params = DesSboxAttack()
-    params.analysis = DPA()
-    params.analysis.leakageFunctions = [bit0, bit1, bit2, bit3]
+    params.analysis = CPA()
+    params.analysis.leakages = [Bit(i) for i in 0:3]
     modeStr = m.captures[1]
     if modeStr == "des"
       params.mode = DES

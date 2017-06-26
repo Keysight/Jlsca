@@ -5,7 +5,9 @@
 # TODO: move incremental-statistics.jl into its own module
 include("incremental-statistics.jl")
 
-export IncrementalCorrelation,init
+import ..Trs.add,..Trs.getGlobCounter
+import ..Trs.toVal
+export IncrementalCorrelation,init,add,getGlobCounter
 
 type IncrementalCorrelation <: PostProcessor
   worksplit::WorkSplit
@@ -14,9 +16,9 @@ type IncrementalCorrelation <: PostProcessor
   meanXinitialized::Bool
   meanX::IncrementalMeanVariance
   keyByteOffsets::Vector{Int}
-  dataFunction::Function
+  target::Target
   kbvals::Vector
-  leakageFunctions::Vector{Function}
+  leakages::Vector{Leakage}
 
   function IncrementalCorrelation()
     IncrementalCorrelation(NoSplit())
@@ -27,11 +29,11 @@ type IncrementalCorrelation <: PostProcessor
   end
 end
 
-function init(c::IncrementalCorrelation, keyByteOffsets::Vector{Int}, dataFunction::Function, kbvals::Vector, leakageFunctions::Vector{Function})
+function init(c::IncrementalCorrelation, keyByteOffsets::Vector{Int}, target::Target, kbvals::Vector, leakages::Vector{Leakage})
   c.keyByteOffsets = keyByteOffsets
-  c.dataFunction = dataFunction
+  c.target = target
   c.kbvals = kbvals
-  c.leakageFunctions = leakageFunctions
+  c.leakages = leakages
 end
 
 function reset(c::IncrementalCorrelation)
@@ -42,15 +44,14 @@ end
 function toLeakages!(c::IncrementalCorrelation, hypo::Vector{UInt8}, idx::Int, input::Union{UInt8,UInt16})
   kbOffset = c.keyByteOffsets[idx]
   nrOfKbVals = length(c.kbvals)
-  nrOfFuns = length(c.leakageFunctions)
+  nrOfFuns = length(c.leakages)
 
 
-  targets = c.dataFunction(input, kbOffset, c.kbvals)
+  targets = target.(c.target, input, kbOffset, c.kbvals)
 
   @inbounds for l in 1:nrOfFuns
-    lfun = c.leakageFunctions[l]
     hypoidx = (l-1)*nrOfKbVals+1
-    hypo[hypoidx:(hypoidx+nrOfKbVals-1)] = lfun(targets)
+    hypo[hypoidx:(hypoidx+nrOfKbVals-1)] = leak.(c.leakages[l], targets)
   end
 
   return hypo
@@ -71,7 +72,7 @@ function add(c::IncrementalCorrelation, worksplit::SplitByData, trs::Trace, trac
     return
   end
 
-  hypo = zeros(UInt8, length(c.leakageFunctions) * length(c.kbvals))
+  hypo = zeros(UInt8, length(c.leakages) * length(c.kbvals))
 
   for idx in eachindex(data)
     val = data[idx]
@@ -113,7 +114,7 @@ function add(c::IncrementalCorrelation, worksplit::Union{NoSplit,SplitByTraces},
   for idx in eachindex(data)
     val = data[idx]
 
-    hypo = zeros(UInt8, length(c.leakageFunctions) * length(c.kbvals))
+    hypo = zeros(UInt8, length(c.leakages) * length(c.kbvals))
     toLeakages!(c, hypo, idx, val)
 
     if !haskey(c.covXY, idx)

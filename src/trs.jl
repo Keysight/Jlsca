@@ -17,7 +17,7 @@ include("trs-bitcompress.jl")
 include("distributed.jl")
 include("conditional-average.jl")
 include("conditional-bitwisereduction.jl")
-include("incremental-correlation.jl")
+# include("incremental-correlation.jl")
 
 include("trs-convert.jl")
 

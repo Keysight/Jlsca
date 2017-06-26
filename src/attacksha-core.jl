@@ -24,7 +24,7 @@ type ModAddAttack <: Attack
   outputkka::Nullable{AbstractString}
 
   function ModAddAttack()
-  	return new(Nullable(), DPA(), Nullable(), [PHASE1], Nullable(), Nullable())
+    return new(Nullable(), CPA(), Nullable(), [PHASE1], Nullable(), Nullable())
   end
 end
 
@@ -52,10 +52,10 @@ function scatask(trs::Trace, params::ModAddAttack, firstTrace=1, numberOfTraces=
 	addDataPass(trs, x -> prepModAdd(idx, partialKey, x))
 	# addDataPass(trs, x -> x[2] + (UInt16(x[1]) + 0xef > 0xff ? 0x1 : 0x0))
 
-	targetFunction = modaddout
+	target = modaddout
 	dataWidth = 1
 
-	scores = analysis(params, phase, trs, firstTrace, numberOfTraces, targetFunction, UInt8, collect(UInt8, 0:255), collect(1:dataWidth))
+	scores = analysis(params, phase, trs, firstTrace, numberOfTraces, target, collect(1:dataWidth))
 
 	rk = getRoundKey(scores)
 
@@ -95,16 +95,16 @@ function shattack()
 
   params = ModAddAttack()
 
-  params.analysis = DPA()
+  params.analysis = CPA()
   # params.analysis.postProcess = Nullable()
-  params.analysis.leakageFunctions = [hw]
-  # params.analysis.leakageFunctions = [hw; [x -> ((x .>> i) & 1) for i in 0:7 ]]
-  # params.analysis.leakageFunctions = [x -> ((x .>> i) & 1) for i in 0:7 ]
+  params.analysis.leakages = [HW()]
+  # params.analysis.leakages = [hw; [x -> ((x .>> i) & 1) for i in 0:7 ]]
+  # params.analysis.leakages = [x -> ((x .>> i) & 1) for i in 0:7 ]
 
   # params.analysis = LRA()
 
   params.phases = [PHASE1, PHASE2, PHASE3, PHASE4]
-  # params.analysis.leakageFunctions = [hw]
+  # params.analysis.leakages = [HW()]
 
   # enable conditional averaging
   # setPostProcessor(trs, CondAvg, getNumberOfCandidates(params))

@@ -8,7 +8,6 @@
 # MiaColumnData for the samples to be recomputed each time. Should be improved
 # although the bulk of the work is in the p(x,y) computation
 
-module Mia
 export mia
 
 using ProgressMeter
@@ -99,7 +98,7 @@ function bucket(X::Vector{Float64}, nrXbuckets::Int)
   return Xbucketed
 end
 
-function mia(O::Matrix, P::Matrix, nrOfObuckets=9)
+function mia(O::AbstractArray{Float64}, P::Matrix, nrOfObuckets=9)
   (ro,co) = size(O)
   (rp,cp) = size(P)
 
@@ -126,7 +125,4 @@ function mia(O::Matrix, P::Matrix, nrOfObuckets=9)
   finish!(progress)
 
   return C
-end
-
-
 end

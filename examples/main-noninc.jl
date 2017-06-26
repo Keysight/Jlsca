@@ -21,12 +21,12 @@ function go()
   end
 
   if isa(params, AesMCAttack)
-    params.analysis.leakageFunctions = [x -> (x .>> i) .& 1 for i in 0:31]
+    params.analysis.leakages = [Bit(i) for i in 0:31]
   else
     if isa(params, AesSboxAttack)
-      params.analysis.leakageFunctions = [x -> (x .>> i) .& 1 for i in 0:7]
+      params.analysis.leakages = [Bit(i) for i in 0:7]
     elseif isa(params, DesSboxAttack)
-      params.analysis.leakageFunctions = [x -> (x .>> i) .& 1 for i in 0:3]
+      params.analysis.leakages = [Bit(i) for i in 0:3]
     end
   end
 

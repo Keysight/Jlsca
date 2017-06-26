@@ -18,9 +18,7 @@ function ParallelCondAvgTest(splitmode)
     direction = FORWARD
     params = getParameters(fullfilename, direction)
 
-    params.analysis = DPA()
-    params.analysis.statistic = cor
-    params.analysis.leakageFunctions = [hw]
+    params.analysis = CPA()
 
     numberOfAverages = length(params.keyByteOffsets)
     numberOfCandidates = getNumberOfCandidates(params)
@@ -46,9 +44,7 @@ function ParallelCondAvgTest(splitmode)
 
     @test(key == get(params.knownKey))
 
-    params.analysis = DPA()
-    params.analysis.statistic = cor
-    params.analysis.leakageFunctions = [hw]
+    params.analysis = CPA()
 
     trs = InspectorTrace(fullfilename)
     setPostProcessor(trs, CondAvg(NoSplit()))
@@ -73,9 +69,7 @@ function ParallelCondAvgTestWithInterval()
     direction = FORWARD
     params = getParameters(fullfilename, direction)
 
-    params.analysis = DPA()
-    params.analysis.statistic = cor
-    params.analysis.leakageFunctions = [hw]
+    params.analysis = CPA()
     params.updateInterval = Nullable(updateInterval)
 
     numberOfAverages = length(params.keyByteOffsets)
@@ -97,9 +91,8 @@ function ParallelCondAvgTestWithInterval()
 
     @test(key == get(params.knownKey))
 
-    params.analysis = DPA()
-    params.analysis.statistic = cor
-    params.analysis.leakageFunctions = [hw]
+    params.analysis = CPA()
+    params.analysis.leakages = [HW()]
     params.updateInterval = Nullable()
 
     for s in 1:numberOfScas

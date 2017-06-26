@@ -19,13 +19,15 @@ function IncrementalCPATest(splitmode)
     params = getParameters(fullfilename, direction)
 
     params.analysis = IncrementalCPA()
-    params.analysis.leakageFunctions = [bit0,bit7]
+    params.analysis.leakages = [Bit(0),Bit(7)]
 
     numberOfAverages = length(params.keyByteOffsets)
     numberOfCandidates = getNumberOfCandidates(params)
 
     @everyworker begin
+      using Jlsca.Sca
       using Jlsca.Trs
+
       trs = InspectorTrace($fullfilename)
       if $splitmode == 1
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
@@ -45,9 +47,8 @@ function IncrementalCPATest(splitmode)
 
     @test(key == get(params.knownKey))
 
-    params.analysis = DPA()
-    params.analysis.statistic = cor
-    params.analysis.leakageFunctions = [bit0,bit7]
+    params.analysis = CPA()
+    params.analysis.leakages = [Bit(0),Bit(7)]
 
     trs = InspectorTrace(fullfilename)
 
@@ -71,7 +72,7 @@ function ParallelIncrementalCPATest(splitmode)
     params = getParameters(fullfilename, direction)
 
     params.analysis = IncrementalCPA()
-    params.analysis.leakageFunctions = [bit0,bit7]
+    params.analysis.leakages = [Bit(0),Bit(7)]
 
     numberOfAverages = length(params.keyByteOffsets)
     numberOfCandidates = getNumberOfCandidates(params)
@@ -98,7 +99,7 @@ function ParallelIncrementalCPATest(splitmode)
     @test(key == get(params.knownKey))
 
     params.analysis = IncrementalCPA()
-    params.analysis.leakageFunctions = [bit0,bit7]
+    params.analysis.leakages = [Bit(0),Bit(7)]
 
     trs = InspectorTrace(fullfilename)
     setPostProcessor(trs, IncrementalCorrelation(NoSplit()))
@@ -124,7 +125,7 @@ function ParallelIncrementalCPATestWithInterval()
     params = getParameters(fullfilename, direction)
 
     params.analysis = IncrementalCPA()
-    params.analysis.leakageFunctions = [bit0,bit7]
+    params.analysis.leakages = [Bit(0),Bit(7)]
     params.updateInterval = Nullable(updateInterval)
 
     numberOfAverages = length(params.keyByteOffsets)
@@ -147,7 +148,7 @@ function ParallelIncrementalCPATestWithInterval()
     @test(key == get(params.knownKey))
 
     params.analysis = IncrementalCPA()
-    params.analysis.leakageFunctions = [bit0,bit7]
+    params.analysis.leakages = [Bit(0),Bit(7)]
     params.updateInterval = Nullable()
 
     for s in 1:numberOfScas

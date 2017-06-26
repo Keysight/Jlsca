@@ -10,7 +10,6 @@ using Jlsca.Trs
 function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysis, onetest::Bool=false)
     tracedir = "../destraces"
     filenames = readdir(tracedir)
-    # leakageFunctions = [bit7]
 
     for filename in filenames
         if filename[end-3+1:end] != "trs"
@@ -21,7 +20,7 @@ function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysi
 
         params = getParameters(fullfilename, direction)
         params.analysis = analysis
-        # params.analysis.leakageFunctions = [hw]
+
         # create Trace instance
         if conditional
           @everyworker begin
@@ -49,13 +48,13 @@ function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysi
     end
 end
 
-x = DPA()
-x.leakageFunctions = [hw]
+x = CPA()
+x.leakages = [HW()]
 
 @time testDesTraces(true, BACKWARD, x)
-@time testDesTraces(true, FORWARD, DPA())
-@time testDesTraces(false, BACKWARD, DPA())
-@time testDesTraces(false, FORWARD, DPA())
+@time testDesTraces(true, FORWARD, CPA())
+@time testDesTraces(false, BACKWARD, CPA())
+@time testDesTraces(false, FORWARD, CPA())
 
 x = LRA()
 x.basisModel = x -> basisModelSingleBits(x, 4)

@@ -18,6 +18,9 @@ const right = 33:64
 
 abstract type DesAttack <: Attack end
 
+nrKeyByteValues(a::DesAttack) = 64
+keyByteValues(a::DesAttack) = collect(UInt8,0:63)
+
 type DesSboxAttack <: DesAttack
   mode::DesMode
   encrypt::Bool
@@ -34,8 +37,8 @@ type DesSboxAttack <: DesAttack
   outputkka::Nullable{AbstractString}
 
   function DesSboxAttack()
-    dpa = DPA()
-    dpa.leakageFunctions = [bit0, bit1, bit2, bit3, bit4]
+    dpa = CPA()
+    dpa.leakages = [Bit(0), Bit(1), Bit(2), Bit(3), Bit(4)]
     return new(DES, true, FORWARD, 1, collect(1:8), Nullable(), dpa, Nullable(), ROUNDOUT, false, [], Nullable(), Nullable())
   end
 end
@@ -54,14 +57,13 @@ function toShortString(params::DesSboxAttack)
   typeStr = (isa(params,DesSboxAttack) ? "SBOX" : "XXX")
   modeStr = string(params.mode)
   directionStr = string(params.direction)
-  analysisStr = (isa(params.analysis, DPA) ? "DPA" : "LRA")
+  analysisStr = (isa(params.analysis, CPA) ? "CPA" : "LRA")
 
   return @sprintf("%s_%s_%s_%s", typeStr, modeStr, analysisStr, directionStr)
  end
 
-
 function printParameters(params::DesSboxAttack)
-  targetFunction = getTargetFunction(params)
+  target = getTarget(params)
 
   attackStr = "Sbox"
   analysisStr = string(typeof(params.analysis).name.name)
@@ -70,7 +72,7 @@ function printParameters(params::DesSboxAttack)
   printParameters(params.analysis)
   @printf("mode:       %s %s\n", string(params.mode), (params.encrypt ? "ENC" : "DEC"))
   @printf("direction:  %s\n", string(params.direction))
-  @printf("target:     %s\n", string(targetFunction))
+  @printf("target:     %s\n", string(target))
   @printf("xor:        %s\n", string(params.xor))
   @printf("data at:    %s\n", string(params.dataOffset))
   @printf("key bytes:  %s\n", string(params.keyByteOffsets))
@@ -88,46 +90,22 @@ function getIdx(sixbits::Union{UInt16, UInt8})
   return idx
 end
 
-# works on columns of data
-function getIdx(sixbits::Union{Vector{UInt16}, Vector{UInt8}})
-  return map(getIdx, sixbits)
-end
-
 # target functions
+type DesSboxOut <: Target{UInt8,UInt8} end
 
-# works on single data byte, vector of keys
-function desSboxOut(sixbits::Union{UInt16, UInt8}, sbidx::Int, kbs::Vector{UInt8})
-  return map(i -> Sbox(sbidx)[i + 1], getIdx((sixbits & 0x3f) .⊻ kbs))
+target(this::DesSboxOut, sixbits::Union{UInt16, UInt8}, sbidx::Int, kb::UInt8) = Sbox(sbidx)[getIdx((sixbits & 0x3f) ⊻ kb) + 1]
+
+type DesSboxOutXORin <: Target{UInt8,UInt8} end
+
+function target(this::DesSboxOutXORin, sixbits::Union{UInt16, UInt8}, sbidx::Int, kb::UInt8)
+  inp =  ((sixbits & 0x3f) ⊻ kb) & 0xf
+  outp = Sbox(sbidx)[inp + 1]
+  return inp ⊻ outp
 end
 
-# works on columns of data
-function desSboxOut(sixbits::Union{Vector{UInt16}, Vector{UInt8}}, sbidx::Int, kb::UInt8)
-  return map(i -> Sbox(sbidx)[i + 1], getIdx((sixbits .& 0x3f) .⊻ kb))
-end
+type RoundOut <: Target{UInt16,UInt16} end
 
-# works on single data byte, vector of keys
-function desSboxOutXORin(sixbits::Union{UInt16, UInt8}, sbidx::Int, kbs::Vector{UInt8})
-  inp =  ((sixbits & 0x3f) .⊻ kbs) .& 0xf
-  outp = desSboxOut(sixbits,sbidx,kbs)
-  return inp .⊻ outp
-end
-
-# works on columns of data
-function desSboxOutXORin(sixbits::Union{Vector{UInt16}, Vector{UInt8}}, sbidx::Int, kb::UInt8)
-  inp =  ((sixbits .& 0x3f) .⊻ kb) .& 0xf
-  outp = desSboxOut(sixbits,sbidx,kb)
-  return inp .⊻ outp
-end
-
-# works on single data byte, vector of keys
-function roundOut(tenbits::UInt16, sbidx::Int, kbs::Vector{UInt8})
-  return desSboxOut(tenbits, sbidx, kbs) .⊻ (tenbits >> 6)
-end
-
-# works on columns of data
-function roundOut(tenbits::Vector{UInt16}, sbidx::Int, kb::UInt8)
-  return desSboxOut(tenbits, sbidx, kb) .⊻ (tenbits .>> 6)
-end
+target(this::RoundOut, tenbits::UInt16, sbidx::Int, kb::UInt8) = Sbox(sbidx)[getIdx((tenbits & 0x3f) ⊻ kb) + 1] ⊻ (tenbits >> 6)
 
 # round functions
 
@@ -196,14 +174,14 @@ function getNumberOfCandidates(params::DesSboxAttack)
   end
 end
 
-function getTargetFunction(params::DesSboxAttack)
+function getTarget(params::DesSboxAttack)
   if params.targetType == ROUNDOUT
-  	return roundOut
+  	return RoundOut()
   else
     if params.xor
-      return desSboxOutXORin
+      return DesSboxOutXORin()
     else
-      return desSboxOut
+      return DesSboxOut()
     end
   end
 end
@@ -313,7 +291,7 @@ end
 
 function scatask(super::Task, trs::Trace, params::DesSboxAttack, firstTrace=1, numberOfTraces=length(trs), phase::Phase=PHASE1, phaseInput=params.phaseInput)
 
-  targetFunction = getTargetFunction(params)
+  target = getTarget(params)
 
   local key, scores
 
@@ -327,7 +305,7 @@ function scatask(super::Task, trs::Trace, params::DesSboxAttack, firstTrace=1, n
   end
 
   # do the attack
-  scores = analysis(super, params, phase, trs, firstTrace, numberOfTraces, targetFunction, UInt8, collect(UInt8, 0:63), params.keyByteOffsets)
+  scores = analysis(super, params, phase, trs, firstTrace, numberOfTraces, target, params.keyByteOffsets)
 
   # if we added a round function on the input data, now we need to remove it
   if !isnull(roundfn)

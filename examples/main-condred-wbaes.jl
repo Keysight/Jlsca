@@ -34,11 +34,10 @@ function gofaster()
   params.keyLength = KL128
   params.direction = FORWARD
   params.dataOffset = 1
-  params.analysis = DPA()
-  params.analysis.statistic = cor
+  params.analysis = CPA()
   
   # the leakage function to attack dual AESes
-  params.analysis.leakageFunctions = [x -> gf2dot(x,UInt8(y)) for y in 1:255]
+  params.analysis.leakages = [x -> gf2dot(x,UInt8(y)) for y in 1:255]
   
   # to get what's called AES INVMUL SBOX in Daredevil
   params.sbox = map(Aes.gf8_inv, collect(UInt8, 0:255))
