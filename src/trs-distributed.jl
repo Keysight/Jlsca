@@ -1,7 +1,7 @@
 export DistributedTrace
 
 import Base.sync_begin, Base.sync_end, Base.async_run_thunk
-export @everyworker
+export @everyworker,@worker
 
 macro everyworker(ex)
     quote
@@ -11,6 +11,16 @@ macro everyworker(ex)
             async_run_thunk(()->remotecall_fetch(thunk, pid))
             yield() # ensure that the remotecall_fetch has been started
         end
+        sync_end()
+    end
+end
+
+macro worker(pid,ex)
+    quote
+        sync_begin()
+        thunk = ()->(eval(Main,$(Expr(:quote,ex))); nothing)
+        async_run_thunk(()->remotecall_fetch(thunk, pid))
+        yield() # ensure that the remotecall_fetch has been started
         sync_end()
     end
 end

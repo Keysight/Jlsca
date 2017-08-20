@@ -35,7 +35,6 @@ type MiaColumnData{T}
     for x in uniques
       wherex = where[x]
       px = length(wherex) / numobs
-      # where[x] = wherex
       p[x] = px
     end
 

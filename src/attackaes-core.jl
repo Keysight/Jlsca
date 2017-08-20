@@ -32,15 +32,15 @@ type AesSboxAttack <: AesAttack
   analysis::Analysis
   xor::Bool
   updateInterval::Nullable{Int}
-  phases::Vector{Phase}
-  phaseInput::Nullable{Vector{UInt8}}
+  phases::Vector{Int}
+  phaseInput::Vector{UInt8}
   outputkka::Nullable{AbstractString}
   sbox::Vector{UInt8}
   invsbox::Vector{UInt8}
 
   function AesSboxAttack()
     leakageFunctions = [Bit(0), Bit(1), Bit(2), Bit(3), Bit(4), Bit(5), Bit(6), Bit(7)]
-    return new(CIPHER, KL128, FORWARD, 1, collect(1:16), Nullable(), CPA(), false, Nullable(), [], Nullable(), Nullable(), Aes.sbox, Aes.invsbox)
+    return new(CIPHER, KL128, FORWARD, 1, collect(1:16), Nullable(), CPA(), false, Nullable(), [], Vector{UInt8}(0), Nullable(), Aes.sbox, Aes.invsbox)
   end
 end
 
@@ -62,15 +62,15 @@ type AesMCAttack <: AesAttack
   analysis::Analysis
   xor::Bool
   updateInterval::Nullable{Int}
-  phases::Vector{Phase}
-  phaseInput::Nullable{Vector{UInt8}}
+  phases::Vector{Int}
+  phaseInput::Vector{UInt8}
   outputkka::Nullable{AbstractString}
   sbox::Vector{UInt8}
   invsbox::Vector{UInt8}
 
   function AesMCAttack()
     leakageFunctions = [Bit(0)]
-    return new(CIPHER, KL128, FORWARD, 1, collect(1:16), Nullable(), CPA(), false, Nullable(), [], Nullable(), Nullable(), Aes.sbox, Aes.invsbox)
+    return new(CIPHER, KL128, FORWARD, 1, collect(1:16), Nullable(), CPA(), false, Nullable(), [], Vector{UInt8}(0), Nullable(), Aes.sbox, Aes.invsbox)
   end
 end
 
@@ -271,9 +271,9 @@ end
 
 
 # get the round key material the attack is recovering to add known key information in the scoring
-function getCorrectRoundKeyMaterial(params::AesAttack, phase::Phase)
+function getCorrectRoundKeyMaterial(params::AesAttack, phase::Int)
   if isnull(params.knownKey)
-    return Nullable{Vector{UInt8}}()
+    return Vector{UInt8}(0)
   end
 
   mode = params.mode
@@ -311,7 +311,11 @@ function getCorrectRoundKeyMaterial(params::AesAttack, phase::Phase)
     end
   end
 
-  return Nullable{Vector{UInt8}}(roundkey)
+  if isa(params, AesMCAttack)
+    return Nullable{Vector{UInt8}}(roundkey[[o for o in phase:4:16]])
+  else
+    return Nullable{Vector{UInt8}}(roundkey)
+  end
 end
 
 # filter function for mixcolumns attack so that we don't accept data that's not semi-constant
@@ -327,9 +331,8 @@ function filterConstantInput(offsets, data::Vector{UInt8}, constant::UInt8)
   return [data[x] for x in offsets]
 end
 
-
 # the mixcolumns attack
-function scatask(super::Task, trs::Trace, params::AesMCAttack, firstTrace=1, numberOfTraces=length(trs), phase::Phase=PHASE1, phaseInput=Nullable{Vector{UInt8}}())
+function scatask(super::Task, trs::Trace, params::AesMCAttack, firstTrace=1, numberOfTraces=length(trs), phase::Int=PHASE1, phaseInput=Vector{UInt8}(0))
   params.keyLength == KL128 || throw(ErrorException("AesMCAttack only supported for 128 bits keys"))
   params.direction == FORWARD || throw(ErrorException("AesMCAttack only supported in FORWARD direction"))
 
@@ -354,9 +357,6 @@ function scatask(super::Task, trs::Trace, params::AesMCAttack, firstTrace=1, num
 
   # myfn = (data,keyBytePosition,keyVal) -> target(params, data, keyBytePosition, keyVal, 1, constant)
 
-  if isnull(phaseInput)
-    phaseInput = Nullable(zeros(UInt8, 16))
-  end
 
   if phase == PHASE1
     offset = 1
@@ -387,21 +387,21 @@ function scatask(super::Task, trs::Trace, params::AesMCAttack, firstTrace=1, num
   # get the recovered key material
   roundkey::Vector{UInt8} = getRoundKey(scores)
 
-  # put them in their place
-  for o in 1:4
-    get(phaseInput)[offsets[o]] = roundkey[o]
-  end
-
   if phase == PHASE4
-    yieldto(super, (FINISHED, recoverKey(get(phaseInput), mode, direction)))
+    phaseInput = vcat(phaseInput, roundkey)
+    reordered = Vector{UInt8}(16)
+    for i in 0:3
+      reordered[i*4+1:i*4+4] = phaseInput[[o for o in i+1:4:16]]
+    end
+    yieldto(super, (FINISHED, recoverKey(reordered, mode, direction)))
   else
-    yieldto(super, (PHASERESULT, phaseInput))
+    yieldto(super, (PHASERESULT, roundkey))
   end
 
 end
 
 
-function getRoundFunction(phase::Phase, params::AesSboxAttack, phaseInput::Nullable{Vector{UInt8}})
+function getRoundFunction(phase::Int, params::AesSboxAttack, phaseInput::Vector{UInt8})
   if phase == PHASE2 && params.keyLength != KL128
       if params.keyLength == KL192
         dataWidth = 8
@@ -411,9 +411,9 @@ function getRoundFunction(phase::Phase, params::AesSboxAttack, phaseInput::Nulla
 
     # setup the round function to calculate the output or input of the next target round
     if (params.mode == CIPHER && params.direction == BACKWARD) || (params.mode == INVCIPHER && params.direction == FORWARD) || (params.mode == EQINVCIPHER && params.direction == FORWARD)
-        roundfn_ = x -> invRound(reshape(x, (4,4)), reshape(get(phaseInput), (4,4)))[end-dataWidth+1:end]
+        roundfn_ = x -> invRound(reshape(x, (4,4)), reshape(phaseInput, (4,4)))[end-dataWidth+1:end]
       else
-        roundfn_ = x -> round(reshape(x, (4,4)), reshape(get(phaseInput), (4,4)))[1:dataWidth]
+        roundfn_ = x -> round(reshape(x, (4,4)), reshape(phaseInput, (4,4)))[1:dataWidth]
     end
     roundfn = Nullable(roundfn_)
   else
@@ -424,7 +424,7 @@ function getRoundFunction(phase::Phase, params::AesSboxAttack, phaseInput::Nulla
 end
 
 # the sbox attack
-function scatask(super::Task, trs::Trace, params::AesSboxAttack, firstTrace=1, numberOfTraces=length(trs), phase::Phase=PHASE1, phaseInput=Nullable{Vector{UInt8}}())
+function scatask(super::Task, trs::Trace, params::AesSboxAttack, firstTrace=1, numberOfTraces=length(trs), phase::Int=PHASE1, phaseInput=Vector{UInt8}(0))
   mode = params.mode
   keyLength = params.keyLength
   direction = params.direction
@@ -506,8 +506,7 @@ function scatask(super::Task, trs::Trace, params::AesSboxAttack, firstTrace=1, n
       params.keyByteOffsets = collect(1:16)
     end
 
-    prevroundkey = Nullable(roundkey)
-    yieldto(super, (PHASERESULT, prevroundkey))
+    yieldto(super, (PHASERESULT, roundkey))
 
   elseif phase == PHASE2
     # done, just some key fiddling left
@@ -521,9 +520,9 @@ function scatask(super::Task, trs::Trace, params::AesSboxAttack, firstTrace=1, n
 
     # put the recovered key material in the correct order and run the key schedules
     if (direction == BACKWARD && mode == CIPHER) || (direction == FORWARD && mode != CIPHER)
-        keymaterial = vcat(roundkey, get(phaseInput))
+        keymaterial = vcat(roundkey, phaseInput)
     else
-        keymaterial = vcat(get(phaseInput), roundkey)
+        keymaterial = vcat(phaseInput, roundkey)
     end
 
     key = recoverKey(keymaterial, mode, direction)

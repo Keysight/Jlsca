@@ -39,6 +39,7 @@ end
 function reset(c::IncrementalCorrelation)
   c.covXY = Dict{Int,IncrementalCovarianceTiled}()
   c.meanXinitialized = false
+  c.counter = 0
 end
 
 function toLeakages!(c::IncrementalCorrelation, hypo::Vector{UInt8}, idx::Int, input::Union{UInt8,UInt16})

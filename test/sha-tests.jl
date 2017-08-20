@@ -1,6 +1,6 @@
 using Base.Test
 
-
+using Jlsca.Sca
 using Jlsca.Sha
 using Jlsca.Trs
 
@@ -50,82 +50,78 @@ function shatest7()
 	@test expected == out[1:12]
 end
 
-function shatestmodaddBits() 
-	secret::UInt32 = 0xdeadbeef
-	traces = 1000
-	samples = zeros(UInt8, traces, 32)
-	data = zeros(UInt8, traces, 4)
+function shatest8()
+	W = rand(UInt32)
+	t = 0
+	a0 = rand(UInt32)
+	b0 = rand(UInt32)
+	c0 = rand(UInt32)
+	d0 = rand(UInt32)
+	e0 = rand(UInt32)
 
-	for i in 1:traces
-		r = rand(UInt32)
-		a = secret + r
-		for j in 1:32
-			samples[i,j] = ((a >> (j-1)) & 1)
-		end
-		for j in 1:4
-			# big endian
-			data[i,4-j+1] = ((r >> ((j-1)*8)) & 0xff)
-		end
-	end
+	(a1,b1,c1,d1,e1) = Sha.iteration(W,t,a0,b0,c0,d0,e0)
 
-	writeToTraces("modaddBits.trs", data, samples)
+	@test Sha.inviteration(W,t,a1,b1,c1,d1,e1) == (a0,b0,c0,d0,e0)
 end
 
-function shatestmodaddHw8() 
-	secret::UInt32 = 0xc335ba47
-	traces = 1000
-	samples = zeros(UInt8, traces, 4)
-	data = zeros(UInt8, traces, 4)
-
-	for i in 1:traces
-		r = rand(UInt32)
-		a = secret + r
-		for j in 1:4
-			samples[i,j] = hw((a >> ((j-1)*8)) & 0xff)
-		end
-		for j in 1:4
-			# big endian
-			data[i,4-j+1] = ((r >> ((j-1)*8)) & 0xff)
-		end
-	end
-
-	writeToTraces("modaddHw8.trs", data, samples)
+function sha256test1() 
+	 @test sha256(b"abc") == hex2bytes("BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD") 
 end
 
-function shatestmodaddHw32() 
-	secret::UInt32 = 0xb4b3c4f3
-	traces = 1000
-	samples = zeros(UInt8, traces, 1)
-	data = zeros(UInt8, traces, 4)
-
-	for i in 1:traces
-		r = rand(UInt32)
-		a = secret + r
-		samples[i,1] = hw(a)
-		for j in 1:4
-			# big endian
-			data[i,4-j+1] = ((r >> ((j-1)*8)) & 0xff)
-		end
-	end
-
-	writeToTraces("modaddHw32.trs", data, samples)
+function sha256test3()
+	@test sha256(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq") == hex2bytes("248D6A61D20638B8E5C026930C3E6039A33CE45964FF2167F6ECEDD419DB06C1")
 end
 
-function shatestmodaddmadness()
-	secret::UInt32 = 0xdeadb000
-	traces = 10
 
-	for i in 1:traces
-		r = rand(UInt32)
-		a = secret + r
-		b::UInt8 = r & 0xff
-		k1::UInt8 = 0x4f
-		k2::UInt8 = k1 | 0x80
-		@printf("%08x + %08x == %08x\n", secret, r, secret+r)
-		@printf("%02x + %02x == %02x %s\n", b, k1, b + k1, bits(b + k1))
-		@printf("%02x + %02x == %02x %s\n", b, k2, b + k2, bits(b + k2))
+# FIXME move this out
+function leak!(buf, str, state)
+	@printf("%s: %08x\n", str, state)
+	write(buf, state)
+	write(buf, Sca.hw(state))
+	for i in 0:3
+		write(buf, Sca.hw((state >> i*8)&0xff))
+	end
+end
+
+using ProgressMeter
+
+
+function shatraces()
+	samplesBuf = IOBuffer()
+	nrOfSamples = 0
+	nrOfTraces = 100
+	local trs
+
+    @showprogress for i in 1:nrOfTraces
+    	input = [rand(UInt8) for i in 1:16]
+        output = sha1(input, (x,y)->leak!(samplesBuf,x,y))
+
+        if nrOfSamples == 0
+            nrOfSamples = position(samplesBuf)
+            filename = @sprintf("sha1.trs")
+            trs = InspectorTrace(filename, 16+20, UInt8, nrOfSamples)
+        else
+            # sanity check
+            if position(samplesBuf) != nrOfSamples
+                @printf("WOWOOWOOOO!!! Cipher returns non-constant #samples/run\n")
+                return
+            end
+        end
+
+        trs[i] = ([input;output], takebuf_array(samplesBuf))
+
 	end
 
+	close(trs)
+end
+
+function speedtest()
+	state = [rand(UInt8) for i in 1:20]
+	len = 100000
+
+	for i in 1:len
+		state = sha1(state)
+	end
 end
 
 shatest1()
@@ -135,4 +131,13 @@ shatest4()
 shatest5()
 shatest6()
 shatest7()
+shatest8()
 
+sha256test1()
+sha256test3()
+
+# @profile speedtest()
+# Profile.print(maxdepth=12,combine=true)
+
+
+# shatraces()

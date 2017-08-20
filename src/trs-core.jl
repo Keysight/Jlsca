@@ -14,6 +14,14 @@ export start,done,next,endof,setindex!
 
 abstract type Trace end
 
+abstract type Pass end
+
+type SimpleFunctionPass <: Pass 
+  fn::Function
+end
+
+pass(a::SimpleFunctionPass, x::Vector, idx::Int) = a.fn(x)
+
 # overloading these to implement an iterator
 start(trs::Trace) = 1
 done(trs::Trace, idx) = pipe(trs) ? false : (idx > length(trs))
@@ -38,8 +46,8 @@ function getSamples(trs::Trace, idx)
   samples = readSamples(trs, idx)
 
   # run all the passes over the trace
-  for fn in trs.passes
-   samples = fn(samples)
+  for p in trs.passes
+   samples = pass(p, samples, idx)
    if length(samples) == 0
      break
    end
@@ -71,14 +79,17 @@ function setindex!(trs::Trace, t::Tuple{Vector,Vector}, idx::Int)
   writeSamples(trs, idx, samples)
 end
 
+# add a sample pass (just a Function over a Vector{FLoat64}) to the list of passes for this trace set
+addSamplePass(trs::Trace, f::Function, prprnd=false) = addSamplePass(trs, SimpleFunctionPass(f), prprnd)
 
 # add a sample pass (just a Function over a Vector{FLoat64}) to the list of passes for this trace set
-function addSamplePass(trs::Trace, f::Function, prprnd=false)
+function addSamplePass(trs::Trace, p::Pass, prprnd=false)
   if prprnd == true
-    trs.passes = vcat(f, trs.passes)
+    trs.passes = vcat(p, trs.passes)
   else
-    trs.passes = vcat(trs.passes, f)
+    trs.passes = vcat(trs.passes, p)
   end
+  return nothing
 end
 
 # removes a sample pass
@@ -88,6 +99,7 @@ function popSamplePass(trs::Trace, fromStart=false)
   else
     trs.passes = trs.passes[1:end-1]
   end
+  return nothing
 end
 
 # add a data pass (just a Function over a Vector{x} where x is the type of the trace set)
@@ -97,6 +109,7 @@ function addDataPass(trs::Trace, f::Function, prprnd=false)
   else
     trs.dataPasses = vcat(trs.dataPasses, f)
   end
+  return nothing
 end
 
 # removes a data pass
@@ -106,6 +119,7 @@ function popDataPass(trs::Trace, fromStart=false)
   else
     trs.dataPasses = trs.dataPasses[1:end-1]
   end
+  return nothing
 end
 
 # removes the data processor and sets the number of traces it fed into the post processor to 0.

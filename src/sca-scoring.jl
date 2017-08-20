@@ -137,7 +137,7 @@ function add2kka(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}},
 end
 
 # print the scores pretty
-function printScores(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, keyLength, keyOffsets, numberOfTraces, leakageFunctionsCombinator=(+), correctRoundKeymaterial=Nullable{Vector{UInt8}}(), printsubs=true,  max=5, io=STDOUT)
+function printScores(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, keyLength, keyOffsets, numberOfTraces, leakageFunctionsCombinator=(+), correctRoundKeymaterial=Vector{UInt8}(0), printsubs=true,  max=5, io=STDOUT)
   scores = getCombinedScores(scoresAndOffsets, leakageFunctionsCombinator)
 
   nrLeakageFunctions = length(scoresAndOffsets)
@@ -158,9 +158,9 @@ function printScores(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt
 
     printableIndexes = indexes[1:max]
     if !isnull(correctRoundKeymaterial)
-      correctKbOffset = findfirst(x -> x == (get(correctRoundKeymaterial)[keyOffsets[j]] + 1), indexes)
+      correctKbOffset = findfirst(x -> x == (get(correctRoundKeymaterial)[j] + 1), indexes)
       if correctKbOffset > max
-        printableIndexes = [ indexes[1:max-1] ; get(correctRoundKeymaterial)[keyOffsets[j]] + 1]
+        printableIndexes = [ indexes[1:max-1] ; get(correctRoundKeymaterial)[j] + 1]
       end
     end
 
@@ -171,7 +171,7 @@ function printScores(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt
       peak = corrvalsPerCand[i]
       rank = findfirst(x -> x == i, indexes)
 
-      if !isnull(correctRoundKeymaterial) && cand == get(correctRoundKeymaterial)[keyOffsets[j]]
+      if !isnull(correctRoundKeymaterial) && cand == get(correctRoundKeymaterial)[j]
         pretty = "correct  "
       else
         pretty = "candidate"

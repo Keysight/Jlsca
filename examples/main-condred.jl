@@ -27,9 +27,6 @@ function gofaster()
     end
   end
 
-  numberOfAverages = length(params.keyByteOffsets)
-  numberOfCandidates = getNumberOfCandidates(params)
-
   localtrs = InspectorTrace(filename, true)
   addSamplePass(localtrs, tobits)
 
@@ -41,8 +38,7 @@ function gofaster()
       # this efficiently converts UInt64 to packed BitVectors
       addSamplePass(trs, tobits)
 
-      setPostProcessor(trs, CondReduce(SplitByData($numberOfAverages, $numberOfCandidates), $localtrs))
-      # setPostProcessor(trs, CondReduce(SplitByTracesBlock(), $localtrs))
+      setPostProcessor(trs, CondReduce(SplitByTracesBlock(), $localtrs))
   end
 
   numberOfTraces = @fetch length(Main.trs)

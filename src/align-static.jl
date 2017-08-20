@@ -2,7 +2,10 @@
 #
 # Author: Cees-Bart Breunesse
 
-export CorrelationAlignNaive,CorrelationAlignFFT,correlationAlign
+export CorrelationAlignNaive,CorrelationAlignFFT,correlationAlign,AlignPass
+
+import ..Trs.Pass
+import ..Trs.pass
 
 type CorrelationAlignNaive
   reference::Vector
@@ -142,4 +145,28 @@ function correlationAlign(samples::Vector{Float64}, state::CorrelationAlignFFT)
 
   ret = (referenceOffset-align,maxCorr)
   return ret
+end
+
+type AlignPass <: Pass 
+  c::CorrelationAlignFFT
+  shifts::Vector{Tuple{Int,Float64}}
+  hasval::BitVector
+  lowerBound::Float64
+
+  function AlignPass(c::CorrelationAlignFFT, nrTraces::Int, lowerBound::Float64)
+    new(c, Vector{Tuple{Int,Float64}}(nrTraces), falses(nrTraces), lowerBound)
+  end
+end
+
+function pass(a::AlignPass, x::Vector, idx::Int)
+  if !a.hasval[idx]
+    a.shifts[idx] = correlationAlign(convert(Vector{Float64}, x), a.c)
+    a.hasval[idx] = true
+  end
+  (shift, corrval) = a.shifts[idx]
+  if corrval > a.lowerBound
+    return circshift(x, shift)
+  else
+    return Vector{eltype(x)}(0)
+  end
 end

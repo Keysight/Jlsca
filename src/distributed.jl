@@ -2,7 +2,7 @@
 #
 # Authors: Cees-Bart Breunesse
 
-export WorkSplit,NoSplit,SplitByData,SplitByTraces,SplitByTracesSliced,SplitByTracesBlock
+export WorkSplit,NoSplit,SplitByData,SplitByTraces,SplitByTracesSliced,SplitByTracesBlock,getWorkerRange
 
 abstract type WorkSplit end
 

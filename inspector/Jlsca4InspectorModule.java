@@ -587,7 +587,7 @@ public class Jlsca4InspectorModule extends Module implements ModuleInChain {
       attackModel.setSelectedItem((String)module.get(ATTACKABLE));
       xorCheckBox.setSelected((Boolean)module.get(XOR));
       phaseModel.setSelectedItem((String)module.get(PHASE));
-      phaseInputTextField.setText((String)module.get(PHASEINPUT));
+      phaseInputTextField.setText((String)module.phaseInput);
       updateIntervalField.setText((String)module.get(UPDATEINTERVAL));
       analysisGroup.setSelected(actionCommandToButtonModel(analysisGroup, (String)module.get(ANALYSIS)), true);
       leakagesModel.setSelectedItem((String)module.get(LEAKAGE));

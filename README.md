@@ -13,6 +13,7 @@ Jlsca is a toolbox in Julia to do the computational part (DPA) of a side channel
 * AES128 enc/dec chosen input MixColumn attack
 * Some whitebox models for AES (INV MUL / Klemsa)
 * DES/TDES1/TDES2/TDES3 enc/dec, backward/forward attack
+* SHA1 backward/forward attack (for HMAC)
 * Known key analysis + key rank evolution CSV output
 * Inspector trace set input and output
 * Split sample and data raw binary (Daredevil) input and output
@@ -104,7 +105,7 @@ Jlsca.Trs.InspectorTrace(0x00,Nullable{Int64}(500),0x0020,1,UInt8,0x00000780,24,
 
 julia> #convert the data bytes to its hamming weight on the fly
 
-julia> addDataPass(trs, Jlsca.Sca.hw)
+julia> addDataPass(trs, x -> Jlsca.Sca.hw.(x))
 1-element Array{Any,1}:
  Jlsca.Sca.hw
 
@@ -156,7 +157,7 @@ julia> addDataPass(trs,mypass)
 1-element Array{Any,1}:
  mypass
 
-julia> addDataPass(trs, Jlsca.Sca.hw)
+julia> addDataPass(trs, x -> Jlsca.Sca.hw.(x))
 2-element Array{Any,1}:
  mypass      
  Jlsca.Sca.hw

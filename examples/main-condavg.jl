@@ -28,8 +28,6 @@ function gofaster()
     end
   end
 
-  numberOfAverages = length(params.keyByteOffsets)
-  numberOfCandidates = getNumberOfCandidates(params)
 
   @everyworker begin
       using Jlsca.Trs
@@ -44,8 +42,7 @@ function gofaster()
       # alignstate = CorrelationAlignFFT(reference, referenceOffset, maxShift)
       # addSamplePass(trs, x -> ((shift,corval) = correlationAlign(x, alignstate); corval > corvalMin ? circshift(x, shift) : Vector{eltype(x)}(0)))
 
-      setPostProcessor(trs, CondAvg(SplitByData($numberOfAverages, $numberOfCandidates)))
-      # setPostProcessor(trs, CondAvg(SplitByTracesBlock()))
+      setPostProcessor(trs, CondAvg(SplitByTracesBlock()))
       # setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
   end
 

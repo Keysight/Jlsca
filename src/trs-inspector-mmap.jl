@@ -2,7 +2,7 @@
 #
 # Author: Cees-Bart Breunesse
 
-export InspectorTraceMM,readData,readSamples,writeToTraces
+export InspectorTraceMM,readData,readSamples
 
 using Base.get
 import Base.close
