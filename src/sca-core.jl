@@ -277,6 +277,7 @@ function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=
   local key = nothing
   local status = nothing
   local phaseInput = params.phaseInput
+  local phaseOutput = Vector{UInt8}(0)
 
   if length(params.phases) == 0
     params.phases = getPhases(params)
@@ -301,6 +302,8 @@ function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=
       if !isnull(params.knownKey)
         knownrkmaterial = mapreduce(x -> get(getCorrectRoundKeyMaterial(params, x)), vcat, 1:(phase-1))
         phaseInput = knownrkmaterial
+      else
+        phaseInput = phaseOutput
       end
       @printf("phase input: %s\n", !isnull(phaseInput) ? bytes2hex(phaseInput) : "none")
     end
@@ -326,7 +329,7 @@ function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=
 
       if status == FINISHED
         finished = true
-        key = statusData
+        key = recoverKey(params, phaseOutput)
         if key != nothing
           @printf("recovered key: %s\n", bytes2hex(key))
           if !isnull(params.knownKey)
@@ -345,7 +348,7 @@ function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=
           get(scoresCallBack)(phase, params, scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2)
         end
       elseif status == PHASERESULT
-        phaseInput = vcat(phaseInput, statusData)
+        phaseOutput = vcat(phaseOutput, statusData)
       elseif status == INTERMEDIATECORRELATION
         if !isnull(corrCallBack)
           get(corrCallBack)(statusData...)

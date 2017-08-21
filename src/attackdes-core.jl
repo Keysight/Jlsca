@@ -246,6 +246,27 @@ function recoverKey(params::DesSboxAttack, phase::Int, rk1::Vector{UInt8}, rk2::
   return key
 end
 
+function recoverKey(params::DesSboxAttack, phaseInput::Vector{UInt8})
+    if params.mode == DES || params.mode == TDES1
+      key = recoverKey(params, PHASE2, phaseInput[1:8], phaseInput[9:16])
+    elseif params.mode == TDES2
+      key1 = recoverKey(params, PHASE2, phaseInput[1:8], phaseInput[9:16])
+      key2 = recoverKey(params, PHASE4, phaseInput[17:24], phaseInput[25:32])
+      key = vcat(key1,key2)
+    else
+      key1 = recoverKey(params, PHASE2, phaseInput[1:8], phaseInput[9:16])
+      key2 = recoverKey(params, PHASE4, phaseInput[17:24], phaseInput[25:32])
+      key3 = recoverKey(params, PHASE6, phaseInput[33:40], phaseInput[41:48])
+      if (params.encrypt && params.direction == FORWARD) || (!params.encrypt && params.direction == BACKWARD)
+        key = vcat(key1,key2,key3)
+      else
+        key = vcat(key3,key2,key1)
+      end
+    end
+
+    return key
+end
+
 function getCorrectRoundKeyMaterial(params::DesSboxAttack, phase::Int)
 	if isnull(params.knownKey)
 	    return Vector{UInt8}(0)
@@ -321,7 +342,6 @@ function scatask(super::Task, trs::Trace, params::DesSboxAttack, firstTrace=1, n
   popDataPass(trs)
 
   if length(params.keyByteOffsets) < 8
-    yieldto(super, (FINISHED, nothing))
     return
   end
 
@@ -337,44 +357,14 @@ function scatask(super::Task, trs::Trace, params::DesSboxAttack, firstTrace=1, n
     roundkey = getRoundKey(scores)
   end
 
-  # we're not done: determine what more to do
-  if phase == PHASE1
-    # produce a roundkey
-    yieldto(super, (PHASERESULT, roundkey))
-  elseif phase == PHASE2
-    if params.mode == DES || params.mode == TDES1
-      # produce final key
-      key = recoverKey(params, PHASE2, phaseInput[1:8], roundkey)
-      yieldto(super, (FINISHED, key))
-    else
-      # produce roundkey
-      yieldto(super, (PHASERESULT, roundkey))
-    end
-  elseif phase == PHASE3
-    # produce roundkey
-    yieldto(super, (PHASERESULT, roundkey))
-  elseif phase == PHASE4
-    if params.mode == TDES2
-      # produce final key
-      key1 = recoverKey(params, PHASE2, phaseInput[1:8], phaseInput[9:16])
-      key2 = recoverKey(params, PHASE4, phaseInput[17:24], roundkey)
-      yieldto(super, (FINISHED, vcat(key1,key2)))
-    else
-      # produce roundkey
-      yieldto(super, (PHASERESULT, roundkey))
-    end
-  elseif phase == PHASE5
-    # produce roundkey
-    yieldto(super, (PHASERESULT, roundkey))
+  yieldto(super, (PHASERESULT, roundkey))
+
+  if phase == PHASE2 && (params.mode == DES || params.mode == TDES1)
+      yieldto(super, (FINISHED,nothing))
+  elseif phase == PHASE4 && params.mode == TDES2
+      yieldto(super, (FINISHED,nothing))
   elseif phase == PHASE6
-    key1 = recoverKey(params, PHASE2, phaseInput[1:8], phaseInput[9:16])
-    key2 = recoverKey(params, PHASE4, phaseInput[17:24], phaseInput[25:32])
-    key3 = recoverKey(params, PHASE6, phaseInput[33:40], roundkey)
-    if (params.encrypt && params.direction == FORWARD) || (!params.encrypt && params.direction == BACKWARD)
-      yieldto(super, (FINISHED, vcat(key1,key2,key3)))
-    else
-      yieldto(super, (FINISHED, vcat(key3,key2,key1)))
-    end
+      yieldto(super, (FINISHED,nothing))
   end
 end
 

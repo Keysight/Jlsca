@@ -216,23 +216,26 @@ function scatask(super::Task, trs::Trace, params::Sha1InputAttack, firstTrace=1,
 
     popDataPass(trs)
 
-    if phase != 14
-        yieldto(super, (PHASERESULT, rk)) 
-    else
-        phaseInput = vcat(phaseInput, rk)
-        state = zeros(UInt8, 20)
-        a0 = Sha.rotr(getInt(2,phaseInput), 30)
-        b0 = Sha.rotr(getInt(3,phaseInput), 30)
-        c0 = getInt(4,phaseInput) - Sha.K(2)
-        d0 = getInt(1,phaseInput) - Sha.Ch(a0,Sha.rotl(b0,30),c0) - Sha.K(1)
-        e0 = getInt(0,phaseInput) - Sha.rotl(a0,5) - Sha.Ch(b0,c0,d0) - Sha.K(0)
-        setIntMSB(a0, 0, state)
-        setIntMSB(b0, 1, state)
-        setIntMSB(c0, 2, state)
-        setIntMSB(d0, 3, state)
-        setIntMSB(e0, 4, state)
-        yieldto(super, (FINISHED, state))
+    yieldto(super, (PHASERESULT, rk)) 
+
+    if phase == 14
+        yieldto(super, (FINISHED,nothing))
     end
+end
+
+function recoverKey(params::Sha1InputAttack, phaseInput::Vector{UInt8})
+    state = zeros(UInt8, 20)
+    a0 = Sha.rotr(getInt(2,phaseInput), 30)
+    b0 = Sha.rotr(getInt(3,phaseInput), 30)
+    c0 = getInt(4,phaseInput) - Sha.K(2)
+    d0 = getInt(1,phaseInput) - Sha.Ch(a0,Sha.rotl(b0,30),c0) - Sha.K(1)
+    e0 = getInt(0,phaseInput) - Sha.rotl(a0,5) - Sha.Ch(b0,c0,d0) - Sha.K(0)
+    setIntMSB(a0, 0, state)
+    setIntMSB(b0, 1, state)
+    setIntMSB(c0, 2, state)
+    setIntMSB(d0, 3, state)
+    setIntMSB(e0, 4, state)
+    return state
 end
 
 function getNumberOfCandidates(params::Sha1InputAttack)
@@ -299,14 +302,16 @@ function scatask(super::Task, trs::Trace, params::Sha1OutputAttack, firstTrace=1
     popDataPass(trs)
 
     popDataPass(trs)
-
     
-    if phase != 20
-        yieldto(super, (PHASERESULT, rk))
-    else
-        phaseInput = vcat(phaseInput,rk)
-        yieldto(super, (FINISHED, reinterpret(UInt8, map(bswap, reinterpret(UInt32, phaseInput)))))
+    yieldto(super, (PHASERESULT, rk))
+
+    if phase == 20
+        yieldto(super, (FINISHED,nothing))
     end
+end
+
+function recoverKey(params::Sha1OutputAttack, phaseInput::Vector{UInt8})
+    return reinterpret(UInt8, map(bswap, reinterpret(UInt32, phaseInput)))
 end
 
 function getCorrectRoundKeyMaterial(params::Sha1OutputAttack, phase::Int)

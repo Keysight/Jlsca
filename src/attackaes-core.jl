@@ -208,6 +208,45 @@ function recoverKey(keymaterial::Vector{UInt8}, mode, direction)
     end
 end
 
+function recoverKey(params::AesSboxAttack, phaseInput::Vector{UInt8})
+  mode = params.mode
+  direction = params.direction
+
+  if params.keyLength == KL128
+    key = recoverKey(phaseInput, mode, direction)
+  else
+    secondrklen = length(params.keyByteOffsets)
+    # for these mode & direction combinations we actually recovered a InvMixColumn key, so correct it
+    if (mode == CIPHER && direction == BACKWARD) || (mode == INVCIPHER && direction == FORWARD) || (mode == EQINVCIPHER && direction == FORWARD)
+      for i in 1:div(secondrklen,4)
+        phaseInput[16+(i-1)*4+1:16+i*4] = Aes.MixColumn(phaseInput[16+(i-1)*4+1:16+i*4])
+      end
+    end
+
+    # put the recovered key material in the correct order and run the key schedules
+    if (direction == BACKWARD && mode == CIPHER) || (direction == FORWARD && mode != CIPHER)
+        keymaterial = vcat(phaseInput[16+1:16+secondrklen], phaseInput[1:16])
+    else
+        keymaterial = vcat(phaseInput[1:16], phaseInput[16+1:16+secondrklen])
+    end
+
+    key = recoverKey(keymaterial, mode, direction)
+  end
+
+  return key
+end
+
+function recoverKey(params::AesMCAttack, phaseInput::Vector{UInt8}) 
+  mode = params.mode
+  direction = params.direction
+
+  reordered = Vector{UInt8}(16)
+  for i in 0:3
+    reordered[i*4+1:i*4+4] = phaseInput[[o for o in i+1:4:16]]
+  end
+  return recoverKey(reordered, mode, direction)
+end
+
 function getNumberOfCandidates(params::AesAttack)
   return 256
 end
@@ -386,16 +425,11 @@ function scatask(super::Task, trs::Trace, params::AesMCAttack, firstTrace=1, num
 
   # get the recovered key material
   roundkey::Vector{UInt8} = getRoundKey(scores)
+  yieldto(super, (PHASERESULT, roundkey))
 
   if phase == PHASE4
-    phaseInput = vcat(phaseInput, roundkey)
-    reordered = Vector{UInt8}(16)
-    for i in 0:3
-      reordered[i*4+1:i*4+4] = phaseInput[[o for o in i+1:4:16]]
-    end
-    yieldto(super, (FINISHED, recoverKey(reordered, mode, direction)))
+    yieldto(super, (FINISHED,nothing))
   else
-    yieldto(super, (PHASERESULT, roundkey))
   end
 
 end
@@ -484,48 +518,23 @@ function scatask(super::Task, trs::Trace, params::AesSboxAttack, firstTrace=1, n
 
   if notAllKeyBytes
     # not enough key bytes to continue
-    yieldto(super, (FINISHED, nothing))
     return
   end
 
   # get the recovered key material
   roundkey::Vector{UInt8} = getRoundKey(scores)
+  yieldto(super, (PHASERESULT, roundkey))
 
   if phase == PHASE1 && keyLength == KL128
-    # we're done now
-
-    key = recoverKey(roundkey, mode, direction)
-    yieldto(super, (FINISHED, key))
+    yieldto(super, (FINISHED,nothing))
   elseif phase == PHASE1
-    # we need another round
-
     # FIXME: get rid of this hack
     if keyLength == KL192
       params.keyByteOffsets = collect(1:8)
     else
       params.keyByteOffsets = collect(1:16)
     end
-
-    yieldto(super, (PHASERESULT, roundkey))
-
   elseif phase == PHASE2
-    # done, just some key fiddling left
-
-    # for these mode & direction combinations we actually recovered a InvMixColumn key, so correct it
-    if (mode == CIPHER && direction == BACKWARD) || (mode == INVCIPHER && direction == FORWARD) || (mode == EQINVCIPHER && direction == FORWARD)
-      for i in 1:div(length(params.keyByteOffsets),4)
-        roundkey[(i-1)*4+1:i*4] = Aes.MixColumn(roundkey[(i-1)*4+1:i*4])
-      end
-    end
-
-    # put the recovered key material in the correct order and run the key schedules
-    if (direction == BACKWARD && mode == CIPHER) || (direction == FORWARD && mode != CIPHER)
-        keymaterial = vcat(roundkey, phaseInput)
-    else
-        keymaterial = vcat(phaseInput, roundkey)
-    end
-
-    key = recoverKey(keymaterial, mode, direction)
-    yieldto(super, (FINISHED, key))
+    yieldto(super, (FINISHED,nothing))
   end
 end
