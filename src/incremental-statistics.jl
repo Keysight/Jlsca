@@ -188,7 +188,7 @@ type IncrementalCovarianceTiled
   cacheCount::Int
   cacheMax::Int
 
-  function IncrementalCovarianceTiled(numberOfX::Int, numberOfY::Int, tilesizeX::Int=128, tilesizeY::Int=128, caches::Int=32*Threads.nthreads())
+  function IncrementalCovarianceTiled(numberOfX::Int, numberOfY::Int, tilesizeX::Int=128, tilesizeY::Int=128, caches::Int=32)
     meanVarX = IncrementalMeanVariance(numberOfX)
     meanVarY = IncrementalMeanVariance(numberOfY)
 
