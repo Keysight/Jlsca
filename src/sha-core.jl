@@ -2,7 +2,8 @@
 #
 # Author: Cees-Bart Breunesse
 
-export sha1,sha256,hmacsha1,sha1init,update,final,Sha1state,Sha256state
+export sha1,sha256,hmacsha1,hmacsha256,sha1init,update,final,Sha1state,Sha256state
+export Ch,Maj
 
 Ch(x::UInt32,y::UInt32,z::UInt32) = (x & y) ⊻ (~x & z)
 Maj(x::UInt32,y::UInt32,z::UInt32) = (x & y) ⊻ (x & z) ⊻ (y & z)
@@ -234,10 +235,14 @@ type Sha256state <: Shastate
 	Sha256state() = new([SHA256H00, SHA256H01, SHA256H02, SHA256H03, SHA256H04, SHA256H05, SHA256H06, SHA256H07], zeros(UInt8, sha1blocksizebytes), sha1blocksizebytes, 0, 0)
 end
 
+export ∑0, ∑1
+
 ∑0(x::UInt32) = rotr(x,2) ⊻ rotr(x,13) ⊻ rotr(x,22)
 ∑1(x::UInt32) = rotr(x,6) ⊻ rotr(x,11) ⊻ rotr(x,25)
 σ0(x::UInt32) = rotr(x,7) ⊻ rotr(x,18) ⊻ (x >> 3)
 σ1(x::UInt32) = rotr(x,17) ⊻ rotr(x,19) ⊻ (x >> 10)
+
+export K256
 
 const K256 = [
 0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -265,21 +270,22 @@ end
 
 function iteration(W,t,a,b,c,d,e,f,g,h,leak::Function=(x,y)->x)
 	T1 = h + ∑1(e) + Ch(e,f,g) + K256[t+1] + W
+	leak("Ch1", (e & f))
+	leak("Ch2", (~e & g))
 	T2 = ∑0(a) + Maj(a,b,c)
-	leak(@sprintf("T1%d", t), T1)
-	leak(@sprintf("T2%d", t), T2)
-	leak(@sprintf("Ch%d", t), Ch(e,f,g))
-	leak(@sprintf("Maj%d", t), Maj(a,b,c))
+	leak("T1", T1)
+	leak("T2", T2)
 	h = g
 	g = f
 	f = e
 	e = d + T1
+	leak("e", e)
 	d = c
 	c = b
 	b = a
 	a = T1 + T2
+	leak("a", a)
 
-	# @printf("t %03d a, %08x, b %08x, c %08x, d %08x, e %08x, f %08x, g %08x, h %08x\n",t,a,b,c,d,e,f,g,h)
 	return (a,b,c,d,e,f,g,h)
 end
 
@@ -322,3 +328,14 @@ function sha256(msg::Vector{UInt8}, leak::Function=(x,y)->x)
 	return final(state, leak)	
 end
 
+function hmacsha256(key::Vector{UInt8}, msg::Vector{UInt8})
+	innerstate = sha256init()
+	innerkey = K0(key) .⊻ 0x36
+	update(innerstate, innerkey)
+	update(innerstate, msg)
+	outerstate = sha256init()
+	outerkey = K0(key) .⊻ 0x5c
+	update(outerstate, [outerkey; final(innerstate)])
+	return final(outerstate)
+
+end

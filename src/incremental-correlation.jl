@@ -167,8 +167,22 @@ function get(c::IncrementalCorrelation)
     end
   end
 
-  C = mapreduce(x -> getCorr(c.covXY[x]), hcat, sort(collect(keys(c.covXY))))
+  idxes = sort(collect(keys(c.covXY)))
 
+  rows = c.covXY[1].numberOfX
+  cols = sum(x -> c.covXY[x].numberOfY, idxes)
+  C = Matrix{Float64}(rows, cols)
+
+  ystart = 0
+  yend = 0
+
+  for i in idxes
+    yend += c.covXY[i].numberOfY
+    C[:,ystart+1:yend] = getCorr(c.covXY[i])
+    ystart += c.covXY[i].numberOfY
+  end
+
+  # C = mapreduce(x -> getCorr(c.covXY[x]), hcat, sort(collect(keys(c.covXY))))
   return C
 end
 

@@ -73,6 +73,15 @@ function sha256test3()
 end
 
 
+function hmacsha256test1()
+    msg = b"Sample message for keylen<blocklen"
+    key = hex2bytes("000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F")
+    expected = hex2bytes("A28CF43130EE696A98F14A37678B56BCFCBDD9E5CF69717FECF5480F0EBDF790")
+    out = hmacsha256(key, msg)
+
+    @test expected == out
+end
+
 # FIXME move this out
 function leak!(buf, str, state)
 	@printf("%s: %08x\n", str, state)
@@ -85,7 +94,7 @@ end
 
 using ProgressMeter
 
-
+# MOVE ME
 function shatraces()
 	samplesBuf = IOBuffer()
 	nrOfSamples = 0
@@ -115,6 +124,36 @@ function shatraces()
 	close(trs)
 end
 
+# MOVE ME
+function sha256traces()
+    samplesBuf = IOBuffer()
+    nrOfSamples = 0
+    nrOfTraces = 100
+    local trs
+
+    @showprogress for i in 1:nrOfTraces
+        input = [rand(UInt8) for i in 1:16]
+        output = sha256(input, (x,y)->leak!(samplesBuf,x,y))
+
+        if nrOfSamples == 0
+            nrOfSamples = position(samplesBuf)
+            filename = @sprintf("sha256.trs")
+            trs = InspectorTrace(filename, 16+32, UInt8, nrOfSamples)
+        else
+            # sanity check
+            if position(samplesBuf) != nrOfSamples
+                @printf("WOWOOWOOOO!!! Cipher returns non-constant #samples/run\n")
+                return
+            end
+        end
+
+        trs[i] = ([input;output], takebuf_array(samplesBuf))
+
+    end
+
+    close(trs)
+end
+
 function speedtest()
 	state = [rand(UInt8) for i in 1:20]
 	len = 100000
@@ -135,9 +174,11 @@ shatest8()
 
 sha256test1()
 sha256test3()
+hmacsha256test1()
 
 # @profile speedtest()
 # Profile.print(maxdepth=12,combine=true)
 
 
 # shatraces()
+# sha256traces()

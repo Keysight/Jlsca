@@ -268,10 +268,6 @@ function recoverKey(params::DesSboxAttack, phaseInput::Vector{UInt8})
 end
 
 function getCorrectRoundKeyMaterial(params::DesSboxAttack, phase::Int)
-	if isnull(params.knownKey)
-	    return Vector{UInt8}(0)
-	end
-
   key1 = 1:8
   key2 = 9:16
   key3 = 17:24
@@ -312,7 +308,7 @@ function getCorrectRoundKeyMaterial(params::DesSboxAttack, phase::Int)
     end
 	end
 
-	return Nullable(toSixbits(getK(expKey,r)))
+	return toSixbits(getK(expKey,r))
 
 end
 

@@ -173,7 +173,7 @@ function getCorrectRoundKeyMaterial(params::Sha1InputAttack, phase::Int)
     res[4] = Sha.rotl(b0,30)
     res[5] = c0 + Sha.K(2)
 
-    return Nullable(reinterpret(UInt8, map(ltoh, res))[intIdx*4+byteIdx+1:intIdx*4+byteIdx+nrBytes])
+    return reinterpret(UInt8, map(htol, res))[intIdx*4+byteIdx+1:intIdx*4+byteIdx+nrBytes]
 
 end
 
@@ -319,7 +319,7 @@ function getCorrectRoundKeyMaterial(params::Sha1OutputAttack, phase::Int)
 
     (intIdx,byteIdx) = getIdxes(params,phase)
 
-    return Nullable([UInt8((getIntMSB(intIdx,kk) >> (byteIdx*8)) & 0xff)])
+    return [UInt8((getIntMSB(intIdx,kk) >> (byteIdx*8)) & 0xff)]
 end
 
 function printParameters(params::Sha1OutputAttack)

@@ -364,7 +364,7 @@ end
 function getCorr(state::IncrementalCovarianceTiled)
   flushcache!(state)
 
-  corr = zeros(Float64, state.numberOfX, state.numberOfY)
+  corr = Matrix{Float64}(state.numberOfX, state.numberOfY)
 
   xstddev = getStdDev(state.meanVarX)
   ystddev = getStdDev(state.meanVarY)

@@ -10,11 +10,21 @@ import ..Trs.reset
 export Attack,Analysis,LRA,MIA,CPA,IncrementalCPA
 export analysis,attack
 export sca
-export scatask
+export scatask,analysis
 export Status
 export printParameters,getParameters
 export Direction,Phase
 export getNumberOfCandidates
+export Target
+export nrKeyByteValues
+export keyByteValues
+export target
+export getCorrectRoundKeyMaterial
+export recoverKey
+
+abstract type Attack end
+
+printParameters(a::Attack) = print("Unknown attack")
 
 abstract type Analysis end
 abstract type NonIncrementalAnalysis <: Analysis end
@@ -93,7 +103,6 @@ getNrLeakageFunctions(a::CPA) = length(a.leakages)
 getNrLeakageFunctions(a::MIA) = length(a.leakages)
 getNrLeakageFunctions(a::IncrementalCPA) = length(a.leakages)
 
-abstract type Attack end
 
 function computeScores(a::CPA, data::Matrix{In}, samples::AbstractArray{Float64}, keyByteOffsets::Vector{Int}, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
   (tr,tc) = size(samples)
@@ -162,6 +171,7 @@ function attack(super::Task, a::NonIncrementalAnalysis, trs::Trace, range::Range
       end
 
       v = @view kbsamples[:,sr:srEnd]
+      
       # run the attack
       (C,elapsedtime,totalbytesallocated,garbagecollectiontime,alloccounters) = @timed computeScores(a, kbdata, v, [keyByteOffsets[kb]], target, kbvals)
 
@@ -172,8 +182,15 @@ function attack(super::Task, a::NonIncrementalAnalysis, trs::Trace, range::Range
 
       yieldto(super, (INTERMEDIATECORRELATION, (C, [keyByteOffsets[kb]])))
 
+      for fn in a.postProcess
+        C[:] = fn(C)
+      end
+
       # get the scores for all leakage functions
-      updateScoresAndOffsets!(scoresAndOffsets, C, 1, kb, getNrLeakageFunctions(a), a.postProcess, length(kbvals))
+      updateScoresAndOffsets!(scoresAndOffsets, C, 1, kb, getNrLeakageFunctions(a), length(kbvals))
+
+      # let somebody do something with the scores for these traces
+      yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, rows, [kb], keyByteOffsets)))
     end
 
     Log.writecsv(a.logfile, totalelapsedtime)
@@ -192,20 +209,31 @@ function attack(super::Task, a::IncrementalCPA, trs::Trace, range::Range, keyByt
 
   ((C,eof),elapsedtime,totalbytesallocated,garbagecollectiontime,alloccounters) = @timed readTraces(trs, range)
 
+
   rows = length(range)
   (samplecols,hypocols) = size(C) 
 
+  # raw correlation data
   yieldto(super, (INTERMEDIATECORRELATION, (C, keyByteOffsets)))
+  
+  @printf("%s produced (%d, %d) correlation matrix\n", string(typeof(a).name.name), samplecols, hypocols)
 
   Log.writecsv(a.logfile, elapsedtime)
 
+  for fn in a.postProcess
+    C[:] = fn(C)
+  end
+
   for kb in 1:length(keyByteOffsets)
-    updateScoresAndOffsets!(scoresAndOffsets, C, kb, kb, length(a.leakages), a.postProcess, length(kbvals))
+    updateScoresAndOffsets!(scoresAndOffsets, C, kb, kb, length(a.leakages), length(kbvals))
 
     Log.writecsv(a.logfile, rows, samplecols, hypocols)
 
     Log.writecsv(a.logfile, 0)    
   end
+
+  # let somebody do something with the scores for these traces
+  yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs), collect(1:length(keyByteOffsets)), keyByteOffsets)))
 end
 
 # does the attack & analysis per xxx traces, should be called from an scatask
@@ -240,9 +268,10 @@ function analysis(super::Task, params::Attack, phase::Int, trs::Trace, firstTrac
 
       Log.writecsvnewline(params.analysis.logfile)
 
-      # let somebody do something with the scores for these traces
-      yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs), length(keyByteOffsets), keyByteOffsets, !isnull(params.knownKey) ? getCorrectRoundKeyMaterial(params, phase) : Nullable())))
+      # only for testing
+      yieldto(super, (ONLYFORTEST, (scoresAndOffsets, getCounter(trs), collect(1:length(keyByteOffsets)), keyByteOffsets)))
     end
+
 
     # reset the state of trace post processor (conditional averager)
     reset(trs)
@@ -263,14 +292,14 @@ const PHASE5 = 5
 const PHASE6 = 6
 export PHASE1,PHASE2,PHASE3,PHASE4,PHASE5,PHASE6
 
-@enum Status FINISHED PHASERESULT INTERMEDIATESCORES INTERMEDIATESCORESANDOFFSETS INTERMEDIATECORRELATION BREAK
+@enum Status FINISHED PHASERESULT INTERMEDIATESCORES ONLYFORTEST INTERMEDIATECORRELATION BREAK
 
 for s in instances(Direction); @eval export $(Symbol(s)); end
 # for s in instances(Phase); @eval export $(Symbol(s)); end
 for s in instances(Status); @eval export $(Symbol(s)); end
 
 # generic sca function, this one is called in all the unit tests and the main functions
-function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=length(trs), printSubs::Bool=false, scoresCallBack::Nullable{Function}=Nullable{Function}(), corrCallBack=Nullable{Function}())
+function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=length(trs), printSubs::Bool=false, scoresCallBack::Nullable{Function}=Nullable{Function}(), corrCallBack=Nullable{Function}(),testcallback=Nullable{Function}())
   @printf("\nJlsca running in Julia version: %s, %d processes/%d workers/%d threads per worker\n\n", VERSION, nprocs(), nworkers(), Threads.nthreads())
 
   printParameters(params)
@@ -300,7 +329,7 @@ function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=
     @printf("\nphase: %s\n", phase)
     if phase > 1
       if !isnull(params.knownKey)
-        knownrkmaterial = mapreduce(x -> get(getCorrectRoundKeyMaterial(params, x)), vcat, 1:(phase-1))
+        knownrkmaterial = mapreduce(x -> getCorrectRoundKeyMaterial(params, x), vcat, 1:(phase-1))
         phaseInput = knownrkmaterial
       else
         phaseInput = phaseOutput
@@ -337,21 +366,21 @@ function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=
           end
         end
       elseif status == INTERMEDIATESCORES
-        (scoresAndOffsets, numberOfTraces2, dataWidth, keyOffsets, knownKey) = statusData
-        printScores(scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2, (+), knownKey, printSubs, 5)
+        (scoresAndOffsets, numberOfTraces2, keyOffsets, prettyKeyOffsets) = statusData
+        printScores(params, phase, scoresAndOffsets, numberOfTraces2,keyOffsets,prettyKeyOffsets)
 
         if !isnull(params.outputkka) && !isnull(params.knownKey)
           add2kka(scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2, get(knownKey), kkaFilename)
-        end
-
-        if !isnull(scoresCallBack)
-          get(scoresCallBack)(phase, params, scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2)
         end
       elseif status == PHASERESULT
         phaseOutput = vcat(phaseOutput, statusData)
       elseif status == INTERMEDIATECORRELATION
         if !isnull(corrCallBack)
           get(corrCallBack)(statusData...)
+        end
+      elseif status == ONLYFORTEST
+        if !isnull(scoresCallBack)
+          get(scoresCallBack)(phase, params, scoresAndOffsets, length(keyOffsets), keyOffsets, numberOfTraces2)
         end
       elseif status == BREAK
         break

@@ -29,12 +29,8 @@ function clearScoresAndOffsets!(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, 
 end
 
 # the scoring function returns two vectors of matrices, one with scores matrices, one with offet matrices into the samples, for each leakage function
-function updateScoresAndOffsets!(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, C::Matrix{Float64}, keyIdxIntoC::Int, keyIdxIntoScores::Int, nrLeakageFunctions::Int, preprocessors::Vector{Function}, nrKeyChunkValues::Int=256)
+function updateScoresAndOffsets!(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, C::Matrix{Float64}, keyIdxIntoC::Int, keyIdxIntoScores::Int, nrLeakageFunctions::Int, nrKeyChunkValues::Int=256)
   (rc, cc) = size(C)
-
-  for fn in preprocessors
-    C = fn(C)
-  end
 
   for l in 1:nrLeakageFunctions
     # max per column for each leakage function for given key byte idx
@@ -84,7 +80,7 @@ function truncate(fname)
     close(fd)
 end
 
-function add2kka(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, keyLength, keyOffsets, numberOfTraces, correctRoundKeymaterial::Vector{UInt8}, fdorstring::Union{IO,AbstractString},  leakageFunctionsCombinator=(+))
+function add2kka(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, keyOffsets, numberOfTraces, correctRoundKeymaterial::Vector{UInt8}, fdorstring::Union{IO,AbstractString},  leakageFunctionsCombinator=(+))
   local fd
 
   if isa(fdorstring,AbstractString)
@@ -137,30 +133,32 @@ function add2kka(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}},
 end
 
 # print the scores pretty
-function printScores(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, keyLength, keyOffsets, numberOfTraces, leakageFunctionsCombinator=(+), correctRoundKeymaterial=Vector{UInt8}(0), printsubs=true,  max=5, io=STDOUT)
+function printScores(params::Attack, phase::Int, scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, numberOfTraces, keyOffsets, prettyKeyOffsets, leakageFunctionsCombinator=(+), printsubs=false,  max=5, io=STDOUT)
+  # FIXME: leakageFunctionsCombinator should be in attack params.
   scores = getCombinedScores(scoresAndOffsets, leakageFunctionsCombinator)
 
   nrLeakageFunctions = length(scoresAndOffsets)
-
+  keyLength = length(keyOffsets)
   winners = zeros(UInt8, keyLength)
-
-  @printf(io, "Results @ %d traces\n", numberOfTraces)
+  correctRoundKeymaterial = !isnull(params.knownKey) ? getCorrectRoundKeyMaterial(params, phase) : Vector{UInt8}(0)
+  @printf(io, "Results @ %d rows\n", numberOfTraces)
 
   for j in 1:keyLength
-    corrvalsPerCand = vec(scores[:,j])
+    kbOffset = keyOffsets[j]
+    corrvalsPerCand = vec(scores[:,kbOffset])
 
     # sort peaks
     indexes = sortperm(vec(corrvalsPerCand), rev=true)
 
     winners[j] = indexes[1] - 1
 
-    @printf(io, "kb: %d\n", keyOffsets[j] )
+    @printf(io, "kb: %d\n", prettyKeyOffsets[kbOffset] )
 
     printableIndexes = indexes[1:max]
-    if !isnull(correctRoundKeymaterial)
-      correctKbOffset = findfirst(x -> x == (get(correctRoundKeymaterial)[j] + 1), indexes)
+    if length(correctRoundKeymaterial) > 0
+      correctKbOffset = findfirst(x -> x == (correctRoundKeymaterial[kbOffset] + 1), indexes)
       if correctKbOffset > max
-        printableIndexes = [ indexes[1:max-1] ; get(correctRoundKeymaterial)[j] + 1]
+        printableIndexes = [ indexes[1:max-1] ; correctRoundKeymaterial[kbOffset] + 1]
       end
     end
 
@@ -171,14 +169,14 @@ function printScores(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt
       peak = corrvalsPerCand[i]
       rank = findfirst(x -> x == i, indexes)
 
-      if !isnull(correctRoundKeymaterial) && cand == get(correctRoundKeymaterial)[j]
+      if length(correctRoundKeymaterial) > 0 && cand == correctRoundKeymaterial[kbOffset]
         pretty = "correct  "
       else
         pretty = "candidate"
       end
 
       if nrLeakageFunctions == 1
-        sample = scoresAndOffsets[1][2][i,j]
+        sample = scoresAndOffsets[1][2][i,kbOffset]
         @printf(io, "rank: %3d, %s: 0x%02x, peak: %f @ %d\n", rank, pretty, cand, peak, sample)
       else
         @printf(io, "rank: %3d, %s: 0x%02x, %s of peaks: %f\n", rank, pretty, cand, string(leakageFunctionsCombinator), peak)
@@ -186,8 +184,8 @@ function printScores(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt
           # print the max peak for each leakage function
           for l in 1:nrLeakageFunctions
             (lscores, loffsets) = scoresAndOffsets[l]
-            sample = loffsets[i,j]
-            @printf(io, " %0.2f @ %d\n", lscores[i,j], sample)
+            sample = loffsets[i,kbOffset]
+            @printf(io, " %0.2f @ %d\n", lscores[i,kbOffset], sample)
           end
         end
       end

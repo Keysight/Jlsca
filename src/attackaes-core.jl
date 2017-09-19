@@ -311,10 +311,6 @@ end
 
 # get the round key material the attack is recovering to add known key information in the scoring
 function getCorrectRoundKeyMaterial(params::AesAttack, phase::Int)
-  if isnull(params.knownKey)
-    return Vector{UInt8}(0)
-  end
-
   mode = params.mode
   direction = params.direction
   knownKey = get(params.knownKey)
@@ -351,9 +347,9 @@ function getCorrectRoundKeyMaterial(params::AesAttack, phase::Int)
   end
 
   if isa(params, AesMCAttack)
-    return Nullable{Vector{UInt8}}(roundkey[[o for o in phase:4:16]])
+    return roundkey[[o for o in phase:4:16]]
   else
-    return Nullable{Vector{UInt8}}(roundkey)
+    return roundkey
   end
 end
 
