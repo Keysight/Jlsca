@@ -238,10 +238,6 @@ function recoverKey(params::Sha1InputAttack, phaseInput::Vector{UInt8})
     return state
 end
 
-function getNumberOfCandidates(params::Sha1InputAttack)
-	return 256
-end
-
 type Sha1OutputAttack <: Sha1Attack
   knownKey::Nullable{Vector{UInt8}}
   analysis::Analysis

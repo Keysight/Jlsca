@@ -63,16 +63,16 @@ function getCombinedScores(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matri
 end
 
 # get a round key from the scores
-function getRoundKey(scores::Matrix{Float64})
+function getRoundKey(params::DpaAttack, attack::Attack, phase::Int, scores::Matrix{Float64})
   return vec(mapslices(x -> UInt8(sortperm(x, rev=true)[1] - 1), scores, 1))
 end
 
-# get a round key from the scores per leakage function by recombining them first
-function getRoundKey(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, leakageFunctionsCombinator=(+))
-  scores = getCombinedScores(scoresAndOffsets, leakageFunctionsCombinator)
+# # get a round key from the scores per leakage function by recombining them first
+# function getRoundKey(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, leakageFunctionsCombinator=(+))
+#   scores = getCombinedScores(scoresAndOffsets, leakageFunctionsCombinator)
 
-  return getRoundKey(scores)
-end
+#   return getRoundKey(scores)
+# end
 
 function truncate(fname)
     fd = open(fname, "w")
@@ -133,14 +133,14 @@ function add2kka(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}},
 end
 
 # print the scores pretty
-function printScores(params::Attack, phase::Int, scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, numberOfTraces, keyOffsets, prettyKeyOffsets, leakageFunctionsCombinator=(+), printsubs=false,  max=5, io=STDOUT)
+function printScores(params::DpaAttack, phase::Int, scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, numberOfTraces, keyOffsets, prettyKeyOffsets, leakageFunctionsCombinator=(+), printsubs=false,  max=5, io=STDOUT)
   # FIXME: leakageFunctionsCombinator should be in attack params.
   scores = getCombinedScores(scoresAndOffsets, leakageFunctionsCombinator)
 
   nrLeakageFunctions = length(scoresAndOffsets)
   keyLength = length(keyOffsets)
   winners = zeros(UInt8, keyLength)
-  correctRoundKeymaterial = !isnull(params.knownKey) ? getCorrectRoundKeyMaterial(params, phase) : Vector{UInt8}(0)
+  correctRoundKeymaterial = !isnull(params.knownKey) ? getCorrectRoundKeyMaterial(params.attack, get(params.knownKey), phase) : Vector{UInt8}(0)
   @printf(io, "Results @ %d rows\n", numberOfTraces)
 
   for j in 1:keyLength

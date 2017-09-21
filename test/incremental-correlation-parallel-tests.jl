@@ -21,8 +21,8 @@ function IncrementalCPATest(splitmode)
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
 
-    numberOfAverages = length(params.keyByteOffsets)
-    numberOfCandidates = getNumberOfCandidates(params)
+    numberOfAverages = getNumberOfTargets(params.attack, 1)
+    numberOfCandidates = length(keyByteValues(params.attack))
 
     @everyworker begin
       using Jlsca.Sca
@@ -74,8 +74,8 @@ function ParallelIncrementalCPATest(splitmode)
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
 
-    numberOfAverages = length(params.keyByteOffsets)
-    numberOfCandidates = getNumberOfCandidates(params)
+    numberOfAverages = getNumberOfTargets(params.attack, 1)
+    numberOfCandidates = length(keyByteValues(params.attack))
 
     @everyworker begin
       using Jlsca.Trs
@@ -128,8 +128,8 @@ function ParallelIncrementalCPATestWithInterval()
     params.analysis.leakages = [Bit(0),Bit(7)]
     params.updateInterval = Nullable(updateInterval)
 
-    numberOfAverages = length(params.keyByteOffsets)
-    numberOfCandidates = getNumberOfCandidates(params)
+    numberOfAverages = getNumberOfTargets(params.attack, 1)
+    numberOfCandidates = length(keyByteValues(params.attack))
 
     @everyworker begin
       using Jlsca.Trs

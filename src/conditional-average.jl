@@ -131,7 +131,7 @@ function get(c::CondAvg)
     end
   end
 
-  datas = Matrix[]
+  datas = Array[]
   averages = Matrix[]
 
   maxVal = 0
@@ -153,7 +153,6 @@ function get(c::CondAvg)
     for i in 1:length(dataSnap)
       sampleSnap[i,:] = c.averages[k][dataSnap[i]]
     end
-    dataSnap = reshape(convert(Array{dataType,1}, dataSnap), length(dataSnap),1)
     push!(datas, dataSnap)
     push!(averages, sampleSnap)
   end

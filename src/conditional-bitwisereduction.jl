@@ -153,7 +153,7 @@ function get(c::CondReduce)
   end
 
 
-  datas = Matrix[]
+  datas = Array[]
   reducedsamples = Matrix[]
 
   maxVal = 0
@@ -201,7 +201,6 @@ function get(c::CondReduce)
       sampleSnap[j,:] = samples[idxes]
     end
 
-    dataSnap = reshape(convert(Array{dataType,1}, dataSnap), length(dataSnap),1)
     push!(datas, dataSnap)
     push!(reducedsamples, sampleSnap)
   end

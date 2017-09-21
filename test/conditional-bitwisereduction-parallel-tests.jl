@@ -21,8 +21,8 @@ function ParallelCondReduceTest(splitmode)
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0)]
 
-    numberOfAverages = length(params.keyByteOffsets)
-    numberOfCandidates = getNumberOfCandidates(params)
+    numberOfAverages = getNumberOfTargets(params.attack, 1)
+    numberOfCandidates = length(keyByteValues(params.attack))
 
     localtrs = InspectorTrace(fullfilename, true)
     addSamplePass(localtrs, tobits)
@@ -85,8 +85,8 @@ function ParallelCondReduceTestWithInterval()
     params.analysis.leakages = [Bit(0)]
     params.updateInterval = Nullable(updateInterval)
 
-    numberOfAverages = length(params.keyByteOffsets)
-    numberOfCandidates = getNumberOfCandidates(params)
+    numberOfAverages = getNumberOfTargets(params.attack, 1)
+    numberOfCandidates = length(keyByteValues(params.attack))
 
     localtrs = InspectorTrace(fullfilename, true)
     addSamplePass(localtrs, tobits)

@@ -30,9 +30,6 @@ function go()
     end
   end
 
-  numberOfAverages = length(params.keyByteOffsets)
-  numberOfCandidates = getNumberOfCandidates(params)
-
   trs = InspectorTrace(filename)
 
   # # example alignment pass
