@@ -90,7 +90,7 @@ function getCorrectRoundKeyMaterial(params::AesAttack, knownKey::Vector{UInt8}, 
 end
 
 function getNumberOfTargets(params::AesSboxAttack, phase::Int)
-  if params.keyLength == KL192
+  if params.keyLength == KL192 && phase == PHASE2
     return 8
   else
     return 16
@@ -238,7 +238,7 @@ function recoverKey(params::AesSboxAttack, phaseInput::Vector{UInt8})
   if params.keyLength == KL128
     key = recoverKeyHelper(phaseInput, mode, direction)
   else
-    secondrklen = getNumberOfTargets(params.attack, 1)
+    secondrklen = getNumberOfTargets(params, 2)
     # for these mode & direction combinations we actually recovered a InvMixColumn key, so correct it
     if (mode == CIPHER && direction == BACKWARD) || (mode == INVCIPHER && direction == FORWARD) || (mode == EQINVCIPHER && direction == FORWARD)
       for i in 1:div(secondrklen,4)
@@ -340,9 +340,9 @@ function getRoundFunction(params::AesSboxAttack, phase::Int, phaseInput::Vector{
 
     # setup the round function to calculate the output or input of the next target round
     if (params.mode == CIPHER && params.direction == BACKWARD) || (params.mode == INVCIPHER && params.direction == FORWARD) || (params.mode == EQINVCIPHER && params.direction == FORWARD)
-        roundfn_ = x -> invRound(reshape(x, (4,4)), reshape(phaseInput, (4,4)))[end-dataWidth+1:end]
+        roundfn_ = x -> invRound(reshape(x[1:16], (4,4)), reshape(phaseInput, (4,4)))[end-dataWidth+1:end]
       else
-        roundfn_ = x -> round(reshape(x, (4,4)), reshape(phaseInput, (4,4)))[1:dataWidth]
+        roundfn_ = x -> round(reshape(x[1:16], (4,4)), reshape(phaseInput, (4,4)))[1:dataWidth]
     end
     roundfn = Nullable(roundfn_)
   else

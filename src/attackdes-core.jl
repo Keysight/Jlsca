@@ -130,12 +130,12 @@ function round2(input::Vector{UInt8}, rk1::BitVector, params::DesRoundAttack)
   state = IP(toBits(input[1:8]))
   state[1:64] = [state[right]; f(state[right],rk1) .⊻ state[left]]
 
-  invplefts = toNibbles(invP(state[left]))[params.keyByteOffsets]
+  invplefts = toNibbles(invP(state[left]))
   if params.xor
-    invplefts $= toNibbles(invP(state[right]))[params.keyByteOffsets]
+    invplefts $= toNibbles(invP(state[right]))
   end
 
-  sboxins = toSixbits(E(state[right]))[params.keyByteOffsets]
+  sboxins = toSixbits(E(state[right]))
 
   return map((x,y) -> (UInt16(x) << 6) | y, invplefts, sboxins)
 end
@@ -291,60 +291,7 @@ function getCorrectRoundKeyMaterial(params::DesAttack, knownKey::Vector{UInt8}, 
 	end
 
 	return toSixbits(getK(expKey,r))
-
 end
-
-# function scatask(super::Task, trs::Trace, params::DesSboxAttack, firstTrace=1, numberOfTraces=length(trs), phase::Int=PHASE1, phaseInput=params.phaseInput)
-
-#   targets::Vector{Target} = [getTarget(params,sbidx) for sbidx in params.keyByteOffsets]
-
-#   local key, scores
-
-#   addDataPass(trs, (x -> x[params.dataOffset + collect(0:7)]))
-
-#   roundfn = getRoundFunction(phase, params, phaseInput)
-
-# 	# if we have a round function, add it
-#   if !isnull(roundfn)
-#     addDataPass(trs, get(roundfn))
-#   end
-
-#   # do the attack
-#   scores = analysis(super, params, phase, trs, firstTrace, numberOfTraces, targets, params.keyByteOffsets)
-
-#   # if we added a round function on the input data, now we need to remove it
-#   if !isnull(roundfn)
-#     popDataPass(trs)
-#   end
-
-#   popDataPass(trs)
-
-#   if getNumberOfTargets(params.attack, 1) < 8
-#     return
-#   end
-
-#   # get the recovered key material & be done with it
-#   if phase in [PHASE3;PHASE5]
-#     # kill the candidates that light up in DES1R16 when attacking DES2R1, etc..
-#     roundkey_ = getRoundKey(scores)
-#     roundkey = getRoundKeyBetter(params, phase, scores, recoverKey(params, phase-1, phaseInput[end-15:end-8], phaseInput[end-7:end]))
-#     if roundkey_ != roundkey
-#       @printf("Corrected round key: %s\n", bytes2hex(roundkey))
-#     end
-#   else
-#     roundkey = getRoundKey(scores)
-#   end
-
-#   yieldto(super, (PHASERESULT, roundkey))
-
-#   if phase == PHASE2 && (params.mode == DES || params.mode == TDES1)
-#       yieldto(super, (FINISHED,nothing))
-#   elseif phase == PHASE4 && params.mode == TDES2
-#       yieldto(super, (FINISHED,nothing))
-#   elseif phase == PHASE6
-#       yieldto(super, (FINISHED,nothing))
-#   end
-# end
 
 # if two candidates are winning (within 5% margin), then don't consider the winner that equals the round key of the "other" DES
 function pick(scorecol::Vector{Float64}, col::Int, block::UInt8)

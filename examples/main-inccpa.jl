@@ -18,12 +18,12 @@ function gofaster()
   end
 
   params.analysis = IncrementalCPA()
-  if isa(params, AesMCAttack)
+  if isa(params.attack, AesMCAttack)
     params.analysis.leakages = [Bit(i) for i in 0:31]
   else
-    if isa(params, AesSboxAttack)
+    if isa(params.attack, AesSboxAttack)
       params.analysis.leakages = [Bit(i) for i in 0:7]
-    elseif isa(params, DesSboxAttack)
+    elseif isa(params.attack, DesSboxAttack)
       params.analysis.leakages = [HW()]
     end
   end

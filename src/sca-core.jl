@@ -143,18 +143,18 @@ function computeScores(a::CPA, data::AbstractArray{In}, samples::AbstractArray{F
   return C
 end
 
-function computeScores(a::MIA, data::AbstractArray{In}, samples::AbstractArray{Float64}, keyByteOffsets::Vector{Int}, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
+function computeScores(a::MIA, data::AbstractArray{In}, samples::AbstractArray{Float64}, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
   (tr,tc) = size(samples)
   (dr,dc) = size(data)
   tr == dr || throw(DimensionMismatch())
 
-  HL::Matrix{UInt8} = predict(data, keyByteOffsets, target, kbvals, a.leakages)
+  HL::Matrix{UInt8} = predict(data, target, kbvals, a.leakages)
   C = mia(samples, HL, a.sampleBuckets)
   return C
 end
 
-function computeScores(a::LRA, data::AbstractArray{In}, samples::AbstractArray{Float64}, keyByteOffsets::Vector{Int}, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
-   C = lra(data, samples, keyByteOffsets, target, a.basisModel, kbvals)
+function computeScores(a::LRA, data::AbstractArray{In}, samples::AbstractArray{Float64}, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
+   C = lra(data, samples, target, a.basisModel, kbvals)
   return C
 end
 
@@ -322,7 +322,7 @@ function scataskUnified(super::Task, trs::Trace, params::DpaAttack, firstTrace::
   roundfn = getRoundFunction(params.attack, phase, phaseInput)
 
   if params.dataOffset != 1
-    addDataPass(trs, x -> x[1:end])
+    addDataPass(trs, x -> x[params.dataOffset:end])
   end
 
   if !isnull(roundfn)
@@ -509,7 +509,7 @@ function getParameters(filename::AbstractString, direction::Direction)
 
   m = match(r"([t]{0,1}des[1-3]{0,1})_([^_]*)_([a-zA-Z0-9]*)", filename)
   if m != nothing
-    attack = DesSboxAttack()
+    attack = DesRoundAttack()
     analysis = CPA()
     analysis.leakages = [HW()]
     params = DpaAttack(attack, analysis)

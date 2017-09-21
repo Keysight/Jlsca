@@ -20,7 +20,7 @@ function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         @printf("file: %s\n", fullfilename)
 
         params = getParameters(fullfilename, direction)
-        if isa(params, AesMCAttack) && (params.direction == BACKWARD || isa(analysis, LRA))
+        if isa(params.attack, AesMCAttack) && (params.attack.direction == BACKWARD || isa(analysis, LRA))
             continue
         end
 
@@ -40,9 +40,9 @@ function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         end
 
         params.analysis = analysis
-        if isa(params, AesSboxAttack) && isa(params.analysis, CPA)
+        if isa(params.attack, AesSboxAttack) && isa(params.analysis, CPA)
             params.analysis.leakages = leakageFunctions
-        elseif isa(params, AesMCAttack) && isa(params.analysis, CPA)
+        elseif isa(params.attack, AesMCAttack) && isa(params.analysis, CPA)
           params.analysis.leakages = [Bit(7)]
         end
 
