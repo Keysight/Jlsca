@@ -540,15 +540,16 @@ function getParameters(filename::AbstractString, direction::Direction)
   if m != nothing
     if direction == FORWARD
       attack = Sha1InputAttack()
-      params.attack = attack
+      analysis = CPA()
+      analysis.leakages = [HW()]
+      params = DpaAttack(attack,analysis)
       params.dataOffset = 1
-      params.analysis = CPA()
-      params.analysis.leakages = [HW()]
     else
-      params = Sha1OutputAttack()
+      attack = Sha1OutputAttack()
+      analysis = CPA()
+      analysis.leakages = [HW()]
+      params = DpaAttack(attack,analysis)
       params.dataOffset = 17
-      params.analysis = CPA()
-      params.analysis.leakages = [HW()]
     end
     params.knownKey = hex2bytes(m.captures[1])
     return params
