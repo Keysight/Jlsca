@@ -16,8 +16,8 @@ const right = 33:64
 
 abstract type DesAttack <: Attack end
 
-keyByteValues(a::DesAttack) = collect(UInt8,0:63)
-getNumberOfTargets(a::DesAttack, phase::Int) = 8
+guesses(a::DesAttack) = collect(UInt8,0:63)
+numberOfTargets(a::DesAttack, phase::Int) = 8
 
 type DesSboxAttack <: DesAttack
   mode::DesMode
@@ -41,13 +41,13 @@ type DesRoundAttack <: DesAttack
   end
 end
 
-function getPhases(params::DesAttack)
+function numberOfPhases(params::DesAttack)
   if params.mode == DES || params.mode == TDES1
-    return [PHASE1, PHASE2]
+    return PHASE2
   elseif params.mode == TDES2
-    return [PHASE1, PHASE2, PHASE3, PHASE4]
+    return PHASE4
   elseif params.mode == TDES3
-    return [PHASE1, PHASE2, PHASE3, PHASE4, PHASE5, PHASE6]
+    return PHASE6
   end
 end
 
@@ -168,7 +168,7 @@ function getTarget(params::DesRoundAttack, phase::Int, sbidx::Int)
   return RoundOut(sbidx)
 end
 
-function getRoundFunction(params::DesAttack, phase::Int, phaseInput=Vector{UInt8}(0))
+function getDataPass(params::DesAttack, phase::Int, phaseInput=Vector{UInt8}(0))
   if params.direction == BACKWARD
     encrypt = !params.encrypt
   else
@@ -249,7 +249,9 @@ function recoverKey(params::DesAttack, phaseInput::Vector{UInt8})
     return key
 end
 
-function getCorrectRoundKeyMaterial(params::DesAttack, knownKey::Vector{UInt8}, phase::Int)
+function correctKeyMaterial(params::DesAttack, knownKey::Vector{UInt8})
+  rk = Vector{UInt8}(0)
+
   key1 = 1:8
   key2 = 9:16
   key3 = 17:24
@@ -260,37 +262,42 @@ function getCorrectRoundKeyMaterial(params::DesAttack, knownKey::Vector{UInt8}, 
     key1 = 17:24
   end
 
-  if phase == PHASE1 || phase == PHASE2
-    key = knownKey[key1]
-    encrypt = params.encrypt
-  elseif phase == PHASE3 || phase == PHASE4
-    key = knownKey[key2]
-    encrypt = !params.encrypt
-  elseif phase == PHASE5 || phase == PHASE6
-    key = knownKey[key3]
-    encrypt = params.encrypt
+  for phase in 1:numberOfPhases(params)
+
+    if phase == PHASE1 || phase == PHASE2
+      key = knownKey[key1]
+      encrypt = params.encrypt
+    elseif phase == PHASE3 || phase == PHASE4
+      key = knownKey[key2]
+      encrypt = !params.encrypt
+    elseif phase == PHASE5 || phase == PHASE6
+      key = knownKey[key3]
+      encrypt = params.encrypt
+    end
+
+    expKey = Des.KeyExpansion(key)
+
+    mode = params.mode
+    direction = params.direction
+
+    if phase == PHASE1 || phase == PHASE3 || phase == PHASE5
+      if (encrypt && direction == FORWARD) || (!encrypt && direction == BACKWARD)
+        r = 1
+      else
+        r = 16
+      end
+    elseif phase == PHASE2 || phase == PHASE4 || phase == PHASE6
+      if (encrypt && direction == FORWARD) || (!encrypt && direction == BACKWARD)
+        r = 2
+      else
+        r = 15
+      end
+    end
+
+    rk = vcat(rk, toSixbits(getK(expKey,r)))
   end
 
-	expKey = Des.KeyExpansion(key)
-
-  mode = params.mode
-  direction = params.direction
-
-  if phase == PHASE1 || phase == PHASE3 || phase == PHASE5
-    if (encrypt && direction == FORWARD) || (!encrypt && direction == BACKWARD)
-  		r = 1
-    else
-      r = 16
-    end
-	elseif phase == PHASE2 || phase == PHASE4 || phase == PHASE6
-    if (encrypt && direction == FORWARD) || (!encrypt && direction == BACKWARD)
-  		r = 2
-    else
-      r = 15
-    end
-	end
-
-	return toSixbits(getK(expKey,r))
+  return rk
 end
 
 # if two candidates are winning (within 5% margin), then don't consider the winner that equals the round key of the "other" DES

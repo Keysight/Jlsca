@@ -20,8 +20,8 @@ function ParallelCondAvgTest(splitmode)
 
     params.analysis = CPA()
 
-    numberOfAverages = getNumberOfTargets(params.attack, 1)
-    numberOfCandidates = length(keyByteValues(params.attack))
+    numberOfAverages = numberOfTargets(params.attack, 1)
+    numberOfCandidates = length(guesses(params.attack))
 
     @everyworker begin
       using Jlsca.Trs
@@ -72,8 +72,8 @@ function ParallelCondAvgTestWithInterval()
     params.analysis = CPA()
     params.updateInterval = Nullable(updateInterval)
 
-    numberOfAverages = getNumberOfTargets(params.attack, 1)
-    numberOfCandidates = length(keyByteValues(params.attack))
+    numberOfAverages = numberOfTargets(params.attack, 1)
+    numberOfCandidates = length(guesses(params.attack))
 
     @everyworker begin
       using Jlsca.Trs

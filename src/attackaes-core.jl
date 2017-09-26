@@ -17,8 +17,6 @@ for s in instances(AesKeyLength); @eval export $(Symbol(s)); end
 
 abstract type AesAttack <: Attack end
 
-keyByteValues(a::AesAttack) = collect(UInt8,0:255)
-
 # two types of attacks: sbox or mixcolumn
 type AesSboxAttack <: AesAttack
   mode::AesMode
@@ -47,49 +45,46 @@ type AesMCAttack <: AesAttack
 end
 
 # get the round key material the attack is recovering to add known key information in the scoring
-function getCorrectRoundKeyMaterial(params::AesAttack, knownKey::Vector{UInt8}, phase::Int)
+function correctKeyMaterial(params::AesAttack, knownKey::Vector{UInt8})
   mode = params.mode
   direction = params.direction
   keyLength = params.keyLength
 
-  rklength = 16
-  off = 0
-  if isa(params, AesSboxAttack)
-    if phase == PHASE1
-      off = 0
-    else phase == PHASE2
-      off = 16
-      if keyLength == KL192
-        rklength = 8
-      end
-    end
-  end
+  Nk = div(length(knownKey),Aes.wz)
+  Nr = Aes.keylength2Nr(length(knownKey))
+  w = Aes.KeyExpansion(knownKey, Nr, Nk)
 
-  if (mode == CIPHER && direction == FORWARD) || (mode == INVCIPHER && direction == BACKWARD) || (mode == EQINVCIPHER && direction == BACKWARD)
-    roundkey = knownKey[off+1:off+rklength]
+  fwkeysched = (mode == CIPHER && direction == FORWARD) || (mode == INVCIPHER && direction == BACKWARD) || (mode == EQINVCIPHER && direction == BACKWARD)
+
+  if fwkeysched
+    roundkey1 = w[1:16]
   else
-    Nk = div(length(knownKey),Aes.wz)
-    Nr = Aes.keylength2Nr(length(knownKey))
-    w = Aes.KeyExpansion(knownKey, Nr, Nk)
-    roundkey = w[end-off+1-rklength:end-off]
+    roundkey1 = w[end-16+1:end]
   end
 
-  if isa(params, AesSboxAttack) && phase == PHASE2
-    if (mode == CIPHER && direction == BACKWARD) || (mode == INVCIPHER && direction == FORWARD) || (mode == EQINVCIPHER && direction == FORWARD)
+  if isa(params, AesSboxAttack) && keyLength > KL128
+    rklength = (keyLength == KL192 ? 8 : 16)
+    if fwkeysched
+      roundkey2 = w[16+1:16+rklength]
+    else
+      roundkey2 = w[end-16-rklength+1:end-16]
+    end
+
+    if !fwkeysched
       for i in 1:div(rklength,4)
-        roundkey[(i-1)*4+1:i*4] = Aes.InvMixColumn(roundkey[(i-1)*4+1:i*4])
+        roundkey2[(i-1)*4+1:i*4] = Aes.InvMixColumn(roundkey2[(i-1)*4+1:i*4])
       end
     end
-  end
 
-  if isa(params, AesMCAttack)
-    return roundkey[[o for o in phase:4:16]]
+    return vcat(roundkey1, roundkey2)
+  elseif isa(params, AesMCAttack)
+    return roundkey1[reduce(vcat, [[o for o in i:4:16] for i in 1:4])]
   else
-    return roundkey
+    return roundkey1
   end
 end
 
-function getNumberOfTargets(params::AesSboxAttack, phase::Int)
+function numberOfTargets(params::AesSboxAttack, phase::Int)
   if params.keyLength == KL192 && phase == PHASE2
     return 8
   else
@@ -97,20 +92,20 @@ function getNumberOfTargets(params::AesSboxAttack, phase::Int)
   end
 end
 
-function getNumberOfTargets(params::AesMCAttack, phase::Int)
+function numberOfTargets(params::AesMCAttack, phase::Int)
   return 4
 end
 
-function getPhases(params::AesSboxAttack)
+function numberOfPhases(params::AesSboxAttack)
   if params.keyLength == KL128
-    return [PHASE1]
+    return PHASE1
   else
-    return [PHASE1, PHASE2]
+    return PHASE2
   end
 end
 
-function getPhases(params::AesMCAttack)
-  return [PHASE1, PHASE2, PHASE3, PHASE4]
+function numberOfPhases(params::AesMCAttack)
+  return PHASE4
 end
 
 # target functions
@@ -238,7 +233,7 @@ function recoverKey(params::AesSboxAttack, phaseInput::Vector{UInt8})
   if params.keyLength == KL128
     key = recoverKeyHelper(phaseInput, mode, direction)
   else
-    secondrklen = getNumberOfTargets(params, 2)
+    secondrklen = numberOfTargets(params, 2)
     # for these mode & direction combinations we actually recovered a InvMixColumn key, so correct it
     if (mode == CIPHER && direction == BACKWARD) || (mode == INVCIPHER && direction == FORWARD) || (mode == EQINVCIPHER && direction == FORWARD)
       for i in 1:div(secondrklen,4)
@@ -330,13 +325,13 @@ function filterConstantInput(offsets, data::Vector{UInt8}, constant::UInt8)
   return [data[x] for x in offsets]
 end
 
-function getRoundFunction(params::AesSboxAttack, phase::Int, phaseInput::Vector{UInt8})
+function getDataPass(params::AesSboxAttack, phase::Int, phaseInput::Vector{UInt8})
   if phase == PHASE2 && params.keyLength != KL128
-      if params.keyLength == KL192
-        dataWidth = 8
-      else
-        dataWidth = 16
-      end
+    if params.keyLength == KL192
+      dataWidth = 8
+    else
+      dataWidth = 16
+    end
 
     # setup the round function to calculate the output or input of the next target round
     if (params.mode == CIPHER && params.direction == BACKWARD) || (params.mode == INVCIPHER && params.direction == FORWARD) || (params.mode == EQINVCIPHER && params.direction == FORWARD)
@@ -352,7 +347,7 @@ function getRoundFunction(params::AesSboxAttack, phase::Int, phaseInput::Vector{
   return roundfn
 end
 
-function getRoundFunction(params::AesMCAttack, phase::Int, phaseInput::Vector{UInt8})
+function getDataPass(params::AesMCAttack, phase::Int, phaseInput::Vector{UInt8})
   params.keyLength == KL128 || throw(ErrorException("AesMCAttack only supported for 128 bits keys"))
   params.direction == FORWARD || throw(ErrorException("AesMCAttack only supported in FORWARD direction"))
   

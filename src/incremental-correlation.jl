@@ -33,7 +33,7 @@ end
 function init(c::IncrementalCorrelation, attack::Attack, phase::Int, leakages::Vector{Leakage}, targetOffsets::Vector{Int})
   c.targetOffsets = targetOffsets
   c.attack = attack
-  c.kbvals = keyByteValues(attack)
+  c.kbvals = guesses(attack)
   c.leakages = leakages
   c.targets = map(t -> getTarget(attack, phase, t), targetOffsets)
 end

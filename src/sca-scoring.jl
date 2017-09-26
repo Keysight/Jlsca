@@ -140,7 +140,9 @@ function printScores(params::DpaAttack, phase::Int, scoresAndOffsets::Vector{Tup
   nrLeakageFunctions = length(scoresAndOffsets)
   keyLength = length(keyOffsets)
   winners = zeros(UInt8, keyLength)
-  correctRoundKeymaterial = !isnull(params.knownKey) ? getCorrectRoundKeyMaterial(params.attack, get(params.knownKey), phase) : Vector{UInt8}(0)
+  phaseDataOffset = phase > 1 ? sum(x -> numberOfTargets(params.attack, x), 1:phase-1) : 1
+  phaseDataLength = numberOfTargets(params.attack, phase)
+  correctRoundKeymaterial = !isnull(params.knownKey) ? correctKeyMaterial(params.attack, get(params.knownKey))[phaseDataOffset+1:phaseDataOffset+phaseDataLength] : Vector{UInt8}(0)
   @printf(io, "Results @ %d rows\n", numberOfTraces)
 
   for j in 1:keyLength

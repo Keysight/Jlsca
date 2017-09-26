@@ -7,22 +7,31 @@ using ..Log
 
 import ..Trs.reset
 
-export Attack,Analysis,LRA,MIA,CPA,IncrementalCPA
-export analysis,attack
-export sca
-export scatask,analysis
-export Status
+export DpaAttack,Attack,Analysis,LRA,MIA,CPA,IncrementalCPA
+export Status,Direction
 export printParameters,getParameters
-export Direction,Phase
-export Target
-export nrKeyByteValues
-export keyByteValues
-export target
-export getCorrectRoundKeyMaterial
-export recoverKey
+export sca
+export Target,target
+export guesses,numberOfPhases,numberOfTargets,correctKeyMaterial,recoverKey,getDataPass,getTarget
+
+@enum Direction FORWARD=1 BACKWARD=2
+@enum Status FINISHED PHASERESULT INTERMEDIATESCORES ONLYFORTEST INTERMEDIATECORRELATION BREAK
+
+const PHASE1 = 1 
+const PHASE2 = 2 
+const PHASE3 = 3
+const PHASE4 = 4 
+const PHASE5 = 5 
+const PHASE6 = 6
+
+export PHASE1,PHASE2,PHASE3,PHASE4,PHASE5,PHASE6
+for s in instances(Direction); @eval export $(Symbol(s)); end
+for s in instances(Status); @eval export $(Symbol(s)); end
 
 abstract type Attack end
 abstract type Analysis end
+abstract type NonIncrementalAnalysis <: Analysis end
+abstract type Target{In <:Integer, Out <: Integer} end
 
 type DpaAttack 
   attack::Attack
@@ -53,12 +62,12 @@ function printParameters(a::DpaAttack)
   end
 end
 
-
 printParameters(a::Attack) = print("Unknown attack")
-
-abstract type NonIncrementalAnalysis <: Analysis end
-
-abstract type Target{In <:Integer, Out <: Integer} end
+guesses(a::Attack) = collect(UInt8, 0:255)
+numberOfPhases(a::Attack) = 1
+numberOfTargets(a::Attack, phase::Int) = 1
+recoverKey(a::Attack, recoverKeyMaterial::Vector{UInt8}) = recoverKeyMaterial
+getDataPass(a::Attack, phase::Int, phaseInput::Vector{UInt8}) = Nullable()
 
 # four types of analysis methods: CPA and MIA and LRA and IncrementalCPA 
 type CPA <: NonIncrementalAnalysis
@@ -163,8 +172,8 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
   local kbsamples::Matrix{Float64}
   local kbdata
 
-  targetOffsets = get(params.targetOffsets, 1:getNumberOfTargets(params.attack, phase))
-  kbvals = keyByteValues(params.attack)
+  targetOffsets = get(params.targetOffsets, 1:numberOfTargets(params.attack, phase))
+  kbvals = guesses(params.attack)
 
   ((data, samples), eof) = readTraces(trs, rows)
 
@@ -224,8 +233,8 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
 end
 
 function attack(a::IncrementalCPA, params::DpaAttack, phase::Int, super::Task, trs::Trace, rows::Range, scoresAndOffsets)
-  targetOffsets = get(params.targetOffsets, collect(1:getNumberOfTargets(params.attack, phase)))
-  kbvals = keyByteValues(params.attack)
+  targetOffsets = get(params.targetOffsets, collect(1:numberOfTargets(params.attack, phase)))
+  kbvals = guesses(params.attack)
 
   if isa(trs, DistributedTrace)
     @sync for w in workers()
@@ -270,9 +279,9 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
 
     offset = firstTrace
     stepSize = min(numberOfTraces, get(params.updateInterval, numberOfTraces))
-    targetOffsets = get(params.targetOffsets, 1:getNumberOfTargets(params.attack, phase))
+    targetOffsets = get(params.targetOffsets, 1:numberOfTargets(params.attack, phase))
 
-    scoresAndOffsets = allocateScoresAndOffsets(getNrLeakageFunctions(params.analysis), length(keyByteValues(params.attack)), length(targetOffsets))
+    scoresAndOffsets = allocateScoresAndOffsets(getNrLeakageFunctions(params.analysis), length(guesses(params.attack)), length(targetOffsets))
     eof = false
     
     for offset in firstTrace:stepSize:numberOfTraces
@@ -300,26 +309,9 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
     return scores
 end
 
-@enum Direction FORWARD=1 BACKWARD=2
-
-const PHASE1 = 1 
-const PHASE2 = 2 
-const PHASE3 = 3
-const PHASE4 = 4 
-const PHASE5 = 5 
-const PHASE6 = 6
-export PHASE1,PHASE2,PHASE3,PHASE4,PHASE5,PHASE6
-
-@enum Status FINISHED PHASERESULT INTERMEDIATESCORES ONLYFORTEST INTERMEDIATECORRELATION BREAK
-
-for s in instances(Direction); @eval export $(Symbol(s)); end
-# for s in instances(Phase); @eval export $(Symbol(s)); end
-for s in instances(Status); @eval export $(Symbol(s)); end
-
-
 function scataskUnified(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, numberOfTraces::Int, phase::Int, phaseInput::Vector{UInt8})
 
-  roundfn = getRoundFunction(params.attack, phase, phaseInput)
+  roundfn = getDataPass(params.attack, phase, phaseInput)
 
   if params.dataOffset != 1
     addDataPass(trs, x -> x[params.dataOffset:end])
@@ -329,7 +321,7 @@ function scataskUnified(super::Task, trs::Trace, params::DpaAttack, firstTrace::
     addDataPass(trs, get(roundfn))
   end
 
-  fullattack = isnull(params.targetOffsets) || getNumberOfTargets(params.attack, phase) == length(get(params.targetOffsets))
+  fullattack = isnull(params.targetOffsets) || numberOfTargets(params.attack, phase) == length(get(params.targetOffsets))
 
   if !fullattack
     addDataPass(trs, x -> x[get(params.targetOffsets)])
@@ -337,7 +329,6 @@ function scataskUnified(super::Task, trs::Trace, params::DpaAttack, firstTrace::
 
   # do the attack
   scores = analysis(super, params, phase, trs, firstTrace:numberOfTraces)
-
 
   if !fullattack
     popDataPass(trs)
@@ -359,11 +350,10 @@ function scataskUnified(super::Task, trs::Trace, params::DpaAttack, firstTrace::
   roundkey::Vector{UInt8} = getRoundKey(params, params.attack, phase, scores)
   yieldto(super, (PHASERESULT, roundkey))
 
-  if getPhases(params.attack)[end] == phase
+  if numberOfPhases(params.attack) == phase
     yieldto(super, (FINISHED,nothing))
   end
 end
-
 
 # generic sca function, this one is called in all the unit tests and the main functions
 function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::Int=length(trs), printSubs::Bool=false, scoresCallBack::Nullable{Function}=Nullable{Function}(), corrCallBack=Nullable{Function}(),testcallback=Nullable{Function}())
@@ -376,9 +366,13 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
   local phaseOutput = Vector{UInt8}(0)
 
   if isnull(params.phases)
-    phases = getPhases(params.attack)
+    phases = 1:numberOfPhases(params.attack)
   else
     phases = get(params.phases)
+  end
+
+  if !isnull(params.knownKey)
+    knownrkmaterial = correctKeyMaterial(params.attack, get(params.knownKey))
   end
 
 
@@ -397,8 +391,8 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
     @printf("\nphase: %s\n", phase)
     if phase > 1
       if !isnull(params.knownKey)
-        knownrkmaterial = mapreduce(x -> getCorrectRoundKeyMaterial(params.attack, get(params.knownKey), x), vcat, 1:(phase-1))
-        phaseInput = knownrkmaterial
+        knownrklen = sum(x -> numberOfTargets(params.attack,x), 1:phase-1)
+        phaseInput = knownrkmaterial[1:knownrklen]
       else
         phaseInput = phaseOutput
       end
@@ -468,6 +462,7 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
 end
 
 
+# FIXME: move this somewhere else, or kill it off
 # fills the attack parameters with data from the file name
 function getParameters(filename::AbstractString, direction::Direction)
   local params::DpaAttack
