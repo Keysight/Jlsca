@@ -21,8 +21,8 @@ function IncrementalCPATest(splitmode)
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
 
-    numberOfAverages = numberOfTargets(params.attack, 1)
-    numberOfCandidates = length(guesses(params.attack))
+    # numberOfAverages = numberOfTargets(params.attack, 1)
+    # numberOfCandidates = length(guesses(params.attack))
 
     @everyworker begin
       using Jlsca.Sca
@@ -33,8 +33,8 @@ function IncrementalCPATest(splitmode)
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
       elseif $splitmode == 2
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesBlock()))
-      elseif $splitmode == 3
-        setPostProcessor(trs, IncrementalCorrelation(SplitByData($numberOfAverages, $numberOfCandidates)))
+      # elseif $splitmode == 3
+      #   setPostProcessor(trs, IncrementalCorrelation(SplitByData($numberOfAverages, $numberOfCandidates)))
       end
     end
 
@@ -74,8 +74,8 @@ function ParallelIncrementalCPATest(splitmode)
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
 
-    numberOfAverages = numberOfTargets(params.attack, 1)
-    numberOfCandidates = length(guesses(params.attack))
+    # numberOfAverages = numberOfTargets(params.attack, 1)
+    # numberOfCandidates = length(guesses(params.attack))
 
     @everyworker begin
       using Jlsca.Trs
@@ -84,8 +84,8 @@ function ParallelIncrementalCPATest(splitmode)
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
       elseif $splitmode == 2
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesBlock()))
-      elseif $splitmode == 3
-        setPostProcessor(trs, IncrementalCorrelation(SplitByData($numberOfAverages, $numberOfCandidates)))
+      # elseif $splitmode == 3
+      #   setPostProcessor(trs, IncrementalCorrelation(SplitByData($numberOfAverages, $numberOfCandidates)))
       end
     end
 
@@ -128,8 +128,8 @@ function ParallelIncrementalCPATestWithInterval()
     params.analysis.leakages = [Bit(0),Bit(7)]
     params.updateInterval = Nullable(updateInterval)
 
-    numberOfAverages = numberOfTargets(params.attack, 1)
-    numberOfCandidates = length(guesses(params.attack))
+    # numberOfAverages = numberOfTargets(params.attack, 1)
+    # numberOfCandidates = length(guesses(params.attack))
 
     @everyworker begin
       using Jlsca.Trs
@@ -181,10 +181,10 @@ end
 
 IncrementalCPATest(1)
 IncrementalCPATest(2)
-IncrementalCPATest(3)
+# IncrementalCPATest(3)
 
 ParallelIncrementalCPATest(1)
 ParallelIncrementalCPATest(2)
-ParallelIncrementalCPATest(3)
+# ParallelIncrementalCPATest(3)
 
 ParallelIncrementalCPATestWithInterval()

@@ -20,24 +20,25 @@ end
 type ModAdd <: Target{UInt8,UInt8} end
 target(a::ModAdd, data::UInt8, keyByte::UInt8) = data + keyByte
 
+guesses(a::ModAdd) = collect(UInt8, 0:255)
+
 type ModAddXor <: Target{UInt16,UInt8} end
 target(a::ModAddXor, data::UInt16, keyByte::UInt8) = (UInt8(data >> 8) + keyByte) ⊻ UInt8(data & 0xff)
 
-type FoutZ <: Target{UInt16,UInt8} end
-function target(a::FoutZ, data::UInt16, keyByte::UInt8)  
-    x = data & 0xff
-    y = (data >> 8) & 0xff
+guesses(a::ModAddXor) = collect(UInt8, 0:255)
+
+type FoutZ <: Target{UInt8,UInt8} end
+function target(a::FoutZ, data::UInt8, keyByte::UInt8)  
+    x = data & 0xf
+    y = (data >> 4) & 0xf
     return ((x & y) ⊻ (~x & keyByte))
 end
+
+guesses(a::FoutZ) = collect(UInt8, 0:15)
 
 # 0-based idx, big endian order
 function setIntMSB(val::UInt32, idx::Int, data::Vector{UInt8})
     data[idx*4+1:idx*4+4] = reinterpret(UInt8, [hton(val)])
-end
-
-# 0-based idx, little endian order
-function getInt(idx::Int, data::Vector{UInt8})
-    return ltoh(reinterpret(UInt32, data[idx*4+1:idx*4+4])[1])
 end
 
 W0(input::Vector{UInt8}) = ntoh(reinterpret(UInt32, input[1:4])[1])
@@ -47,9 +48,32 @@ W3(input::Vector{UInt8}) = ntoh(reinterpret(UInt32, input[13:16])[1])
 
 R0(pi::Vector{UInt8}) = ltoh(reinterpret(UInt32, pi[1:4])[1])
 R1(pi::Vector{UInt8}) = ltoh(reinterpret(UInt32, pi[5:8])[1])
-a0rot(pi::Vector{UInt8}) = ltoh(reinterpret(UInt32, pi[9:12])[1])
-b0rot(pi::Vector{UInt8}) = ltoh(reinterpret(UInt32, pi[13:16])[1])
-R3(pi::Vector{UInt8}) = ltoh(reinterpret(UInt32, pi[17:20])[1])
+
+function a0rot(pi::Vector{UInt8})
+    nibbles = pi[9:16]
+    ret::UInt32 = 0
+    for i in 8:-1:1
+        ret <<= 4
+        ret |= (nibbles[i] & 0xf)
+        nibbles[i] <<= 4
+    end
+
+    return ret
+end
+
+function b0rot(pi::Vector{UInt8})
+    nibbles = pi[17:24]
+    ret::UInt32 = 0
+    for i in 8:-1:1
+        ret <<= 4
+        ret |= (nibbles[i] & 0xf)
+        nibbles[i] <<= 4
+    end
+
+    return ret
+end
+
+R3(pi::Vector{UInt8}) = ltoh(reinterpret(UInt32, pi[25:28])[1])
 
 # data per row
 function prepModAdd1(byteIdx::Int, key::UInt32, data::Array{UInt8}, initialXor::UInt32)
@@ -81,13 +105,15 @@ end
 function prepFoutZ3(data::Array{UInt8}, state::Vector{UInt8})
     t0::UInt32 = R0(state) + W0(data)
     t0rot = Sha.rotl(t0,30)
-    t1::UInt32 = Sha.rotl(t0, 5) + getInt(1, state) + W1(data)
-    ret = zeros(UInt16, 4)
-    for i in 1:4
-        shift = (i-1)*8
-        ret[i] = (t0rot >> shift) & 0xff
-        ret[i] <<= 8
-        ret[i] |= (t1 >> shift) & 0xff
+    t1::UInt32 = Sha.rotl(t0, 5) + R1(state) + W1(data)
+    ret = zeros(UInt8, 8)
+
+    for i in 0:7
+        shift = i*4
+        idx = i
+        ret[idx+1] = (t0rot >> shift) & 0xf
+        ret[idx+1] <<= 4
+        ret[idx+1] |= (t1 >> shift) & 0xf
     end
     return ret
 end
@@ -96,12 +122,14 @@ function prepFoutZ4(data::Array{UInt8}, state::Vector{UInt8})
     t0 = R0(state) + W0(data)
     a0r = a0rot(state)
 
-    ret = zeros(UInt16, 4)
-    for i in 1:4
-        shift = (i-1)*8
-        ret[i] = (a0r >> shift) & 0xff
-        ret[i] <<= 8
-        ret[i] |= (t0 >> shift) & 0xff
+    ret = zeros(UInt8, 8)
+
+    for i in 0:7
+        shift = i*4
+        idx = i
+        ret[idx+1] = (a0r >> shift) & 0xf
+        ret[idx+1] <<= 4
+        ret[idx+1] |= (t0 >> shift) & 0xf
     end
     return ret
 end
@@ -110,7 +138,7 @@ function prepModAdd5(byteIdx::Int, key::UInt32, data::Array{UInt8}, state::Vecto
     d::UInt32 = 0
 
     t0 = R0(state) + W0(data)
-    t1 = Sha.rotl(t0, 5) + getInt(1, state) + W1(data)
+    t1 = Sha.rotl(t0, 5) + R1(state) + W1(data)
     xor = t1
     a0r = a0rot(state)
     b0r = b0rot(state)
@@ -156,11 +184,11 @@ function getDataPass(params::Sha1InputAttack, phase::Int, phaseInput::Vector{UIn
         # DPA 3 
         # no XOR attack for this one!
         roundfn = x -> prepFoutZ3(x, phaseInput)
-    elseif intIdx == 3
+    elseif intIdx == 4
         # DPA 4 
         # no XOR attack for this one!
         roundfn = x -> prepFoutZ4(x, phaseInput)
-    elseif intIdx == 4
+    elseif intIdx == 6
         # DPA 5
         if params.xor 
             roundfn = x -> [prepModAdd5(byteIdx, partialKey, x, phaseInput)]
@@ -171,8 +199,6 @@ function getDataPass(params::Sha1InputAttack, phase::Int, phaseInput::Vector{UIn
 
     return Nullable(roundfn)
 end
-
-guesses(a::Sha1Attack) = collect(UInt8,0:255)
 
 function printParameters(params::Sha1InputAttack)
   @printf("SHA1 input attack parameters\n")
@@ -195,7 +221,7 @@ function numberOfTargets(params::Sha1InputAttack, phase::Int)
     if (1 <= phase <= 8) || (11 <= phase <= 14)
         return 1
     else
-        return 4
+        return 8
     end
 end
 
@@ -220,24 +246,43 @@ function correctKeyMaterial(params::Sha1InputAttack, knownKey::Vector{UInt8})
     d0 = kk[4]
     e0 = kk[5]
 
-    res = Vector{UInt32}(5)
+    res = Vector{UInt32}(7)
 
     res[1] = e0 + Sha.rotl(a0,5) + Sha.Ch(b0,c0,d0) + Sha.K(0)
     res[2] = d0 + Sha.Ch(a0,Sha.rotl(b0,30),c0) + Sha.K(1)
-    res[3] = Sha.rotl(a0,30)
-    res[4] = Sha.rotl(b0,30)
-    res[5] = c0 + Sha.K(2)
+    a0r = Sha.rotl(a0,30)
+    res[3] = 0
+    for i in 3:-1:0
+        res[3] <<= 8
+        res[3] |= ((a0r >> i*4) & 0xf)
+    end
+    for i in 7:-1:4
+        res[4] <<= 8
+        res[4] |= ((a0r >> i*4) & 0xf)
+    end
+    b0r = Sha.rotl(b0,30)
+    res[5] = 0
+    for i in 3:-1:0
+        res[5] <<= 8
+        res[5] |= ((b0r >> i*4) & 0xf)
+    end
+    res[6] = 0
+    for i in 7:-1:4
+        res[6] <<= 8
+        res[6] |= ((b0r >> i*4) & 0xf)
+    end
+    res[7] = c0 + Sha.K(2)
 
     return reinterpret(UInt8, map(htol, res))
 end
 
 function recoverKey(params::Sha1InputAttack, phaseInput::Vector{UInt8})
     state = zeros(UInt8, 20)
-    a0 = Sha.rotr(getInt(2,phaseInput), 30)
-    b0 = Sha.rotr(getInt(3,phaseInput), 30)
-    c0 = getInt(4,phaseInput) - Sha.K(2)
-    d0 = getInt(1,phaseInput) - Sha.Ch(a0,Sha.rotl(b0,30),c0) - Sha.K(1)
-    e0 = getInt(0,phaseInput) - Sha.rotl(a0,5) - Sha.Ch(b0,c0,d0) - Sha.K(0)
+    a0 = Sha.rotr(a0rot(phaseInput), 30)
+    b0 = Sha.rotr(b0rot(phaseInput), 30)
+    c0 = R3(phaseInput) - Sha.K(2)
+    d0 = R1(phaseInput) - Sha.Ch(a0,Sha.rotl(b0,30),c0) - Sha.K(1)
+    e0 = R0(phaseInput) - Sha.rotl(a0,5) - Sha.Ch(b0,c0,d0) - Sha.K(0)
     setIntMSB(a0, 0, state)
     setIntMSB(b0, 1, state)
     setIntMSB(c0, 2, state)

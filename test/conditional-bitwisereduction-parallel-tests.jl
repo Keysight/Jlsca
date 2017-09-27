@@ -21,8 +21,8 @@ function ParallelCondReduceTest(splitmode)
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0)]
 
-    numberOfAverages = numberOfTargets(params.attack, 1)
-    numberOfCandidates = length(guesses(params.attack))
+    # numberOfAverages = numberOfTargets(params.attack, 1)
+    # numberOfCandidates = length(guesses(params.attack))
 
     localtrs = InspectorTrace(fullfilename, true)
     addSamplePass(localtrs, tobits)
@@ -35,8 +35,8 @@ function ParallelCondReduceTest(splitmode)
         setPostProcessor(trs, CondReduce(SplitByTracesSliced(), $localtrs))
       elseif $splitmode == 2
         setPostProcessor(trs, CondReduce(SplitByTracesBlock(), $localtrs))
-      elseif $splitmode == 3
-        setPostProcessor(trs, CondReduce(SplitByData($numberOfAverages, $numberOfCandidates), $localtrs))
+      # elseif $splitmode == 3
+      #   setPostProcessor(trs, CondReduce(SplitByData($numberOfAverages, $numberOfCandidates), $localtrs))
       end
     end
 
@@ -85,8 +85,8 @@ function ParallelCondReduceTestWithInterval()
     params.analysis.leakages = [Bit(0)]
     params.updateInterval = Nullable(updateInterval)
 
-    numberOfAverages = numberOfTargets(params.attack, 1)
-    numberOfCandidates = length(guesses(params.attack))
+    # numberOfAverages = numberOfTargets(params.attack, 1)
+    # numberOfCandidates = length(guesses(params.attack))
 
     localtrs = InspectorTrace(fullfilename, true)
     addSamplePass(localtrs, tobits)
@@ -139,6 +139,6 @@ end
 
 ParallelCondReduceTest(1)
 ParallelCondReduceTest(2)
-ParallelCondReduceTest(3)
+# ParallelCondReduceTest(3)
 
 ParallelCondReduceTestWithInterval()

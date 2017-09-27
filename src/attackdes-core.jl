@@ -16,7 +16,6 @@ const right = 33:64
 
 abstract type DesAttack <: Attack end
 
-guesses(a::DesAttack) = collect(UInt8,0:63)
 numberOfTargets(a::DesAttack, phase::Int) = 8
 
 type DesSboxAttack <: DesAttack
@@ -70,6 +69,8 @@ function getIdx(sixbits::Union{UInt16, UInt8})
   return idx
 end
 
+const desguesses = collect(UInt8,0:63)
+
 # target functions
 type DesSboxOut <: Target{UInt8,UInt8} 
   sbidx::Int
@@ -77,7 +78,9 @@ end
 
 target(this::DesSboxOut, sixbits::Union{UInt16, UInt8}, kb::UInt8) = Sbox(this.sbidx)[getIdx((sixbits & 0x3f) ⊻ kb) + 1]
 
-type DesSboxOutXORin <: Target{UInt8,UInt8} end
+guesses(a::DesSboxOut) = desguesses
+
+type DesSboxOutXORin <: Target{UInt8,UInt8}  end
 
 function target(this::DesSboxOutXORin, sixbits::Union{UInt16, UInt8}, kb::UInt8)
   inp =  ((sixbits & 0x3f) ⊻ kb) & 0xf
@@ -85,11 +88,15 @@ function target(this::DesSboxOutXORin, sixbits::Union{UInt16, UInt8}, kb::UInt8)
   return inp ⊻ outp
 end
 
+guesses(a::DesSboxOutXORin) = desguesses
+
 type RoundOut <: Target{UInt16,UInt16} 
   sbidx::Int
 end
 
 target(this::RoundOut, tenbits::UInt16, kb::UInt8) = Sbox(this.sbidx)[getIdx((tenbits & 0x3f) ⊻ kb) + 1] ⊻ (tenbits >> 6)
+
+guesses(a::RoundOut) = desguesses
 
 # round functions
 
@@ -168,7 +175,7 @@ function getTarget(params::DesRoundAttack, phase::Int, sbidx::Int)
   return RoundOut(sbidx)
 end
 
-function getDataPass(params::DesAttack, phase::Int, phaseInput=Vector{UInt8}(0))
+function getDataPass(params::DesAttack, phase::Int, phaseInput::Vector{UInt8})
   if params.direction == BACKWARD
     encrypt = !params.encrypt
   else

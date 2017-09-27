@@ -20,8 +20,8 @@ function ParallelCondAvgTest(splitmode)
 
     params.analysis = CPA()
 
-    numberOfAverages = numberOfTargets(params.attack, 1)
-    numberOfCandidates = length(guesses(params.attack))
+    # numberOfAverages = numberOfTargets(params.attack, 1)
+    # numberOfCandidates = length(guesses(params.attack))
 
     @everyworker begin
       using Jlsca.Trs
@@ -30,8 +30,8 @@ function ParallelCondAvgTest(splitmode)
         setPostProcessor(trs, CondAvg(SplitByTracesSliced()))
       elseif $splitmode == 2
         setPostProcessor(trs, CondAvg(SplitByTracesBlock()))
-      elseif $splitmode == 3
-        setPostProcessor(trs, CondAvg(SplitByData($numberOfAverages, $numberOfCandidates)))
+      # elseif $splitmode == 3
+      #   setPostProcessor(trs, CondAvg(SplitByData($numberOfAverages, $numberOfCandidates)))
       end
     end
 
@@ -72,8 +72,8 @@ function ParallelCondAvgTestWithInterval()
     params.analysis = CPA()
     params.updateInterval = Nullable(updateInterval)
 
-    numberOfAverages = numberOfTargets(params.attack, 1)
-    numberOfCandidates = length(guesses(params.attack))
+    # numberOfAverages = numberOfTargets(params.attack, 1)
+    # numberOfCandidates = length(guesses(params.attack))
 
     @everyworker begin
       using Jlsca.Trs
@@ -120,6 +120,6 @@ end
 
 ParallelCondAvgTest(1)
 ParallelCondAvgTest(2)
-ParallelCondAvgTest(3)
+# ParallelCondAvgTest(3)
 
 ParallelCondAvgTestWithInterval()
