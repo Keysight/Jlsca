@@ -84,16 +84,18 @@ end
 function bucket(X::Vector{Float64}, nrXbuckets::Int)
   minX = minimum(X)
   maxX = maximum(X)
-  stepX = (maxX - minX) / nrXbuckets
+  if minX < 0
+    maxX = abs(maxX) + abs(minX)
+    minX = 0
+  end
 
-  if stepX <= 0
-    stepX = 1
-  end 
+  stepX = abs(maxX - minX) / nrXbuckets
 
   Xbucketed = zeros(Int, length(X))
   for (idx,val) in enumerate(X)
-    Xbucketed[idx] = min(Int(div(val,stepX)), nrXbuckets - 1)
+    Xbucketed[idx] = min(Int(div(abs(val)-minX,stepX)), nrXbuckets - 1)
   end
+
   return Xbucketed
 end
 

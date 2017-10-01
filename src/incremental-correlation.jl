@@ -16,10 +16,9 @@ type IncrementalCorrelation <: PostProcessor
   meanXinitialized::Bool
   meanX::IncrementalMeanVariance
   targetOffsets::Vector{Int}
-  attack::Attack
-  kbvals::Vector
   leakages::Vector{Leakage}
   targets::Vector{Target}
+  hypocache::Vector{Vector{UInt8}}
 
   function IncrementalCorrelation()
     IncrementalCorrelation(NoSplit())
@@ -30,12 +29,15 @@ type IncrementalCorrelation <: PostProcessor
   end
 end
 
-function init(c::IncrementalCorrelation, attack::Attack, phase::Int, leakages::Vector{Leakage}, targetOffsets::Vector{Int})
-  c.targetOffsets = targetOffsets
-  c.attack = attack
-  c.kbvals = guesses(attack)
-  c.leakages = leakages
-  c.targets = map(t -> getTarget(attack, phase, t), targetOffsets)
+function init(c::IncrementalCorrelation, params::DpaAttack, phase::Int)
+  c.targetOffsets = getTargetOffsets(params, phase)
+  c.leakages = params.analysis.leakages
+  c.targets = map(x -> getTarget(params.attack, phase, x), 1:numberOfTargets(params.attack, phase))
+  c.hypocache = Vector{Vector{UInt8}}(length(c.targetOffsets))
+  for i in 1:length(c.targetOffsets)
+    c.hypocache[i] = Vector{UInt8}(length(guesses(c.targets[i])) * length(c.leakages))
+  end
+
 end
 
 function reset(c::IncrementalCorrelation)
@@ -46,11 +48,12 @@ end
 
 function toLeakages!(c::IncrementalCorrelation, hypo::Vector{UInt8}, idx::Int, input::Union{UInt8,UInt16})
   kbOffset = c.targetOffsets[idx]
-  nrOfKbVals = length(c.kbvals)
+  kbvals = guesses(c.targets[kbOffset])
+  nrOfKbVals = length(kbvals)
   nrOfFuns = length(c.leakages)
   t = c.targets[kbOffset]
 
-  outputs = target.(t, input, c.kbvals)
+  outputs = target.(t, input, kbvals)
 
   @inbounds for l in 1:nrOfFuns
     hypoidx = (l-1)*nrOfKbVals+1
@@ -75,9 +78,10 @@ function add(c::IncrementalCorrelation, worksplit::SplitByData, trs::Trace, trac
     return
   end
 
-  hypo = zeros(UInt8, length(c.leakages) * length(c.kbvals))
-
+  # hypo = zeros(UInt8, length(c.leakages) * length(c.kbvals))
+  
   for idx in 1:length(c.targetOffsets)
+    hypo = c.hypocache[idx]
     val = data[idx]
 
     if !(toVal(c.worksplit, Int(idx), Int(val)) in c.worksplit.range)
@@ -117,7 +121,8 @@ function add(c::IncrementalCorrelation, worksplit::Union{NoSplit,SplitByTraces},
   for idx in 1:length(c.targetOffsets)
     val = data[idx]
 
-    hypo = zeros(UInt8, length(c.leakages) * length(c.kbvals))
+    # hypo = zeros(UInt8, length(c.leakages) * length(guesses(c.targets[c.targetOffsets[idx]])))
+    hypo = c.hypocache[idx]
     toLeakages!(c, hypo, idx, val)
 
     if !haskey(c.covXY, idx)

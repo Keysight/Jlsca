@@ -11,61 +11,199 @@ export getRoundKey
 import Base.get
 import Base.truncate
 
-function allocateScoresAndOffsets(nrLeakageFunctions::Int, nrKeyChunkValues::Int, keyLength::Int)
-  scoresAndOffsets = Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}(nrLeakageFunctions)
+type ScoresAndOffsets 
+  # per leakage, per target, scores for all kbvals
+  scores::Vector{Vector{Vector{Float64}}}
+  # per leakage, per target, offsets for all scores
+  offsets::Vector{Vector{Vector{Int}}}
+  nrTargets::Int
 
-  for i in 1:length(scoresAndOffsets)
-    scoresAndOffsets[i] = (zeros(Float64, nrKeyChunkValues, keyLength), zeros(UInt, nrKeyChunkValues, keyLength))
-  end
+  function ScoresAndOffsets(params::DpaAttack, phase::Int)
 
-  return scoresAndOffsets
-end
+    nrLeakageFunctions = getNrLeakageFunctions(params.analysis)
+    scores = Vector{Vector{Vector{Float64}}}(nrLeakageFunctions)
+    offsets = Vector{Vector{Vector{Int}}}(nrLeakageFunctions)
 
-function clearScoresAndOffsets!(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}})  
-  for i in 1:length(scoresAndOffsets)
-    scoresAndOffsets[i][1] .= 0
-    scoresAndOffsets[i][2] .= 0
-  end
-end
+    targetOffsets = getTargetOffsets(params, phase)
+    nrTargets = length(targetOffsets)
 
-# the scoring function returns two vectors of matrices, one with scores matrices, one with offet matrices into the samples, for each leakage function
-function updateScoresAndOffsets!(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, C::Matrix{Float64}, keyIdxIntoC::Int, keyIdxIntoScores::Int, nrLeakageFunctions::Int, nrKeyChunkValues::Int=256)
-  (rc, cc) = size(C)
-
-  for l in 1:nrLeakageFunctions
-    # max per column for each leakage function for given key byte idx
-    (scores, offsets) = scoresAndOffsets[l]
-
-    lower = (keyIdxIntoC-1)*nrLeakageFunctions*nrKeyChunkValues + (l-1)*nrKeyChunkValues  + 1
-    upper = lower+nrKeyChunkValues-1
-    (corrvals, corrvaloffsets) = findmax(C[:,lower:upper], 1)
-
-    for (idx,val) in enumerate(corrvals)
-      if val > scores[:,keyIdxIntoScores][idx]
-        scores[idx,keyIdxIntoScores] = val
-        offsets[idx,keyIdxIntoScores] = ind2sub(size(C), corrvaloffsets[idx])[1]
+    for l in 1:nrLeakageFunctions
+      scores[l] = Vector{Vector{Float64}}(nrTargets)
+      offsets[l] = Vector{Vector{Int}}(nrTargets)
+      for t in 1:nrTargets
+        kbvalsLen = length(guesses(getTarget(params.attack, phase, targetOffsets[t])))
+        scores[l][t] = zeros(Float64, kbvalsLen)
+        offsets[l][t] = zeros(Int, kbvalsLen)
       end
     end
-  end
 
-  return scoresAndOffsets
+    return new(scores,offsets,nrTargets)
+  end
 end
 
-# combine the leakages contributing to a single candidate
-function getCombinedScores(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, leakageFunctionsCombinator::Function=(+))
-  scores = zeros(scoresAndOffsets[1][1])
+length(sc::ScoresAndOffsets) = length(sc.scores)
+getindex(sc::ScoresAndOffsets, i::Int) = (sc.scores[i], sc.offsets[i])
 
-  for (scoresSingleLeakage,offsetsSingleLeakage) in scoresAndOffsets
-    scores = leakageFunctionsCombinator(scores, scoresSingleLeakage)
+function clearScoresAndOffsets!(sc::ScoresAndOffsets)
+  for i in 1:length(sc)
+    (scores,offsets) = sc[i]
+    for j in 1:length(scores)
+      scores[j] .= 0
+      offsets[j] .= 0
+    end
+  end
+end
+
+function updateScoresAndOffsets!(sc::ScoresAndOffsets, C::AbstractArray{Float64,2}, leakageIdx::Int, targetOffset::Int)
+
+    scores = sc.scores[leakageIdx][targetOffset]
+    offsets = sc.offsets[leakageIdx][targetOffset]
+    (corrvals, corrvaloffsets) = findmax(C, 1)
+
+    for (idx,val) in enumerate(corrvals)
+      if val > scores[idx]
+        scores[idx] = val
+        offsets[idx] = ind2sub(size(C), corrvaloffsets[idx])[1]
+      end
+    end
+end
+
+function getScores(params::DpaAttack, sc::ScoresAndOffsets, targetOffet::Int)
+  scores = zeros(sc.scores[1][targetOffet])
+
+  for i in 1:length(sc)
+    (scoresSingleLeakage,offsetsSingleLeakage) = sc[i]
+    scores = params.leakageFunctionsCombinator(scores, scoresSingleLeakage[targetOffet])
   end
 
   return scores
 end
 
-# get a round key from the scores
-function getRoundKey(params::DpaAttack, attack::Attack, phase::Int, scores::Matrix{Float64})
-  return vec(mapslices(x -> UInt8(sortperm(x, rev=true)[1] - 1), scores, 1))
+function getRoundKey(params::DpaAttack, attack::Attack, phase::Int, sc::ScoresAndOffsets)
+  return map(x -> UInt8(sortperm(getScores(params,sc,x), rev=true)[1] - 1), 1:sc.nrTargets)
 end
+
+# print the scores pretty
+function printScores(params::DpaAttack, phase::Int, scoresAndOffsets::ScoresAndOffsets, numberOfTraces, keyOffsets, prettyKeyOffsets, printsubs=false,  max=5, io=STDOUT)
+  
+  nrLeakageFunctions = length(scoresAndOffsets)
+  keyLength = length(keyOffsets)
+  winners = zeros(UInt8, keyLength)
+  phaseDataOffset = phase > 1 ? sum(x -> numberOfTargets(params.attack, x), 1:phase-1) : 0
+  phaseDataLength = numberOfTargets(params.attack, phase)
+  correctRoundKeymaterial = !isnull(params.knownKey) ? correctKeyMaterial(params.attack, get(params.knownKey))[phaseDataOffset+1:phaseDataOffset+phaseDataLength] : Vector{UInt8}(0)
+  @printf(io, "Results @ %d rows\n", numberOfTraces)
+
+  for j in 1:keyLength
+    kbOffset = keyOffsets[j]
+    corrvalsPerCand = getScores(params, scoresAndOffsets, kbOffset)
+
+    # sort peaks
+    indexes = sortperm(vec(corrvalsPerCand), rev=true)
+
+    winners[j] = indexes[1] - 1
+
+    @printf(io, "kb: %d\n", prettyKeyOffsets[kbOffset] )
+
+    printableIndexes = indexes[1:max]
+    if length(correctRoundKeymaterial) > 0
+      correctKbOffset = findfirst(x -> x == (correctRoundKeymaterial[kbOffset] + 1), indexes)
+      if correctKbOffset > max
+        printableIndexes = [ indexes[1:max-1] ; correctRoundKeymaterial[kbOffset] + 1]
+      end
+    end
+    
+    # print top 5 peaks
+    # for known key scenario: print top 5 if it includes the correct key byte, top 4 and the correct key byte otherwise
+    for i in printableIndexes
+      cand = i - 1
+      peak = corrvalsPerCand[i]
+      rank = findfirst(x -> x == i, indexes)
+
+      if length(correctRoundKeymaterial) > 0 && cand == correctRoundKeymaterial[kbOffset]
+        pretty = "correct  "
+      else
+        pretty = "candidate"
+      end
+
+      if nrLeakageFunctions == 1
+        sample = scoresAndOffsets.offsets[1][kbOffset][i]
+        @printf(io, "rank: %3d, %s: 0x%02x, peak: %f @ %d\n", rank, pretty, cand, peak, sample)
+      else
+        @printf(io, "rank: %3d, %s: 0x%02x, %s of peaks: %f\n", rank, pretty, cand, string(params.leakageFunctionsCombinator), peak)
+        if printsubs
+          # print the max peak for each leakage function
+          for l in 1:nrLeakageFunctions
+            (lscores, loffsets) = scoresAndOffsets[l]
+            sample = loffsets[kbOffset][i]
+            @printf(io, " %0.2f @ %d\n", lscores[kbOffset][i], sample)
+          end
+        end
+      end
+    end
+  end
+
+  @printf(io, "recovered key material: %s\n", bytes2hex(winners))
+
+end
+
+# function allocateScoresAndOffsets(nrLeakageFunctions::Int, nrKeyChunkValues::Int, keyLength::Int)
+#   scoresAndOffsets = Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}(nrLeakageFunctions)
+
+#   for i in 1:length(scoresAndOffsets)
+#     scoresAndOffsets[i] = (zeros(Float64, nrKeyChunkValues, keyLength), zeros(UInt, nrKeyChunkValues, keyLength))
+#   end
+
+#   return scoresAndOffsets
+# end
+
+# function clearScoresAndOffsets!(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}})  
+#   for i in 1:length(scoresAndOffsets)
+#     scoresAndOffsets[i][1] .= 0
+#     scoresAndOffsets[i][2] .= 0
+#   end
+# end
+
+
+
+# the scoring function returns two vectors of matrices, one with scores matrices, one with offet matrices into the samples, for each leakage function
+# function updateScoresAndOffsets!(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, C::Matrix{Float64}, keyIdxIntoC::Int, keyIdxIntoScores::Int, nrLeakageFunctions::Int, nrKeyChunkValues::Int=256)
+#   (rc, cc) = size(C)
+
+#   for l in 1:nrLeakageFunctions
+#     # max per column for each leakage function for given key byte idx
+#     (scores, offsets) = scoresAndOffsets[l]
+
+#     lower = (keyIdxIntoC-1)*nrLeakageFunctions*nrKeyChunkValues + (l-1)*nrKeyChunkValues  + 1
+#     upper = lower+nrKeyChunkValues-1
+#     (corrvals, corrvaloffsets) = findmax(C[:,lower:upper], 1)
+
+#     for (idx,val) in enumerate(corrvals)
+#       if val > scores[:,keyIdxIntoScores][idx]
+#         scores[idx,keyIdxIntoScores] = val
+#         offsets[idx,keyIdxIntoScores] = ind2sub(size(C), corrvaloffsets[idx])[1]
+#       end
+#     end
+#   end
+
+#   return scoresAndOffsets
+# end
+
+# combine the leakages contributing to a single candidate
+# function getCombinedScores(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, leakageFunctionsCombinator::Function=(+))
+#   scores = zeros(scoresAndOffsets[1][1])
+
+#   for (scoresSingleLeakage,offsetsSingleLeakage) in scoresAndOffsets
+#     scores = leakageFunctionsCombinator(scores, scoresSingleLeakage)
+#   end
+
+#   return scores
+# end
+
+# get a round key from the scores
+# function getRoundKey(params::DpaAttack, attack::Attack, phase::Int, scores::Matrix{Float64})
+#   return vec(mapslices(x -> UInt8(sortperm(x, rev=true)[1] - 1), scores, 1))
+# end
 
 # # get a round key from the scores per leakage function by recombining them first
 # function getRoundKey(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, leakageFunctionsCombinator=(+))
