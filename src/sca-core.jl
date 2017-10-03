@@ -6,7 +6,7 @@ using ..Trs
 using ..Log
 
 import ..Trs.reset
-import Base.getindex,Base.length
+import Base.getindex,Base.length,Base.show
 
 export DpaAttack,Attack,Analysis,LRA,MIA,CPA,IncrementalCPA
 export Status,Direction
@@ -33,6 +33,16 @@ abstract type Attack end
 abstract type Analysis end
 abstract type NonIncrementalAnalysis <: Analysis end
 abstract type Target{In <:Integer, Out <: Integer} end
+abstract type Maximization end
+
+type GlobalMaximization <: Maximization end
+type NormalizedMaximization <: Maximization end
+
+abstract type Combination end
+
+type Sum <: Combination end
+show(io::IO, a::Sum) = print(io, "+")
+
 
 type DpaAttack 
   attack::Attack
@@ -45,10 +55,11 @@ type DpaAttack
   outputkka::Nullable{AbstractString}
   targetOffsets::Nullable{Vector{Int}}
   scoresCallBack::Nullable{Function}
-  leakageFunctionsCombinator::Function
+  leakageCombinator::Combination
+  maximization::Maximization
 
   function DpaAttack(attack::Attack, analysis::Analysis) 
-    new(attack,analysis,1,Nullable(),Nullable(),Nullable(),Nullable(),Nullable(),Nullable(), Nullable(), (+))
+    new(attack,analysis,1,Nullable(),Nullable(),Nullable(),Nullable(),Nullable(),Nullable(), Nullable(), Sum(), GlobalMaximization())
   end
 end
 
@@ -96,6 +107,10 @@ type MIA <: NonIncrementalAnalysis
   function MIA()
     return new([HW()], [x -> abs.(x)], Nullable(), SimpleCSV(), 9)
   end
+end
+
+function poop(a::AbstractArray{Float64, 2})
+  return reshape(mapslices(x -> (s = std(x); s > 0 ? Float64((maximum(x) - mean(x)) / s) : Float64(0)), a, 1), 1, size(a)[2])
 end
 
 type LRA <: NonIncrementalAnalysis
@@ -224,7 +239,7 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
 
 
       for fn in a.postProcess
-        C[:] = fn(C)
+        C = fn(C)
       end
 
       # get the scores for all leakage functions
@@ -232,7 +247,7 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
         oo = (l-1)*nrKbvals
         vv = @view C[:,oo+1:oo+nrKbvals]
         yieldto(super, (INTERMEDIATECORRELATION, (phase, o, l, vv)))
-        updateScoresAndOffsets!(scoresAndOffsets, vv, l, o)
+        updateScoresAndOffsets!(params.maximization, scoresAndOffsets, vv, l, o)
       end
 
       # let somebody do something with the scores for these traces
@@ -260,7 +275,7 @@ function attack(a::IncrementalCPA, params::DpaAttack, phase::Int, super::Task, t
   @printf("%s produced (%d, %d) correlation matrix\n", string(typeof(a).name.name), samplecols, hypocols)
 
   for fn in a.postProcess
-    C[:] = fn(C)
+    C = fn(C)
   end
 
   nrLeakages = length(a.leakages)
@@ -271,7 +286,7 @@ function attack(a::IncrementalCPA, params::DpaAttack, phase::Int, super::Task, t
       oo = (l-1)*nrKbvals + (kb-1)*nrLeakages*nrKbvals
       vv = @view C[:,oo+1:oo+nrKbvals]
       yieldto(super, (INTERMEDIATECORRELATION, (phase, kb, l, vv)))
-      updateScoresAndOffsets!(scoresAndOffsets, vv, l, kb)
+      updateScoresAndOffsets!(params.maximization, scoresAndOffsets, vv, l, kb)
     end
   end
 

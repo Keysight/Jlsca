@@ -38,10 +38,10 @@ function IncrementalCPATest(splitmode)
       end
     end
 
-    sando = Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}(2)
+    sando = Vector{Sca.ScoresAndOffsets}(2)
     sandoIdx = 1
 
-    cb::Function = (phase,params,scoresAndOffsets,dataWidth,keyOffsets,numberOfTraces2) -> (sando[sandoIdx] = scoresAndOffsets[1]; sandoIdx += 1)
+    cb::Function = (phase,params,scoresAndOffsets,dataWidth,keyOffsets,numberOfTraces2) -> (sando[sandoIdx] = deepcopy(scoresAndOffsets); sandoIdx += 1)
 
     key = sca(DistributedTrace(),params,1, len, false, Nullable{Function}(cb))
 
@@ -57,9 +57,17 @@ function IncrementalCPATest(splitmode)
     @test(key == get(params.knownKey))
 
     @test sandoIdx == 3
+    @test sando[1].nrTargets == sando[2].nrTargets
+    @test sando[1].nrLeakages == sando[2].nrLeakages
+    nrTargets = sando[1].nrTargets
+    nrLeakages = sando[1].nrLeakages
 
-    @test sando[1][1] ≈ sando[2][1]
-    @test sando[1][2] ≈ sando[2][2]
+    for l in 1:nrLeakages
+      for t in 1:nrTargets
+        @test sando[1].scores[l][t] ≈ sando[2].scores[l][t]
+        @test sando[1].offsets[l][t] == sando[2].offsets[l][t]
+      end
+    end
 end
 
 function ParallelIncrementalCPATest(splitmode)
@@ -89,10 +97,10 @@ function ParallelIncrementalCPATest(splitmode)
       end
     end
 
-    sando = Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}(2)
+    sando = Vector{Sca.ScoresAndOffsets}(2)
     sandoIdx = 1
 
-    cb::Function = (phase,params,scoresAndOffsets,dataWidth,keyOffsets,numberOfTraces2) -> (sando[sandoIdx] = scoresAndOffsets[1]; sandoIdx += 1)
+    cb::Function = (phase,params,scoresAndOffsets,dataWidth,keyOffsets,numberOfTraces2) -> (sando[sandoIdx] = deepcopy(scoresAndOffsets); sandoIdx += 1)
 
     key = sca(DistributedTrace(),params,1, len, false, Nullable{Function}(cb))
 
@@ -109,9 +117,17 @@ function ParallelIncrementalCPATest(splitmode)
     @test(key == get(params.knownKey))
 
     @test sandoIdx == 3
+    @test sando[1].nrTargets == sando[2].nrTargets
+    @test sando[1].nrLeakages == sando[2].nrLeakages
+    nrTargets = sando[1].nrTargets
+    nrLeakages = sando[1].nrLeakages
 
-    @test sando[1][1] ≈ sando[2][1]
-    @test sando[1][2] == sando[2][2]
+    for l in 1:nrLeakages
+      for t in 1:nrTargets
+        @test sando[1].scores[l][t] ≈ sando[2].scores[l][t]
+        @test sando[1].offsets[l][t] == sando[2].offsets[l][t]
+      end
+    end
 end
 
 function ParallelIncrementalCPATestWithInterval()
@@ -138,10 +154,10 @@ function ParallelIncrementalCPATestWithInterval()
     end
 
     numberOfScas = div(len, updateInterval) + ((len % updateInterval) > 0 ? 1 : 0)
-    sando = Vector{Tuple{Matrix{Float64}, Matrix{UInt}, Int}}(numberOfScas*2)
+    sando = Vector{Sca.ScoresAndOffsets}(numberOfScas*2)
     sandoIdx = 1
 
-    cb::Function = (phase,params,scoresAndOffsets,dataWidth,keyOffsets,numberOfTraces2) -> (sando[sandoIdx] = (copy(scoresAndOffsets[1][1]),copy(scoresAndOffsets[1][2]),numberOfTraces2); sandoIdx += 1)
+    cb::Function = (phase,params,scoresAndOffsets,dataWidth,keyOffsets,numberOfTraces2) -> (sando[sandoIdx] = deepcopy(scoresAndOffsets); sandoIdx += 1)
 
     key = sca(DistributedTrace(),params,1, len, false, Nullable{Function}(cb))
 
@@ -163,16 +179,19 @@ function ParallelIncrementalCPATestWithInterval()
     end
 
     @test sandoIdx == numberOfScas*2+1
-
+    
     for s in 1:numberOfScas
-      @test sando[s][1] ≈ sando[s+numberOfScas][1]
-      # TODO: This test fails for the given trace set because two samples
-      # have approx the same correlation and a different sample wins when
-      # updateing the scores. Doesn't matter for correctness, but I should
-      # compare the raw correlation matrices instead of the scores and
-      # offsets.
-      # @test sando[s][2] == sando[s+numberOfScas][2]
-      @test sando[s][3] == sando[s+numberOfScas][3]
+      @test sando[s].nrTargets == sando[s+numberOfScas].nrTargets
+      @test sando[s].nrLeakages == sando[s+numberOfScas].nrLeakages
+      nrTargets = sando[s].nrTargets
+      nrLeakages = sando[s].nrLeakages
+
+      for l in 1:nrLeakages
+        for t in 1:nrTargets
+          @test sando[s].scores[l][t] ≈ sando[s+numberOfScas].scores[l][t]
+          @test sando[s].offsets[l][t] == sando[s+numberOfScas].offsets[l][t]
+        end
+      end
     end
 end
 
