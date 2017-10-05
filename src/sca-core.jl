@@ -6,7 +6,6 @@ using ..Trs
 using ..Log
 
 import ..Trs.reset
-import Base.getindex,Base.length,Base.show
 
 export DpaAttack,Attack,Analysis,LRA,MIA,CPA,IncrementalCPA
 export Status,Direction
@@ -107,10 +106,6 @@ type MIA <: NonIncrementalAnalysis
   function MIA()
     return new([HW()], [x -> abs.(x)], Nullable(), SimpleCSV(), 9)
   end
-end
-
-function poop(a::AbstractArray{Float64, 2})
-  return reshape(mapslices(x -> (s = std(x); s > 0 ? Float64((maximum(x) - mean(x)) / s) : Float64(0)), a, 1), 1, size(a)[2])
 end
 
 type LRA <: NonIncrementalAnalysis
