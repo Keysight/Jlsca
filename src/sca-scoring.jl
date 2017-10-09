@@ -32,7 +32,7 @@ type ScoresAndOffsets
       scores[l] = Vector{Vector{Float64}}(nrTargets)
       offsets[l] = Vector{Vector{Int}}(nrTargets)
       for t in 1:nrTargets
-        kbvalsLen = length(guesses(getTarget(params.attack, phase, targetOffsets[t])))
+        kbvalsLen = length(guesses(getTarget(params, phase, targetOffsets[t])))
         scores[l][t] = zeros(Float64, kbvalsLen)
         offsets[l][t] = zeros(Int, kbvalsLen)
       end

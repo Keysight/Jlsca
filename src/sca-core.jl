@@ -17,11 +17,11 @@ export guesses,numberOfPhases,numberOfTargets,correctKeyMaterial,recoverKey,getD
 @enum Direction FORWARD=1 BACKWARD=2
 @enum Status FINISHED PHASERESULT INTERMEDIATESCORES ONLYFORTEST INTERMEDIATECORRELATION BREAK
 
-const PHASE1 = 1 
-const PHASE2 = 2 
+const PHASE1 = 1
+const PHASE2 = 2
 const PHASE3 = 3
-const PHASE4 = 4 
-const PHASE5 = 5 
+const PHASE4 = 4
+const PHASE5 = 5
 const PHASE6 = 6
 
 export PHASE1,PHASE2,PHASE3,PHASE4,PHASE5,PHASE6
@@ -43,7 +43,7 @@ type Sum <: Combination end
 show(io::IO, a::Sum) = print(io, "+")
 
 
-type DpaAttack 
+type DpaAttack
   attack::Attack
   analysis::Analysis
   dataOffset::Int
@@ -56,18 +56,24 @@ type DpaAttack
   scoresCallBack::Nullable{Function}
   leakageCombinator::Combination
   maximization::Maximization
+  # caching stuff below, not configurable, overwritten for each sca run
+  targets::Vector{Vector{Target}}
+  phasefn::Vector{Nullable{Function}}
 
-  function DpaAttack(attack::Attack, analysis::Analysis) 
+  function DpaAttack(attack::Attack, analysis::Analysis)
     new(attack,analysis,1,Nullable(),Nullable(),Nullable(),Nullable(),Nullable(),Nullable(), Nullable(), Sum(), GlobalMaximization())
   end
 end
 
-function printParameters(a::DpaAttack) 
+function printParameters(a::DpaAttack)
   printParameters(a.attack)
   @printf("analysis:   %s\n", string(typeof(a.analysis).name.name))
   printParameters(a.analysis)
   @printf("data at:    %s\n", string(a.dataOffset))
-  if !isnull(a.targetOffsets) 
+  if !isnull(a.phases)
+    @printf("phases:     %s\n", string(get(a.phases)))
+  end
+  if !isnull(a.targetOffsets)
     @printf("key bytes:  %s\n", string(get(a.targetOffsets)))
   end
   if !isnull(a.knownKey)
@@ -84,7 +90,7 @@ getDataPass(a::Attack, phase::Int, phaseInput::Vector{UInt8}) = Nullable()
 
 phaseDataOffset(attack::Attack, phase::Int) = phase > 1 ? sum(x -> numberOfTargets(params.attack, x), 1:phase-1) : 0
 
-# four types of analysis methods: CPA and MIA and LRA and IncrementalCPA 
+# four types of analysis methods: CPA and MIA and LRA and IncrementalCPA
 type CPA <: NonIncrementalAnalysis
   leakages::Vector{Leakage}
   postProcess::Vector{Function}
@@ -209,15 +215,15 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
     # FIXME: need to pick something sane here
     maxCols = get(a.maxCols, 10000)
 
-    target = getTarget(params.attack, phase, targetOffsets[o])
+    target = getTarget(params, phase, targetOffsets[o])
     kbvals = guesses(target)
     nrKbvals = length(kbvals)
 
     for sr in 1:maxCols:samplecols
       srEnd = min(sr+maxCols-1, samplecols)
-      
+
       @printf("%s on samples shape %s (range %s) and data shape %s\n", string(typeof(a).name.name), size(kbsamples), string(sr:srEnd), size(kbdata))
-      
+
       if size(kbsamples)[2] == 0
         @printf("no samples!\n")
         scores = nothing
@@ -225,7 +231,7 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
       end
 
       v = @view kbsamples[:,sr:srEnd]
-      
+
       # run the attack
       C = computeScores(a, kbdata, v, target, kbvals)
 
@@ -265,8 +271,8 @@ function attack(a::IncrementalCPA, params::DpaAttack, phase::Int, super::Task, t
 
   (C,eof) = readTraces(trs, rows)
 
-  (samplecols,hypocols) = size(C) 
-  
+  (samplecols,hypocols) = size(C)
+
   @printf("%s produced (%d, %d) correlation matrix\n", string(typeof(a).name.name), samplecols, hypocols)
 
   for fn in a.postProcess
@@ -276,7 +282,7 @@ function attack(a::IncrementalCPA, params::DpaAttack, phase::Int, super::Task, t
   nrLeakages = length(a.leakages)
 
   for kb in 1:length(targetOffsets)
-    nrKbvals = length(guesses(getTarget(params.attack, phase, targetOffsets[kb])))
+    nrKbvals = length(guesses(getTarget(params, phase, targetOffsets[kb])))
     for l in 1:nrLeakages
       oo = (l-1)*nrKbvals + (kb-1)*nrLeakages*nrKbvals
       vv = @view C[:,oo+1:oo+nrKbvals]
@@ -309,14 +315,14 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
     scoresAndOffsets = ScoresAndOffsets(params, phase)
 
     eof = false
-    
+
     for offset in firstTrace:stepSize:numberOfTraces
       interval = offset:(offset+min(stepSize, numberOfTraces - offset + 1)-1)
 
       if eof
         break
       end
-      
+
       clearScoresAndOffsets!(scoresAndOffsets)
 
       attack(params.analysis, params, phase, super, trs, interval, scoresAndOffsets)
@@ -332,9 +338,9 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
     return scoresAndOffsets
 end
 
-function scataskUnified(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, numberOfTraces::Int, phase::Int, phaseInput::Vector{UInt8})
+function scataskUnified(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, numberOfTraces::Int, phase::Int)
 
-  roundfn = getDataPass(params.attack, phase, phaseInput)
+  roundfn = getDataPass(params, phase)
 
   if params.dataOffset != 1
     addDataPass(trs, x -> x[params.dataOffset:end])
@@ -382,9 +388,14 @@ function getTargetOffsets(a::DpaAttack, phase::Int)
   return get(a.targetOffsets, collect(1:numberOfTargets(a.attack, phase)))
 end
 
-function isFullAttack(a::DpaAttack, phase::Int) 
+function isFullAttack(a::DpaAttack, phase::Int)
   return isnull(a.targetOffsets) || (numberOfTargets(a.attack, phase) == length(get(params.targetOffsets)))
 end
+
+numberOfTargets(a::DpaAttack, phase::Int) = length(a.targets[phase])
+getTargets(a::DpaAttack, phase::Int) = a.targets[phase]
+getTarget(a::DpaAttack, phase::Int, targetOffset::Int) = a.targets[phase][targetOffset]
+getDataPass(a::DpaAttack, phase::Int) = a.phasefn[phase]
 
 # generic sca function, this one is called in all the unit tests and the main functions
 function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::Int=length(trs), printSubs::Bool=false, scoresCallBack::Nullable{Function}=Nullable{Function}(), corrCallBack=Nullable{Function}(),testcallback=Nullable{Function}())
@@ -397,16 +408,9 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
   local phaseInput = get(params.phaseInput, Vector{UInt8}(0))
   local phaseOutput = Vector{UInt8}(0)
 
-  if isnull(params.phases)
-    phases = 1:numberOfPhases(params.attack)
-  else
-    phases = get(params.phases)
-  end
-
   if !isnull(params.knownKey)
     knownrkmaterial = correctKeyMaterial(params.attack, get(params.knownKey))
   end
-
 
   if !isnull(params.outputkka) && !isnull(params.knownKey)
     kkaFilename = get(params.outputkka)
@@ -414,24 +418,41 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
   end
 
   finished = false
+  phase = 1
 
-  for phase in phases
-    if finished
-      break
+  params.targets = Vector{Vector{Target}}(0)
+  params.phasefn = Vector{Nullable{Function}}(0)
+
+  while !finished
+    targets = map(x -> getTarget(params.attack, phase, x), 1:numberOfTargets(params.attack,phase))
+    if length(targets) == 0
+      print("length is 0!\n")
+      finished = true
+      continue
     end
+    params.targets = [params.targets; [targets]]
 
-    @printf("\nphase: %s\n", phase)
     if phase > 1
       if !isnull(params.knownKey)
-        knownrklen = sum(x -> numberOfTargets(params.attack,x), 1:phase-1)
+        knownrklen = sum(x -> numberOfTargets(params,x), 1:phase-1)
         phaseInput = knownrkmaterial[1:knownrklen]
       else
         phaseInput = phaseOutput
       end
       phaseOutput = phaseInput
-      @printf("phase input: %s\n", !isnull(phaseInput) ? bytes2hex(phaseInput) : "none")
-      # for now, this is needed. For example, the DES getRoundKey() function depends on it
-      params.phaseInput = Nullable(phaseInput)
+    end
+
+    phasefn = getDataPass(params.attack, phase, phaseInput)
+    params.phasefn = [params.phasefn; phasefn]
+
+    if !isnull(params.phases) && !(phase in get(params.phases, []))
+      phase += 1
+      continue
+    end
+
+    @printf("\nphase: %s\n", phase)
+    if length(phaseInput) > 0
+      @printf("phase input: %s\n", bytes2hex(phaseInput))
     end
     print("\n")
 
@@ -440,10 +461,10 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
     # create the scatask with some sugar to catch exceptions
     t = @task begin
        try
-          scataskUnified(ct, trs, params, firstTrace, numberOfTraces, phase, phaseInput)
+          scataskUnified(ct, trs, params, firstTrace, numberOfTraces, phase)
           yieldto(ct, (BREAK,0))
         catch e
-          bt = catch_backtrace()  
+          bt = catch_backtrace()
           showerror(STDERR, e, bt)
           print(STDERR, "\n")
           Base.throwto(ct, ErrorException("task dead, look at stack trace above"))
@@ -485,6 +506,8 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
         @printf("WARNING: don't know how to handle %s produced by scatask\n", string(status))
       end
     end
+
+    phase += 1
   end
 
   if !isnull(params.outputkka) && !isnull(params.knownKey)
