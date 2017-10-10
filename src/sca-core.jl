@@ -88,8 +88,6 @@ numberOfTargets(a::Attack, phase::Int) = 1
 recoverKey(a::Attack, recoverKeyMaterial::Vector{UInt8}) = recoverKeyMaterial
 getDataPass(a::Attack, phase::Int, phaseInput::Vector{UInt8}) = Nullable()
 
-phaseDataOffset(attack::Attack, phase::Int) = phase > 1 ? sum(x -> numberOfTargets(params.attack, x), 1:phase-1) : 0
-
 # four types of analysis methods: CPA and MIA and LRA and IncrementalCPA
 type CPA <: NonIncrementalAnalysis
   leakages::Vector{Leakage}
@@ -385,11 +383,11 @@ function scataskUnified(super::Task, trs::Trace, params::DpaAttack, firstTrace::
 end
 
 function getTargetOffsets(a::DpaAttack, phase::Int)
-  return get(a.targetOffsets, collect(1:numberOfTargets(a.attack, phase)))
+  return get(a.targetOffsets, collect(1:numberOfTargets(a, phase)))
 end
 
 function isFullAttack(a::DpaAttack, phase::Int)
-  return isnull(a.targetOffsets) || (numberOfTargets(a.attack, phase) == length(get(params.targetOffsets)))
+  return isnull(a.targetOffsets) || (numberOfTargets(a, phase) == length(get(params.targetOffsets)))
 end
 
 numberOfTargets(a::DpaAttack, phase::Int) = length(a.targets[phase])

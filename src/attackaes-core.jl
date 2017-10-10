@@ -233,7 +233,7 @@ function recoverKey(params::AesSboxAttack, phaseInput::Vector{UInt8})
   if params.keyLength == KL128
     key = recoverKeyHelper(phaseInput, mode, direction)
   else
-    secondrklen = numberOfTargets(params, 2)
+    secondrklen = (KL192 == params.keyLength ? 8 : 16)
     # for these mode & direction combinations we actually recovered a InvMixColumn key, so correct it
     if (mode == CIPHER && direction == BACKWARD) || (mode == INVCIPHER && direction == FORWARD) || (mode == EQINVCIPHER && direction == FORWARD)
       for i in 1:div(secondrklen,4)
