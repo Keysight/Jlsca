@@ -248,11 +248,10 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
         yieldto(super, (INTERMEDIATECORRELATION, (phase, o, l, vv)))
         updateScoresAndOffsets!(params.maximization, scoresAndOffsets, vv, l, o)
       end
-
-      # let somebody do something with the scores for these traces
-      yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, nrrows, [o], targetOffsets)))
     end
 
+    # let somebody do something with the scores for these traces
+    yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, nrrows, [o], targetOffsets)))
   end
 end
 
