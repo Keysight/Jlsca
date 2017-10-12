@@ -189,9 +189,9 @@ function attack(super::Task, a::NonIncrementalAnalysis, trs::Trace, range::Range
       # get the scores for all leakage functions
       updateScoresAndOffsets!(scoresAndOffsets, C, 1, kb, getNrLeakageFunctions(a), length(kbvals))
 
-      # let somebody do something with the scores for these traces
-      yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, rows, [kb], keyByteOffsets)))
     end
+    # let somebody do something with the scores for these traces
+    yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, rows, [kb], keyByteOffsets)))
 
     Log.writecsv(a.logfile, totalelapsedtime)
 
