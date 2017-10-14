@@ -12,7 +12,7 @@ export Status,Direction
 export printParameters,getParameters
 export sca
 export Target,target
-export guesses,numberOfPhases,numberOfTargets,correctKeyMaterial,recoverKey,getDataPass,getTarget
+export guesses,numberOfPhases,correctKeyMaterial,recoverKey,getDataPass,getTargets
 
 @enum Direction FORWARD=1 BACKWARD=2
 @enum Status FINISHED PHASERESULT INTERMEDIATESCORES ONLYFORTEST INTERMEDIATECORRELATION BREAK
@@ -59,6 +59,7 @@ type DpaAttack
   # caching stuff below, not configurable, overwritten for each sca run
   targets::Vector{Vector{Target}}
   phasefn::Vector{Nullable{Function}}
+  phaseData::Vector{UInt8}
 
   function DpaAttack(attack::Attack, analysis::Analysis)
     new(attack,analysis,1,Nullable(),Nullable(),Nullable(),Nullable(),Nullable(),Nullable(), Nullable(), Sum(), GlobalMaximization())
@@ -84,7 +85,7 @@ end
 printParameters(a::Attack) = print("Unknown attack")
 guesses(a::Target{In,Out}) where {In,Out} = collect(UInt8, 0:255)
 numberOfPhases(a::Attack) = 1
-numberOfTargets(a::Attack, phase::Int) = 1
+getTargets(a::Attack, phase::Int) = []
 recoverKey(a::Attack, recoverKeyMaterial::Vector{UInt8}) = recoverKeyMaterial
 getDataPass(a::Attack, phase::Int, phaseInput::Vector{UInt8}) = Nullable()
 
@@ -421,7 +422,7 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
   params.phasefn = Vector{Nullable{Function}}(0)
 
   while !finished
-    targets = map(x -> getTarget(params.attack, phase, x), 1:numberOfTargets(params.attack,phase))
+    targets = getTargets(params.attack, phase)
     if length(targets) == 0
       print("length is 0!\n")
       finished = true
@@ -436,37 +437,39 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
       else
         phaseInput = phaseOutput
       end
-      phaseOutput = phaseInput
     end
 
     phasefn = getDataPass(params.attack, phase, phaseInput)
     params.phasefn = [params.phasefn; phasefn]
 
     if !isnull(params.phases) && !(phase in get(params.phases, []))
+      phaseOutput = phaseInput
       phase += 1
       continue
     end
 
-    @printf("\nphase: %s\n", phase)
+    print("\nphase: $(phase) / $(numberOfPhases(params.attack)), #targets $(length(targets))\n")
     if length(phaseInput) > 0
       @printf("phase input: %s\n", bytes2hex(phaseInput))
     end
     print("\n")
 
+    params.phaseData = phaseInput
+
     ct = current_task()
 
     # create the scatask with some sugar to catch exceptions
     t = @task begin
-       try
-          scataskUnified(ct, trs, params, firstTrace, numberOfTraces, phase)
-          yieldto(ct, (BREAK,0))
-        catch e
-          bt = catch_backtrace()
-          showerror(STDERR, e, bt)
-          print(STDERR, "\n")
-          Base.throwto(ct, ErrorException("task dead, look at stack trace above"))
-        end
+      try
+        scataskUnified(ct, trs, params, firstTrace, numberOfTraces, phase)
+        yieldto(ct, (BREAK,0))
+      catch e
+        bt = catch_backtrace()
+        showerror(STDERR, e, bt)
+        print(STDERR, "\n")
+        Base.throwto(ct, ErrorException("task dead, look at stack trace above"))
       end
+    end
 
     while !istaskdone(t) && t.state != :failed
       (status, statusData) = yieldto(t)

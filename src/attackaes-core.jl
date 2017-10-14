@@ -84,18 +84,6 @@ function correctKeyMaterial(params::AesAttack, knownKey::Vector{UInt8})
   end
 end
 
-function numberOfTargets(params::AesSboxAttack, phase::Int)
-  if params.keyLength == KL192 && phase == PHASE2
-    return 8
-  else
-    return 16
-  end
-end
-
-function numberOfTargets(params::AesMCAttack, phase::Int)
-  return 4
-end
-
 function numberOfPhases(params::AesSboxAttack)
   if params.keyLength == KL128
     return PHASE1
@@ -265,7 +253,7 @@ function recoverKey(params::AesMCAttack, phaseInput::Vector{UInt8})
   return recoverKeyHelper(reordered, mode, direction)
 end
 
-function getTarget(params::AesMCAttack, phase::Int, targetOffset::Int)
+function getTargets(params::AesMCAttack, phase::Int)
   if (params.direction == FORWARD && params.mode == CIPHER) || (params.direction == BACKWARD && params.mode != CIPHER)
     if params.xor
       targetfn = McOutXORIn(params.sbox, 0x0, 1)
@@ -280,11 +268,11 @@ function getTarget(params::AesMCAttack, phase::Int, targetOffset::Int)
     end
   end
 
-  return targetfn
+  return [targetfn for i in 1:4]
 end
 
 
-function getTarget(params::AesSboxAttack, phase::Int, targetOffset::Int)
+function getTargets(params::AesSboxAttack, phase::Int)
   if (params.direction == FORWARD && params.mode == CIPHER) || (params.direction == BACKWARD && params.mode != CIPHER)
     if params.xor
       targetfn = SboxOutXORIn(params.sbox)
@@ -299,7 +287,13 @@ function getTarget(params::AesSboxAttack, phase::Int, targetOffset::Int)
     end
   end
 
-  return targetfn
+  if params.keyLength == KL192 && phase == PHASE2
+    numberOfTargets = 8
+  else
+    numberOfTargets = 16
+  end
+
+  return [targetfn for i in 1:numberOfTargets]
 end
 
 function printParameters(params::Union{AesSboxAttack,AesMCAttack})

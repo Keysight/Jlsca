@@ -205,18 +205,6 @@ function printParameters(params::Sha1InputAttack)
   @printf("T xor:      %s%s\n", string(params.xor), params.xor ? @sprintf(" (xor for T0 = %d)", params.xorForT0) : "")
 end
 
-function getTarget(params::Sha1InputAttack, phase::Int, targetOffset::Int) 
-    if (1 <= phase <= 8) || (11 <= phase <= 14)
-        if params.xor
-            return ModAddXor()
-        else
-            return ModAdd()
-        end
-    else
-        return FoutZ()
-    end
-end
-
 function numberOfTargets(params::Sha1InputAttack, phase::Int)
     if (1 <= phase <= 8) || (11 <= phase <= 14)
         return 1
@@ -224,6 +212,19 @@ function numberOfTargets(params::Sha1InputAttack, phase::Int)
         return 8
     end
 end
+
+function getTargets(params::Sha1InputAttack, phase::Int) 
+    if (1 <= phase <= 8) || (11 <= phase <= 14)
+        if params.xor
+            return [ModAddXor()]
+        else
+            return [ModAdd()]
+        end
+    else
+        return [FoutZ() for i in 1:numberOfTargets(params,phase)]
+    end
+end
+
 
 numberOfPhases(params::Sha1InputAttack) = 14
 
@@ -297,7 +298,7 @@ type ModSub <: Target{UInt8,UInt8} end
 target(a::ModSub, data::UInt8, keyByte::UInt8) = data - keyByte
 
 numberOfPhases(params::Sha1OutputAttack) = 20
-getTarget(params::Sha1OutputAttack, phase::Int, targetOffset::Int) = ModSub()
+getTargets(params::Sha1OutputAttack, phase::Int) = [ModSub()]
 numberOfTargets(params::Sha1OutputAttack, phase::Int) = 1
 
 function getDataPass(params::Sha1OutputAttack, phase::Int, phaseInput::Vector{UInt8})

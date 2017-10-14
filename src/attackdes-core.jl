@@ -16,8 +16,6 @@ const right = 33:64
 
 abstract type DesAttack <: Attack end
 
-numberOfTargets(a::DesAttack, phase::Int) = 8
-
 type DesSboxAttack <: DesAttack
   mode::DesMode
   encrypt::Bool
@@ -163,16 +161,16 @@ function innerDesRound2(input::Vector{UInt8}, expDesKey1::BitVector, expDesKey2:
   return round2(Des.Cipher(Des.Cipher(input[1:8], expDesKey1, (x,y)->y, encrypt), expDesKey2, (x,y)->y, !encrypt), rk1, params)
 end
 
-function getTarget(params::DesSboxAttack, phase::Int, sbidx::Int)
+function getTargets(params::DesSboxAttack, phase::Int)
   if params.xor
-    return DesSboxOutXORin(sbidx)
+    return [DesSboxOutXORin(sbidx) for sbidx in 1:8]
   else
-    return DesSboxOut(sbidx)
+    return [DesSboxOut(sbidx) for sbidx in 1:8]
   end
 end
 
-function getTarget(params::DesRoundAttack, phase::Int, sbidx::Int)
-  return RoundOut(sbidx)
+function getTargets(params::DesRoundAttack, phase::Int)
+  return [RoundOut(sbidx) for sbidx in 1:8]
 end
 
 function getDataPass(params::DesAttack, phase::Int, phaseInput::Vector{UInt8})
@@ -328,11 +326,11 @@ function pick(scorecol::Vector{Float64}, col::Int, block::UInt8)
 end
 
 # a better way to get a round key from the scores
-function getRoundKey(a::DpaAttack, params::DesAttack, phase::Int, scores::Matrix{Float64})
+function getRoundKey(a::DpaAttack, params::DesAttack, phase::Int, sc::ScoresAndOffsets)
   if phase in [PHASE3;PHASE5]    
-    rows,cols = size(scores)
-    phaseInput = get(a.phaseInput)
-    wrongdeskey = recoverKeyHelper(params, phase-1, phaseInput[end-15:end-8], phaseInput[end-7:end])
+    nrTargets = sc.nrTargets
+    phaseOutput = a.phaseData
+    wrongdeskey = recoverKeyHelper(params, phase-1, phaseOutput[end-15:end-8], phaseOutput[end-7:end])
 
     if params.direction == BACKWARD
       encrypt = !params.encrypt
@@ -348,14 +346,16 @@ function getRoundKey(a::DpaAttack, params::DesAttack, phase::Int, scores::Matrix
     end
 
 
-    rk = zeros(UInt8, cols)
+    rk = zeros(UInt8, nrTargets)
 
-    for c in 1:cols
-      rk[c] = pick(scores[:,c],c,wrongrk[c])
+
+    for c in 1:nrTargets
+      combinedscores = getScores(a.leakageCombinator,a,sc,c)
+      rk[c] = pick(combinedscores,c,wrongrk[c])
     end
 
     return rk
   else
-    return vec(mapslices(x -> UInt8(sortperm(x, rev=true)[1] - 1), scores, 1))
+    return map(x -> UInt8(sortperm(getScores(a.leakageCombinator,a,sc,x), rev=true)[1] - 1), 1:sc.nrTargets)
   end
 end
