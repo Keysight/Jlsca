@@ -5,7 +5,7 @@
 export lra
 
 # LRA for a single data column
-function lra(data::AbstractArray{In}, samples::AbstractArray{Float64}, t::Target{In,Out}, basisFunction::Function, keyChunkValues::Vector{UInt8}) where {In,Out}
+function lra(data::AbstractArray{In}, samples::AbstractArray, t::Target{In,Out}, basisFunction::Function, keyChunkValues::Vector{UInt8}) where {In,Out}
     (rs, cs) = size(samples)
 
     SStot = sum((samples .- mean(samples, 1)) .^ 2, 1)'

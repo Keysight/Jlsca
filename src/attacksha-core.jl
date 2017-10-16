@@ -19,6 +19,7 @@ end
 
 type ModAdd <: Target{UInt8,UInt8} end
 target(a::ModAdd, data::UInt8, keyByte::UInt8) = data + keyByte
+# target(a::ModAdd, data::UInt8, keyByte::UInt8) = UInt16(data) + keyByte
 
 guesses(a::ModAdd) = collect(UInt8, 0:255)
 

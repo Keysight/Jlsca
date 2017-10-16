@@ -18,7 +18,7 @@ type MiaColumnData{T}
   p::Dict{T, Float64}
   numobs::Int
 
-  function MiaColumnData{T}(X::Vector{T}) where T
+  function MiaColumnData{T}(X::AbstractArray{T}) where T
     uniques = Set{T}()
     where = Dict{T,IntSet}()
     p = Dict{T, Float64}()
@@ -84,22 +84,28 @@ end
 function bucket(X::Vector{Float64}, nrXbuckets::Int)
   minX = minimum(X)
   maxX = maximum(X)
+
   if minX < 0
-    maxX = abs(maxX) + abs(minX)
+    maxX = maxX + abs(minX)
+    delta = abs(minX)
     minX = 0
+  else
+    maxX = maxX - minX
+    delta = -abs(minX)
+    minX = 0    
   end
 
-  stepX = abs(maxX - minX) / nrXbuckets
+  stepX = maxX / nrXbuckets
 
   Xbucketed = zeros(Int, length(X))
   for (idx,val) in enumerate(X)
-    Xbucketed[idx] = min(Int(div(abs(val)-minX,stepX)), nrXbuckets - 1)
+    Xbucketed[idx] = min(Int(div(val+delta,stepX)), nrXbuckets - 1)
   end
 
   return Xbucketed
 end
 
-function mia(O::AbstractArray{Float64}, P::Matrix, nrOfObuckets=9)
+function mia(O::AbstractArray, P::Matrix, nrOfObuckets=9)
   (ro,co) = size(O)
   (rp,cp) = size(P)
 

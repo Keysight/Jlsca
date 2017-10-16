@@ -84,15 +84,15 @@ end
 
 # FIXME move this out
 function leak!(buf, str, state)
-	@printf("%s: %08x\n", str, state)
+	# @printf("%s: %08x\n", str, state)
 	write(buf, state)
-	write(buf, Sca.hw(state))
-    for i in 0:3
-        write(buf, Sca.hw((state >> i*8)&0xff))
-    end
-    for i in 0:7
-        write(buf, Sca.hw((state >> i*4)&0xf))
-    end
+	# write(buf, Sca.hw(state))
+ #    for i in 0:3
+ #        write(buf, Sca.hw((state >> i*8)&0xff))
+ #    end
+ #    for i in 0:7
+ #        write(buf, Sca.hw((state >> i*4)&0xf))
+ #    end
 end
 
 using ProgressMeter
@@ -101,7 +101,7 @@ using ProgressMeter
 function shatraces()
 	samplesBuf = IOBuffer()
 	nrOfSamples = 0
-	nrOfTraces = 100
+	nrOfTraces = 500
 	local trs
 
     @showprogress for i in 1:nrOfTraces
@@ -183,5 +183,5 @@ hmacsha256test1()
 # Profile.print(maxdepth=12,combine=true)
 
 
-# shatraces()
+shatraces()
 # sha256traces()

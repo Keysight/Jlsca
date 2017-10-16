@@ -162,7 +162,7 @@ getNrLeakageFunctions(a::MIA) = length(a.leakages)
 getNrLeakageFunctions(a::IncrementalCPA) = length(a.leakages)
 
 
-function computeScores(a::CPA, data::AbstractArray{In}, samples::AbstractArray{Float64}, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
+function computeScores(a::CPA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
   (tr,tc) = size(samples)
   (dr,) = size(data)
   tr == dr || throw(DimensionMismatch())
@@ -172,7 +172,7 @@ function computeScores(a::CPA, data::AbstractArray{In}, samples::AbstractArray{F
   return C
 end
 
-function computeScores(a::MIA, data::AbstractArray{In}, samples::AbstractArray{Float64}, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
+function computeScores(a::MIA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
   (tr,tc) = size(samples)
   (dr,) = size(data)
   tr == dr || throw(DimensionMismatch())
@@ -182,14 +182,14 @@ function computeScores(a::MIA, data::AbstractArray{In}, samples::AbstractArray{F
   return C
 end
 
-function computeScores(a::LRA, data::AbstractArray{In}, samples::AbstractArray{Float64}, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
+function computeScores(a::LRA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
    C = lra(data, samples, target, a.basisModel, kbvals)
   return C
 end
 
 function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Trace, rows::Range, scoresAndOffsets)
 
-  local kbsamples::Matrix{Float64}
+  local kbsamples
   local kbdata
 
   targetOffsets = getTargetOffsets(params, phase)
@@ -445,6 +445,9 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
     if !isnull(params.phases) && !(phase in get(params.phases, []))
       phaseOutput = phaseInput
       phase += 1
+      if phase > numberOfPhases(params.attack) 
+        finished = true
+      end
       continue
     end
 
