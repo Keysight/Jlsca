@@ -16,6 +16,8 @@ const right = 33:64
 
 abstract type DesAttack <: Attack end
 
+numberOfTargets(a::DesAttack, phase::Int) = 8
+
 type DesSboxAttack <: DesAttack
   mode::DesMode
   encrypt::Bool
@@ -161,7 +163,7 @@ function innerDesRound2(input::Vector{UInt8}, expDesKey1::BitVector, expDesKey2:
   return round2(Des.Cipher(Des.Cipher(input[1:8], expDesKey1, (x,y)->y, encrypt), expDesKey2, (x,y)->y, !encrypt), rk1, params)
 end
 
-function getTargets(params::DesSboxAttack, phase::Int)
+function getTargets(params::DesSboxAttack, phase::Int, phaseInput::Vector{UInt8})
   if params.xor
     return [DesSboxOutXORin(sbidx) for sbidx in 1:8]
   else
@@ -169,7 +171,7 @@ function getTargets(params::DesSboxAttack, phase::Int)
   end
 end
 
-function getTargets(params::DesRoundAttack, phase::Int)
+function getTargets(params::DesRoundAttack, phase::Int, phaseInput::Vector{UInt8})
   return [RoundOut(sbidx) for sbidx in 1:8]
 end
 

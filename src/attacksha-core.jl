@@ -28,14 +28,25 @@ target(a::ModAddXor, data::UInt16, keyByte::UInt8) = (UInt8(data >> 8) + keyByte
 
 guesses(a::ModAddXor) = collect(UInt8, 0:255)
 
-type FoutZ <: Target{UInt8,UInt8} end
-function target(a::FoutZ, data::UInt8, keyByte::UInt8)  
-    x = data & 0xf
-    y = (data >> 4) & 0xf
-    return ((x & y) ⊻ (~x & keyByte))
+type FoutZ4b <: Target{UInt8,UInt8} end
+
+function target(a::FoutZ4b, data::UInt8, keyByte::UInt8)  
+    x = UInt8(data & 0xf)
+    y = UInt8((data >> 4) & 0xf)
+    return (((x & y) ⊻ (~x & keyByte)) & 0xf)
 end
 
-guesses(a::FoutZ) = collect(UInt8, 0:15)
+guesses(a::FoutZ4b) = collect(UInt8, 0:15)
+
+type FoutZ8b <: Target{UInt8,UInt8} 
+    y::UInt8
+end
+
+function target(a::FoutZ8b, x::UInt8, keyByte::UInt8)  
+    return (((x & a.y) ⊻ (~x & keyByte)) & 0xff)
+end
+
+guesses(a::FoutZ8b) = collect(UInt8, 0:255)
 
 # 0-based idx, big endian order
 function setIntMSB(val::UInt32, idx::Int, data::Vector{UInt8})
@@ -56,25 +67,14 @@ function a0rot(pi::Vector{UInt8})
     for i in 8:-1:1
         ret <<= 4
         ret |= (nibbles[i] & 0xf)
-        nibbles[i] <<= 4
+        # nibbles[i] <<= 4
     end
 
     return ret
 end
 
-function b0rot(pi::Vector{UInt8})
-    nibbles = pi[17:24]
-    ret::UInt32 = 0
-    for i in 8:-1:1
-        ret <<= 4
-        ret |= (nibbles[i] & 0xf)
-        nibbles[i] <<= 4
-    end
-
-    return ret
-end
-
-R3(pi::Vector{UInt8}) = ltoh(reinterpret(UInt32, pi[25:28])[1])
+b0rot(pi::Vector{UInt8}) = ltoh(reinterpret(UInt32, pi[17:20])[1])
+R3(pi::Vector{UInt8}) = ltoh(reinterpret(UInt32, pi[21:24])[1])
 
 # data per row
 function prepModAdd1(byteIdx::Int, key::UInt32, data::Array{UInt8}, initialXor::UInt32)
@@ -125,12 +125,11 @@ function prepFoutZ4(data::Array{UInt8}, state::Vector{UInt8})
 
     ret = zeros(UInt8, 8)
 
-    for i in 0:7
-        shift = i*4
+    for i in 0:4
+        shift = i*8
         idx = i
-        ret[idx+1] = (a0r >> shift) & 0xf
-        ret[idx+1] <<= 4
-        ret[idx+1] |= (t0 >> shift) & 0xf
+        ret[idx+1] <<= 8
+        ret[idx+1] |= (t0 >> shift) & 0xff
     end
     return ret
 end
@@ -189,7 +188,7 @@ function getDataPass(params::Sha1InputAttack, phase::Int, phaseInput::Vector{UIn
         # DPA 4 
         # no XOR attack for this one!
         roundfn = x -> prepFoutZ4(x, phaseInput)
-    elseif intIdx == 6
+    elseif intIdx == 5
         # DPA 5
         if params.xor 
             roundfn = x -> [prepModAdd5(byteIdx, partialKey, x, phaseInput)]
@@ -209,20 +208,25 @@ end
 function numberOfTargets(params::Sha1InputAttack, phase::Int)
     if (1 <= phase <= 8) || (11 <= phase <= 14)
         return 1
-    else
+    elseif phase == 9
         return 8
+    elseif phase == 10
+        return 4
     end
 end
 
-function getTargets(params::Sha1InputAttack, phase::Int) 
+function getTargets(params::Sha1InputAttack, phase::Int, phaseInput::Vector{UInt8}) 
     if (1 <= phase <= 8) || (11 <= phase <= 14)
         if params.xor
             return [ModAddXor()]
         else
             return [ModAdd()]
         end
-    else
-        return [FoutZ() for i in 1:numberOfTargets(params,phase)]
+    elseif phase == 9
+        return [FoutZ4b() for i in 1:8]
+    elseif phase == 10
+        a0r = a0rot(phaseInput)
+        return [FoutZ8b((a0r >> (i-1)*8) & 0xff) for i in 1:4]
     end
 end
 
@@ -258,22 +262,14 @@ function correctKeyMaterial(params::Sha1InputAttack, knownKey::Vector{UInt8})
         res[3] <<= 8
         res[3] |= ((a0r >> i*4) & 0xf)
     end
+    res[4] = 0
     for i in 7:-1:4
         res[4] <<= 8
         res[4] |= ((a0r >> i*4) & 0xf)
     end
     b0r = Sha.rotl(b0,30)
-    res[5] = 0
-    for i in 3:-1:0
-        res[5] <<= 8
-        res[5] |= ((b0r >> i*4) & 0xf)
-    end
-    res[6] = 0
-    for i in 7:-1:4
-        res[6] <<= 8
-        res[6] |= ((b0r >> i*4) & 0xf)
-    end
-    res[7] = c0 + Sha.K(2)
+    res[5] = b0r
+    res[6] = c0 + Sha.K(2)
 
     return reinterpret(UInt8, map(htol, res))
 end
@@ -299,7 +295,7 @@ type ModSub <: Target{UInt8,UInt8} end
 target(a::ModSub, data::UInt8, keyByte::UInt8) = data - keyByte
 
 numberOfPhases(params::Sha1OutputAttack) = 20
-getTargets(params::Sha1OutputAttack, phase::Int) = [ModSub()]
+getTargets(params::Sha1OutputAttack, phase::Int, phaseInput::Vector{UInt8}) = [ModSub()]
 numberOfTargets(params::Sha1OutputAttack, phase::Int) = 1
 
 function getDataPass(params::Sha1OutputAttack, phase::Int, phaseInput::Vector{UInt8})

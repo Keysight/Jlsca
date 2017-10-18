@@ -12,7 +12,7 @@ export Status,Direction
 export printParameters,getParameters
 export sca
 export Target,target
-export guesses,numberOfPhases,correctKeyMaterial,recoverKey,getDataPass,getTargets
+export guesses,numberOfPhases,numberOfTargets,correctKeyMaterial,recoverKey,getDataPass,getTargets
 
 @enum Direction FORWARD=1 BACKWARD=2
 @enum Status FINISHED PHASERESULT INTERMEDIATESCORES ONLYFORTEST INTERMEDIATECORRELATION BREAK
@@ -85,7 +85,8 @@ end
 printParameters(a::Attack) = print("Unknown attack")
 guesses(a::Target{In,Out}) where {In,Out} = collect(UInt8, 0:255)
 numberOfPhases(a::Attack) = 1
-getTargets(a::Attack, phase::Int) = []
+numberOfTargets(a::Attack, phase::Int) = 1
+getTargets(a::Attack, phase::Int, phaseInput::Vector{UInt8}) = []
 recoverKey(a::Attack, recoverKeyMaterial::Vector{UInt8}) = recoverKeyMaterial
 getDataPass(a::Attack, phase::Int, phaseInput::Vector{UInt8}) = Nullable()
 
@@ -422,14 +423,6 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
   params.phasefn = Vector{Nullable{Function}}(0)
 
   while !finished
-    targets = getTargets(params.attack, phase)
-    if length(targets) == 0
-      print("length is 0!\n")
-      finished = true
-      continue
-    end
-    params.targets = [params.targets; [targets]]
-
     if phase > 1
       if !isnull(params.knownKey)
         knownrklen = sum(x -> numberOfTargets(params,x), 1:phase-1)
@@ -438,6 +431,11 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
         phaseInput = phaseOutput
       end
     end
+
+    targets = getTargets(params.attack, phase, phaseInput)
+    @assert length(targets) > 0
+    params.targets = [params.targets; [targets]]
+
 
     phasefn = getDataPass(params.attack, phase, phaseInput)
     params.phasefn = [params.phasefn; phasefn]
