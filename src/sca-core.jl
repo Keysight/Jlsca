@@ -253,7 +253,7 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
     end
 
     # let somebody do something with the scores for these traces
-    yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, nrrows, [o], targetOffsets)))
+    yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs), nrrows, [o])))
   end
 end
 
@@ -292,7 +292,7 @@ function attack(a::IncrementalCPA, params::DpaAttack, phase::Int, super::Task, t
 
 
   # let somebody do something with the scores for these traces
-  yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs), collect(1:length(targetOffsets)), targetOffsets)))
+  yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs),getCounter(trs), targetOffsets)))
 end
 
 # does the attack & analysis per xxx traces, should be called from an scatask
@@ -326,7 +326,7 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
 
       attack(params.analysis, params, phase, super, trs, interval, scoresAndOffsets)
 
-      # only for testing
+      # FIXME: only for testing, fix the damn tests and remove this nonsense
       yieldto(super, (ONLYFORTEST, (scoresAndOffsets, getCounter(trs), collect(1:length(targetOffsets)), targetOffsets)))
     end
 
@@ -337,7 +337,7 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
     return scoresAndOffsets
 end
 
-function scataskUnified(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, numberOfTraces::Int, phase::Int)
+function scatask(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, numberOfTraces::Int, phase::Int)
 
   roundfn = getDataPass(params, phase)
 
@@ -411,11 +411,6 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
     knownrkmaterial = correctKeyMaterial(params.attack, get(params.knownKey))
   end
 
-  if !isnull(params.outputkka) && !isnull(params.knownKey)
-    kkaFilename = get(params.outputkka)
-    truncate(kkaFilename)
-  end
-
   finished = false
   phase = 1
 
@@ -435,7 +430,6 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
     targets = getTargets(params.attack, phase, phaseInput)
     @assert length(targets) > 0
     params.targets = [params.targets; [targets]]
-
 
     phasefn = getDataPass(params.attack, phase, phaseInput)
     params.phasefn = [params.phasefn; phasefn]
@@ -462,7 +456,7 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
     # create the scatask with some sugar to catch exceptions
     t = @task begin
       try
-        scataskUnified(ct, trs, params, firstTrace, numberOfTraces, phase)
+        scatask(ct, trs, params, firstTrace, numberOfTraces, phase)
         yieldto(ct, (BREAK,0))
       catch e
         bt = catch_backtrace()
@@ -485,11 +479,11 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
           end
         end
       elseif status == INTERMEDIATESCORES
-        (scoresAndOffsets, numberOfTraces2, keyOffsets, prettyKeyOffsets) = statusData
-        printScores(params, phase, scoresAndOffsets, numberOfTraces2,keyOffsets,prettyKeyOffsets)
+        (scoresAndOffsets, numberOfTracesProcessed, numberOfRowsAfterProcessing, keyOffsets) = statusData
+        printScores(params, phase, scoresAndOffsets, numberOfTracesProcessed, numberOfRowsAfterProcessing ,keyOffsets)
 
         if !isnull(params.outputkka) && !isnull(params.knownKey)
-          add2kka(scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2, get(knownKey), kkaFilename)
+          add2kka(params, phase, scoresAndOffsets, numberOfTracesProcessed, numberOfRowsAfterProcessing, keyOffsets)
         end
       elseif status == PHASERESULT
         phaseOutput = vcat(phaseOutput, statusData)

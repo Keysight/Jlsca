@@ -102,15 +102,14 @@ function getRoundKey(params::DpaAttack, attack::Attack, phase::Int, sc::ScoresAn
 end
 
 # print the scores pretty
-function printScores(params::DpaAttack, phase::Int, scoresAndOffsets::ScoresAndOffsets, numberOfTraces, keyOffsets, prettyKeyOffsets, printsubs=false,  max=5, io=STDOUT)
-  
+function printScores(params::DpaAttack, phase::Int, scoresAndOffsets::ScoresAndOffsets, numberOfTraces::Int, numberOfRows::Int, keyOffsets::Vector{Int}, printsubs=false,  max=5, io=STDOUT) 
   nrLeakageFunctions = length(scoresAndOffsets)
   keyLength = length(keyOffsets)
   winners = zeros(UInt8, keyLength)
   phaseDataOffset = phase > 1 ? sum(x -> numberOfTargets(params, x), 1:phase-1) : 0
   phaseDataLength = numberOfTargets(params, phase)
   correctRoundKeymaterial = !isnull(params.knownKey) ? correctKeyMaterial(params.attack, get(params.knownKey))[phaseDataOffset+1:phaseDataOffset+phaseDataLength] : Vector{UInt8}(0)
-  @printf(io, "Results @ %d rows\n", numberOfTraces)
+  @printf(io, "Results @ %d rows (%d traces consumed)\n", numberOfRows, numberOfTraces)
 
   for j in 1:keyLength
     kbOffset = keyOffsets[j]
@@ -121,7 +120,7 @@ function printScores(params::DpaAttack, phase::Int, scoresAndOffsets::ScoresAndO
 
     winners[j] = indexes[1] - 1
 
-    @printf(io, "target: %d, phase: %d\n", prettyKeyOffsets[kbOffset], phase)
+    @printf(io, "target: %d, phase: %d\n", keyOffsets[j], phase)
 
     printableIndexes = indexes[1:max]
     if length(correctRoundKeymaterial) > 0
@@ -171,35 +170,35 @@ function truncate(fname)
     close(fd)
 end
 
-function add2kka(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}, keyOffsets, numberOfTraces, correctRoundKeymaterial::Vector{UInt8}, fdorstring::Union{IO,AbstractString},  leakageFunctionsCombinator=(+))
-  local fd
+function add2kka(params::DpaAttack, phase::Int, scoresAndOffsets::ScoresAndOffsets, numberOfTraces::Int, numberOfRows::Int, keyOffsets::Vector{Int})
+  @assert(!isnull(params.outputkka) && !isnull(params.knownKey))
 
-  if isa(fdorstring,AbstractString)
-    isempty = stat(fdorstring).size == 0
+  phaseDataOffset = phase > 1 ? sum(x -> numberOfTargets(params, x), 1:phase-1) : 0
+  phaseDataLength = numberOfTargets(params, phase)
+  correctRoundKeymaterial = correctKeyMaterial(params.attack, get(params.knownKey))[phaseDataOffset+1:phaseDataOffset+phaseDataLength]
 
-    fd = open(fdorstring, "a")
+  kkaFilename = get(params.outputkka) * "phase$(phase).csv"
+  isempty = stat(kkaFilename).size == 0
 
-    if isempty
-      @printf(fd, "#traces")
-      for j in 1:length(correctRoundKeymaterial)
-        @printf(fd, ",")
-        # @printf(fd, "kb%d rank,kb%d value,kb%d score", j,j,j)
-        @printf(fd, "kb%d rank", j)
-      end
-      @printf(fd, "\n")
+  fd = open(kkaFilename, "a")
+
+  if isempty
+    @printf(fd, "numberOfTraces,numberOfRows")
+    for j in 1:length(correctRoundKeymaterial)
+      @printf(fd, ",")
+      # @printf(fd, "kb%d rank,kb%d value,kb%d score", j,j,j)
+      @printf(fd, "kb%d rank", j)
     end
-  else
-    fd = fdorstring
+    @printf(fd, "\n")
   end
 
-  scores = getCombinedScores(scoresAndOffsets, leakageFunctionsCombinator)
 
-  @printf(fd, "%d", numberOfTraces)
+  @printf(fd, "%d,%d", numberOfTraces, numberOfRows)
+
   for i in 1:length(correctRoundKeymaterial)
     if i in keyOffsets
       j = findfirst(x -> x == i, keyOffsets)
-      scoresPerCand = vec(scores[:,j])
-
+      scoresPerCand = getScores(params.leakageCombinator, params, scoresAndOffsets, i)
       # sort peaks
       indexesPerCand = sortperm(vec(scoresPerCand), rev=true)
       keybyte = correctRoundKeymaterial[keyOffsets[j]]
@@ -217,8 +216,5 @@ function add2kka(scoresAndOffsets::Vector{Tuple{Matrix{Float64}, Matrix{UInt}}},
 
   @printf(fd, "\n")
 
-  if isa(fdorstring,AbstractString)
-    close(fd)
-  end
-
+  close(fd)
 end
