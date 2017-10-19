@@ -195,23 +195,29 @@ By all means take a look at the `main-xxx.jl` files, pick one that matches what 
 
 ## Attack parameters
 
-There are three supported attacks: AesSboxAttack(), AesMCAttack() and DesSboxAttack(), defined in attackaes-core.jl and attackdes-core.jl. For example, the following creates a forward AES128 attack attack on all 8 bits of the intermediate state with vanilla CPA:
+There are several supported attacks: AesSboxAttack(), AesMCAttack(), DesSboxAttack(), Sha1InputAttack, and Sha1OutputAttack defined in attackaes-core.jl, attackdes-core.jl and attacksha-core.jl. For example, the following creates a forward AES128 attack attack on all 8 bits of the intermediate state with vanilla CPA:
 
 ```julia
-params = AesSboxAttack()
-params.mode = CIPHER
-params.keyLength = KL128
-params.direction = FORWARD
-params.analysis = CPA()
-params.analysis.leakages = [Bit(i) for i in 0:7]
+# first define an attack
+attack = AesSboxAttack()
+attack.mode = CIPHER
+attack.keyLength = KL128
+attack.direction = FORWARD
+# then an analysis
+analysis = CPA()
+analysis.leakages = [Bit(i) for i in 0:7]
+# combine the two in a DpaAttack. The attack field is now also accessible
+# through params.attack, same for params.analysis.
+params = DpaAttack(attack,analysis)
+
 ```
-What's put in params.analysis.leakages is a list of objects with a type that inherits from `Leakage` and implements a `leak` function. Look in `sca-leakages.jl` on how to see HW and Bit type leakges are implemented. If you'd like to attack with HW instead, write this:
+What's put in analysis.leakages is a list of objects with a type that inherits from `Leakage` and implements a `leak` function. Look in `sca-leakages.jl` on how to see HW and Bit type leakges are implemented. If you'd like to attack with HW instead, write this:
 ```julia
 params.analysis.leakages = [HW()]
 ```
-If you want to attack the HD between S-box in and out, set this:
+If you want to attack the HD between S-box in and out, set this (only for the DES/AES attacks):
 ```julia
-params.xor = true
+params.attack.xor = true
 ```
 Since we're configuring a forward attack, we need to tell Jlsca what the offset of the input in the trace data is:
 ```julia
@@ -219,16 +225,16 @@ params.dataOffset = 1
 ```
 This means that the input data is the start of the trace data: Julia offsets are 1-based!! If you'd rather run the attack backwards, and the output data is located after the input, you'd type this:
 ```julia
-params.direction = BACKWARD
+params.attack.direction = BACKWARD
 params.dataOffset = 17
 ```
 If we want to attack all key bytes, we write this:
 ```julia
-params.keyByteOffsets = collect(1:16)
+params.targetOffsets = collect(1:16)
 ```
 If we only want the first and last key bytes we write this:
 ```julia
-params.keyByteOffsets = [1,16]
+params.targetOffsets = [1,16]
 ```
 If we want LRA instead of CPA, we do this:
 ```julia
@@ -246,20 +252,14 @@ The `sampleBuckets` value is the number of buckets in which samples (observation
 
 ## Passing attack phase data
 
-To attack inner rounds you need to use key material you recovered earlier. Jlsca does all this automagically by default. For example, AES192 consists of two separate attacks. If you want to attack AES192 you can tell Jlsca to do both phases sequentially without user interaction by setting the attack parameter:
+To attack inner rounds you need to use key material you recovered earlier. Jlsca does all this automagically by default. For example, AES192 consists of two separate attacks. If you only want to attack the first round of AES192 you can tell Jlsca by setting the attack parameter:
 ```julia
-params.phases = [PHASE1, PHASE2]
+params.phases = [1]
 ```
-Jlsca will then run the two attacks, combine the results, and spits out the full key.
-
-If you want to control the two phases explicitly (if you run the Jlsca module in Inspector, for example) you can do so too. Again, for AES192, you'd first run the attack with:
-```julia
-params.phases = [PHASE1]
-```
-which gives you the first round key, printed as a hex string labeled "next phase input" on the console. You cut and paste that information into the next phase like this:
+which gives you the first round key, printed as a hex string labeled "next phase input" on the console. You cut and paste that information into the next phase like this, or if you ran phase 1 before this data will already be present in `params.phaseInput`:
 ```julia
 params.phases = [PHASE2]
-params.phaseInput = Nullable(hex2bytes("00112233445566778899aabbccddeeff")))
+params.phaseInput = hex2bytes("00112233445566778899aabbccddeeff"))
 ```
 
 ## Passes and processors
@@ -317,8 +317,7 @@ What's currently parallelized are all the post processors:
 
 All the provided main-xxx.jl files can be run with -pX to run on X processors (local or not, as long as the trace set input is available for all processes). 
 
-There are currently 3 different ways to parallelize each post processor:
-* SplitByData: This means that each process will visit each trace, but do only a part of the work for each trace, split by data. For example, for conditional averaging each process only keeps the averages for which it is responsible. If there are N processes, and the total amount of memory for all averages is M, each process uses M/N memory. 
+There are currently 2 different ways to parallelize each post processor:
 * SplitByTracesBlock: This means that each process will visit a subset of traces, but do all the work required for that trace. For conditional averaging this means that each process needs M memory but less trace data needs to be moved around and interpreted. Traces are split in blocks, i.e. the first N go to process 1, the second N to process 2 etc.
 * SplitByTracesSliced: Same as SplitByTracesBLock, but process 1 takes trace 1, process 2 takes trace 2, etc.
 

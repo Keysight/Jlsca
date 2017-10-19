@@ -500,6 +500,8 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
     phase += 1
   end
 
+  params.phaseInput = phaseOutput
+
   if !isnull(params.outputkka) && !isnull(params.knownKey)
     @printf("KKA output in %s\n", get(params.outputkka))
   end
