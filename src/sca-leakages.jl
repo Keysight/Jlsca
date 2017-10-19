@@ -8,6 +8,17 @@ export basisModelSingleBits
 
 abstract type Leakage end
 
+function show(io::IO, leakages::Vector{Leakage}) 
+  if length(leakages) == 0
+    print(io, "No leakages")
+  else
+    print(io, leakages[1])
+    if length(leakages) > 1
+      map((x -> (print(io,","); print(io,x))), leakages[2:end])
+    end
+  end
+end
+
 # some leakages for CPA
 
 type Bit <: Leakage

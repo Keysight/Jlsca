@@ -20,7 +20,7 @@ end
 type ModAdd <: Target{UInt8,UInt8} end
 target(a::ModAdd, data::UInt8, keyByte::UInt8) = data + keyByte
 # target(a::ModAdd, data::UInt8, keyByte::UInt8) = UInt16(data) + keyByte
-
+show(io::IO, a::ModAdd) = print(io, "Modular addition")
 guesses(a::ModAdd) = collect(UInt8, 0:255)
 
 type ModAddXor <: Target{UInt16,UInt8} end
@@ -36,6 +36,7 @@ function target(a::FoutZ4b, data::UInt8, keyByte::UInt8)
     return (((x & y) ⊻ (~x & keyByte)) & 0xf)
 end
 
+show(io::IO, a::FoutZ4b) = print(io, "Ch out, 4-bits")
 guesses(a::FoutZ4b) = collect(UInt8, 0:15)
 
 type FoutZ8b <: Target{UInt8,UInt8} 
@@ -46,6 +47,7 @@ function target(a::FoutZ8b, x::UInt8, keyByte::UInt8)
     return (((x & a.y) ⊻ (~x & keyByte)) & 0xff)
 end
 
+show(io::IO, a::FoutZ8b) = print(io, "Ch out, 8-bits")
 guesses(a::FoutZ8b) = collect(UInt8, 0:255)
 
 # 0-based idx, big endian order
@@ -121,17 +123,8 @@ end
 
 function prepFoutZ4(data::Array{UInt8}, state::Vector{UInt8})
     t0 = R0(state) + W0(data)
-    a0r = a0rot(state)
 
-    ret = zeros(UInt8, 8)
-
-    for i in 0:4
-        shift = i*8
-        idx = i
-        ret[idx+1] <<= 8
-        ret[idx+1] |= (t0 >> shift) & 0xff
-    end
-    return ret
+    return reinterpret(UInt8, [htol(t0)])
 end
 
 function prepModAdd5(byteIdx::Int, key::UInt32, data::Array{UInt8}, state::Vector{UInt8})
@@ -292,6 +285,7 @@ end
 type Sha1OutputAttack <: Sha1Attack end
 
 type ModSub <: Target{UInt8,UInt8} end
+show(io::IO, a::ModSub) = print(io, "Modular subtraction")
 target(a::ModSub, data::UInt8, keyByte::UInt8) = data - keyByte
 
 numberOfPhases(params::Sha1OutputAttack) = 20

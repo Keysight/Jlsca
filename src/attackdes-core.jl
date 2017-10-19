@@ -77,10 +77,11 @@ type DesSboxOut <: Target{UInt8,UInt8}
 end
 
 target(this::DesSboxOut, sixbits::Union{UInt16, UInt8}, kb::UInt8) = Sbox(this.sbidx)[getIdx((sixbits & 0x3f) ⊻ kb) + 1]
-
+show(io::IO, a::DesSboxOut) = print(io, "Sbox $(a.sbidx) out")
 guesses(a::DesSboxOut) = desguesses
 
 type DesSboxOutXORin <: Target{UInt8,UInt8}  end
+
 
 function target(this::DesSboxOutXORin, sixbits::Union{UInt16, UInt8}, kb::UInt8)
   inp =  ((sixbits & 0x3f) ⊻ kb) & 0xf
@@ -88,6 +89,7 @@ function target(this::DesSboxOutXORin, sixbits::Union{UInt16, UInt8}, kb::UInt8)
   return inp ⊻ outp
 end
 
+show(io::IO, a::DesSboxOutXORin) = print(io, "Sbox $(a.sbidx) out XOR in")
 guesses(a::DesSboxOutXORin) = desguesses
 
 type RoundOut <: Target{UInt16,UInt16} 
@@ -95,7 +97,7 @@ type RoundOut <: Target{UInt16,UInt16}
 end
 
 target(this::RoundOut, tenbits::UInt16, kb::UInt8) = Sbox(this.sbidx)[getIdx((tenbits & 0x3f) ⊻ kb) + 1] ⊻ (tenbits >> 6)
-
+show(io::IO, a::RoundOut) = print(io, "Round out, sbox $(a.sbidx)")
 guesses(a::RoundOut) = desguesses
 
 # round functions

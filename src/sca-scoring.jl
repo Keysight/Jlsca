@@ -120,7 +120,7 @@ function printScores(params::DpaAttack, phase::Int, scoresAndOffsets::ScoresAndO
 
     winners[j] = indexes[1] - 1
 
-    @printf(io, "target: %d, phase: %d\n", keyOffsets[j], phase)
+    @printf(io, "target: %d, phase: %d, \"%s\"\n", keyOffsets[j], phase, getTarget(params, phase, keyOffsets[j]))
 
     printableIndexes = indexes[1:max]
     if length(correctRoundKeymaterial) > 0

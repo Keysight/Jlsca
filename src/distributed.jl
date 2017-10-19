@@ -78,7 +78,7 @@ function add(c::PostProcessor, trs::Trace, globalRange::Range, update::Function)
   end
   rangestr = @sprintf("trace range %s", traceStart:traceStep:traceEnd)
 
-  @printf("Running processor %s on %s, using trace set with %d data passes, %d sample passes\n", string(typeof(c)), rangestr, length(trs.dataPasses), length(trs.passes))
+  @printf("Running processor \"%s\" on %s, %d data passes, %d sample passes\n", c, rangestr, length(trs.dataPasses), length(trs.passes))
   total = 0
   bla = 0
   try
