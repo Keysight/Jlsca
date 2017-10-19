@@ -21,9 +21,6 @@ function IncrementalCPATest(splitmode)
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
 
-    # numberOfAverages = numberOfTargets(params.attack, 1)
-    # numberOfCandidates = length(guesses(params.attack))
-
     @everyworker begin
       using Jlsca.Sca
       using Jlsca.Trs
@@ -33,8 +30,6 @@ function IncrementalCPATest(splitmode)
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
       elseif $splitmode == 2
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesBlock()))
-      # elseif $splitmode == 3
-      #   setPostProcessor(trs, IncrementalCorrelation(SplitByData($numberOfAverages, $numberOfCandidates)))
       end
     end
 
@@ -75,9 +70,6 @@ function ParallelIncrementalCPATest(splitmode)
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
 
-    # numberOfAverages = numberOfTargets(params.attack, 1)
-    # numberOfCandidates = length(guesses(params.attack))
-
     @everyworker begin
       using Jlsca.Trs
       trs = InspectorTrace($fullfilename)
@@ -85,8 +77,6 @@ function ParallelIncrementalCPATest(splitmode)
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
       elseif $splitmode == 2
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesBlock()))
-      # elseif $splitmode == 3
-      #   setPostProcessor(trs, IncrementalCorrelation(SplitByData($numberOfAverages, $numberOfCandidates)))
       end
     end
 
@@ -104,7 +94,7 @@ function ParallelIncrementalCPATest(splitmode)
     params.analysis.leakages = [Bit(0),Bit(7)]
 
     trs = InspectorTrace(fullfilename)
-    setPostProcessor(trs, IncrementalCorrelation(NoSplit()))
+    setPostProcessor(trs, IncrementalCorrelation())
 
     key = sca(trs,params,1, len)
 
@@ -129,9 +119,6 @@ function ParallelIncrementalCPATestWithInterval()
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
     params.updateInterval = Nullable(updateInterval)
-
-    # numberOfAverages = numberOfTargets(params.attack, 1)
-    # numberOfCandidates = length(guesses(params.attack))
 
     @everyworker begin
       using Jlsca.Trs
@@ -158,7 +145,7 @@ function ParallelIncrementalCPATestWithInterval()
       len2 = min(len, updateInterval*s)
 
       trs = InspectorTrace(fullfilename)
-      setPostProcessor(trs, IncrementalCorrelation(NoSplit()))
+      setPostProcessor(trs, IncrementalCorrelation())
 
       key = sca(trs,params,1, len2)
 

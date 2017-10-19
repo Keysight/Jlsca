@@ -43,7 +43,6 @@ abstract type Combination end
 type Sum <: Combination end
 show(io::IO, a::Sum) = print(io, "+")
 
-
 type DpaAttack
   attack::Attack
   analysis::Analysis

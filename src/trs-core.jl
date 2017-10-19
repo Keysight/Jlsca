@@ -221,23 +221,14 @@ function readAndPostProcessTraces(trs2::Trace, range::Range)
 
   traceLength = length(range)
 
-  progressLength = traceLength*nworkers()
   if isa(trs2, DistributedTrace)
     worksplit = @fetch Main.trs.postProcInstance.worksplit
   else
     worksplit = trs2.postProcInstance.worksplit
   end
 
-  if isa(worksplit, SplitByTraces)
-    progressLength = traceLength
-  elseif isa(worksplit, SplitByData) || isa(worksplit, NoSplit)
-    progressLength = traceLength*nworkers()
-  else
-    throw(ErrorException("not suppoerpeopsodpsofd!!!1"))
-  end
-
   if !pipe(trs2)
-    progress = Progress(progressLength, 1, @sprintf("Processing traces %s.. ", range))
+    progress = Progress(traceLength, 1, @sprintf("Processing traces %s.. ", range))
   else
     progress = nothing
   end
@@ -265,7 +256,6 @@ function readAndPostProcessTraces(trs2::Trace, range::Range)
   if isa(trs2, DistributedTrace)
     worker1copy = @fetchfrom workers()[1] Main.trs.postProcInstance
     ret = get(worker1copy)
-    # ret = @fetchfrom workers()[1] get(Main.trs.postProcInstance)
   else
     ret = get(trs2.postProcInstance)
   end

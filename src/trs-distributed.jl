@@ -75,15 +75,9 @@ function getCounter(trs2::DistributedTrace)
     worksplit = trs2.postProcInstance.worksplit
   end
 
-  if isa(worksplit, SplitByTraces)
-    total::Int = 0
-    @sync for worker in workers()
-      total += @fetchfrom worker Main.trs.tracesReturned
-    end
-  elseif isa(worksplit, SplitByData) || isa(worksplit, NoSplit)
-    total = @fetch Main.trs.tracesReturned
-  else
-    throw(ErrorException("not suppoerpeopsodpsofd!!!1"))
+  total = 0
+  @sync for worker in workers()
+    total += @fetchfrom worker Main.trs.tracesReturned
   end
 
   return total

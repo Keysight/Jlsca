@@ -4,8 +4,8 @@ Jlsca is a toolbox in Julia to do the computational part (DPA) of a side channel
 
 * Conditional averaging, for analog measurements
 * Conditional bitwise sample reduction, for whiteboxes
-* Incremental correlation statistics
-* Parallelization of all the above
+* Threaded and tiled incremental correlation statistics
+* Parallelization of all the above (multi-core / multi-machine)
 * Correlation power analysis (CPA)
 * non-profiled Linear regression analysis (LRA)
 * Mutual Information Analysis (MIA)
@@ -64,6 +64,10 @@ Step 2 in the installation performed a git clone of Jlsca in your Julia's user d
 This file performs vanilla correlation statistics on an input trace set. Vanilla meaning that it will compute correlation with the entire sample and hypothesis matrices present in memory. This is a good starting point for playing and implementing new statistics or attacks. This main does not do parallelization, so it will complain when you specify multiple processes (`-pX`) on the `julia` command line. For example:
 ```
 julia examples/main-noninc.jl destraces/tdes2_enc_9084b0087a1a1270587c146ccc60a252.trs
+```
+Or if you want to do a backwards attack do this (applies to all the main-xxx.jl files)
+```
+julia examples/main-noninc.jl destraces/tdes2_enc_9084b0087a1a1270587c146ccc60a252.trs BACKWARD
 ```
 
 ### File `main-condavg.jl`
