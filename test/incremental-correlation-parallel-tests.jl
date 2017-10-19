@@ -21,9 +21,6 @@ function IncrementalCPATest(splitmode)
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
 
-    numberOfAverages = length(params.keyByteOffsets)
-    numberOfCandidates = getNumberOfCandidates(params)
-
     @everyworker begin
       using Jlsca.Sca
       using Jlsca.Trs
@@ -33,17 +30,16 @@ function IncrementalCPATest(splitmode)
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
       elseif $splitmode == 2
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesBlock()))
-      elseif $splitmode == 3
-        setPostProcessor(trs, IncrementalCorrelation(SplitByData($numberOfAverages, $numberOfCandidates)))
       end
     end
 
-    sando = Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}(2)
+    sando = Vector{Matrix{Float64}}(totalNumberOfTargets(params.attack) * Sca.getNrLeakageFunctions(params.analysis) * 2)
     sandoIdx = 1
 
-    cb::Function = (phase,params,scoresAndOffsets,dataWidth,keyOffsets,numberOfTraces2) -> (sando[sandoIdx] = scoresAndOffsets[1]; sandoIdx += 1)
+    cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
+    params.scoresCallBack = cb
 
-    key = sca(DistributedTrace(),params,1, len, false, Nullable{Function}(cb))
+    key = sca(DistributedTrace(),params,1, len)
 
     @test(key == get(params.knownKey))
 
@@ -52,14 +48,14 @@ function IncrementalCPATest(splitmode)
 
     trs = InspectorTrace(fullfilename)
 
-    key = sca(trs,params,1, len, false, Nullable{Function}(cb))
+    key = sca(trs,params,1, len)
 
     @test(key == get(params.knownKey))
 
-    @test sandoIdx == 3
-
-    @test sando[1][1] ≈ sando[2][1]
-    @test sando[1][2] ≈ sando[2][2]
+    @test sandoIdx == length(sando) + 1
+    for i in 1:totalNumberOfTargets(params.attack)
+        @test sando[i] ≈ sando[i+totalNumberOfTargets(params.attack)* Sca.getNrLeakageFunctions(params.analysis)]
+    end
 end
 
 function ParallelIncrementalCPATest(splitmode)
@@ -74,9 +70,6 @@ function ParallelIncrementalCPATest(splitmode)
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
 
-    numberOfAverages = length(params.keyByteOffsets)
-    numberOfCandidates = getNumberOfCandidates(params)
-
     @everyworker begin
       using Jlsca.Trs
       trs = InspectorTrace($fullfilename)
@@ -84,17 +77,16 @@ function ParallelIncrementalCPATest(splitmode)
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
       elseif $splitmode == 2
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesBlock()))
-      elseif $splitmode == 3
-        setPostProcessor(trs, IncrementalCorrelation(SplitByData($numberOfAverages, $numberOfCandidates)))
       end
     end
 
-    sando = Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}(2)
+    sando = Vector{Matrix{Float64}}(totalNumberOfTargets(params.attack)  * Sca.getNrLeakageFunctions(params.analysis) * 2)
     sandoIdx = 1
 
-    cb::Function = (phase,params,scoresAndOffsets,dataWidth,keyOffsets,numberOfTraces2) -> (sando[sandoIdx] = scoresAndOffsets[1]; sandoIdx += 1)
+    cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
+    params.scoresCallBack = cb
 
-    key = sca(DistributedTrace(),params,1, len, false, Nullable{Function}(cb))
+    key = sca(DistributedTrace(),params,1, len)
 
     @test(key == get(params.knownKey))
 
@@ -102,16 +94,16 @@ function ParallelIncrementalCPATest(splitmode)
     params.analysis.leakages = [Bit(0),Bit(7)]
 
     trs = InspectorTrace(fullfilename)
-    setPostProcessor(trs, IncrementalCorrelation(NoSplit()))
+    setPostProcessor(trs, IncrementalCorrelation())
 
-    key = sca(trs,params,1, len, false, Nullable{Function}(cb))
+    key = sca(trs,params,1, len)
 
     @test(key == get(params.knownKey))
 
-    @test sandoIdx == 3
-
-    @test sando[1][1] ≈ sando[2][1]
-    @test sando[1][2] == sando[2][2]
+    @test sandoIdx == length(sando) + 1
+    for i in 1:totalNumberOfTargets(params.attack)
+        @test sando[i] ≈ sando[i+totalNumberOfTargets(params.attack)* Sca.getNrLeakageFunctions(params.analysis)]
+    end
 end
 
 function ParallelIncrementalCPATestWithInterval()
@@ -128,9 +120,6 @@ function ParallelIncrementalCPATestWithInterval()
     params.analysis.leakages = [Bit(0),Bit(7)]
     params.updateInterval = Nullable(updateInterval)
 
-    numberOfAverages = length(params.keyByteOffsets)
-    numberOfCandidates = getNumberOfCandidates(params)
-
     @everyworker begin
       using Jlsca.Trs
       trs = InspectorTrace($fullfilename)
@@ -138,12 +127,13 @@ function ParallelIncrementalCPATestWithInterval()
     end
 
     numberOfScas = div(len, updateInterval) + ((len % updateInterval) > 0 ? 1 : 0)
-    sando = Vector{Tuple{Matrix{Float64}, Matrix{UInt}, Int}}(numberOfScas*2)
+    sando = Vector{Matrix{Float64}}(totalNumberOfTargets(params.attack) * numberOfScas * Sca.getNrLeakageFunctions(params.analysis) * 2)
     sandoIdx = 1
 
-    cb::Function = (phase,params,scoresAndOffsets,dataWidth,keyOffsets,numberOfTraces2) -> (sando[sandoIdx] = (copy(scoresAndOffsets[1][1]),copy(scoresAndOffsets[1][2]),numberOfTraces2); sandoIdx += 1)
+    cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
+    params.scoresCallBack = cb
 
-    key = sca(DistributedTrace(),params,1, len, false, Nullable{Function}(cb))
+    key = sca(DistributedTrace(),params,1, len)
 
     @test(key == get(params.knownKey))
 
@@ -155,24 +145,16 @@ function ParallelIncrementalCPATestWithInterval()
       len2 = min(len, updateInterval*s)
 
       trs = InspectorTrace(fullfilename)
-      setPostProcessor(trs, IncrementalCorrelation(NoSplit()))
+      setPostProcessor(trs, IncrementalCorrelation())
 
-      key = sca(trs,params,1, len2, false, Nullable{Function}(cb))
+      key = sca(trs,params,1, len2)
 
       @test(key == get(params.knownKey))
     end
 
-    @test sandoIdx == numberOfScas*2+1
-
-    for s in 1:numberOfScas
-      @test sando[s][1] ≈ sando[s+numberOfScas][1]
-      # TODO: This test fails for the given trace set because two samples
-      # have approx the same correlation and a different sample wins when
-      # updateing the scores. Doesn't matter for correctness, but I should
-      # compare the raw correlation matrices instead of the scores and
-      # offsets.
-      # @test sando[s][2] == sando[s+numberOfScas][2]
-      @test sando[s][3] == sando[s+numberOfScas][3]
+    @test sandoIdx == length(sando) + 1
+    for i in 1:totalNumberOfTargets(params.attack)
+        @test sando[i] ≈ sando[i+totalNumberOfTargets(params.attack)*numberOfScas* Sca.getNrLeakageFunctions(params.analysis)]
     end
 end
 
@@ -181,10 +163,10 @@ end
 
 IncrementalCPATest(1)
 IncrementalCPATest(2)
-IncrementalCPATest(3)
+# IncrementalCPATest(3)
 
 ParallelIncrementalCPATest(1)
 ParallelIncrementalCPATest(2)
-ParallelIncrementalCPATest(3)
+# ParallelIncrementalCPATest(3)
 
 ParallelIncrementalCPATestWithInterval()

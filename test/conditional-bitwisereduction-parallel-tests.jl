@@ -21,9 +21,6 @@ function ParallelCondReduceTest(splitmode)
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0)]
 
-    numberOfAverages = length(params.keyByteOffsets)
-    numberOfCandidates = getNumberOfCandidates(params)
-
     localtrs = InspectorTrace(fullfilename, true)
     addSamplePass(localtrs, tobits)
 
@@ -35,17 +32,16 @@ function ParallelCondReduceTest(splitmode)
         setPostProcessor(trs, CondReduce(SplitByTracesSliced(), $localtrs))
       elseif $splitmode == 2
         setPostProcessor(trs, CondReduce(SplitByTracesBlock(), $localtrs))
-      elseif $splitmode == 3
-        setPostProcessor(trs, CondReduce(SplitByData($numberOfAverages, $numberOfCandidates), $localtrs))
       end
     end
 
-    sando = Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}(2)
+    sando = Vector{Matrix{Float64}}(totalNumberOfTargets(params.attack) * 2)
     sandoIdx = 1
 
-    cb::Function = (phase,params,scoresAndOffsets,dataWidth,keyOffsets,numberOfTraces2) -> (sando[sandoIdx] = scoresAndOffsets[1]; sandoIdx += 1)
+    cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
+    params.scoresCallBack = cb
 
-    key = sca(DistributedTrace(),params,1, len, false, Nullable{Function}(cb))
+    key = sca(DistributedTrace(),params,1, len)
 
     @test(key == get(params.knownKey))
 
@@ -54,20 +50,16 @@ function ParallelCondReduceTest(splitmode)
 
     trs = InspectorTrace(fullfilename, true)
     addSamplePass(trs, tobits)
-    setPostProcessor(trs, CondReduce(NoSplit(), trs))
+    setPostProcessor(trs, CondReduce(trs))
 
-    key = sca(trs,params,1, len, false, Nullable{Function}(cb))
+    key = sca(trs,params,1, len)
 
     @test(key == get(params.knownKey))
 
-    @test sandoIdx == 3
-
-    @test size(sando[1][1]) == size(sando[2][1])
-    @test size(sando[1][2]) == size(sando[2][2])
-
-
-    @test sando[1][1] ≈ sando[2][1]
-    @test sando[1][2] == sando[2][2]
+    @test sandoIdx == length(sando) + 1
+    for i in 1:totalNumberOfTargets(params.attack)
+        @test sando[i] ≈ sando[i+totalNumberOfTargets(params.attack)]
+    end
 end
 
 
@@ -85,9 +77,6 @@ function ParallelCondReduceTestWithInterval()
     params.analysis.leakages = [Bit(0)]
     params.updateInterval = Nullable(updateInterval)
 
-    numberOfAverages = length(params.keyByteOffsets)
-    numberOfCandidates = getNumberOfCandidates(params)
-
     localtrs = InspectorTrace(fullfilename, true)
     addSamplePass(localtrs, tobits)
 
@@ -99,12 +88,13 @@ function ParallelCondReduceTestWithInterval()
     end
 
     numberOfScas = div(len, updateInterval) + ((len % updateInterval) > 0 ? 1 : 0)
-    sando = Vector{Tuple{Matrix{Float64}, Matrix{UInt}, Int}}(numberOfScas*2)
+    sando = Vector{Matrix{Float64}}(totalNumberOfTargets(params.attack) * numberOfScas * 2)
     sandoIdx = 1
 
-    cb::Function = (phase,params,scoresAndOffsets,dataWidth,keyOffsets,numberOfTraces2) -> (sando[sandoIdx] = (copy(scoresAndOffsets[1][1]),copy(scoresAndOffsets[1][2]),numberOfTraces2); sandoIdx += 1)
+    cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
+    params.scoresCallBack = cb
 
-    key = sca(DistributedTrace(),params,1, len, false, Nullable{Function}(cb))
+    key = sca(DistributedTrace(),params,1, len)
 
     @test(key == get(params.knownKey))
 
@@ -117,21 +107,17 @@ function ParallelCondReduceTestWithInterval()
 
       trs = InspectorTrace(fullfilename,true)
       addSamplePass(trs, tobits)
-      setPostProcessor(trs, CondReduce(NoSplit(), trs))
+      setPostProcessor(trs, CondReduce(trs))
 
-      key = sca(trs,params,1, len2, false, Nullable{Function}(cb))
+      key = sca(trs,params,1, len2)
 
       @test(key == get(params.knownKey))
     end
-
-    @test sandoIdx == numberOfScas*2+1
-
-    for s in 1:numberOfScas
-      @test sando[s][1] ≈ sando[s+numberOfScas][1]
-      @test sando[s][2] == sando[s+numberOfScas][2]
-      @test sando[s][3] == sando[s+numberOfScas][3]
+    
+    @test sandoIdx == length(sando) + 1
+    for i in 1:totalNumberOfTargets(params.attack)
+        @test sando[i] ≈ sando[i+totalNumberOfTargets(params.attack)*numberOfScas]
     end
-
 end
 
 
@@ -139,6 +125,6 @@ end
 
 ParallelCondReduceTest(1)
 ParallelCondReduceTest(2)
-ParallelCondReduceTest(3)
+# ParallelCondReduceTest(3)
 
 ParallelCondReduceTestWithInterval()

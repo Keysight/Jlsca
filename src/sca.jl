@@ -4,6 +4,8 @@
 
 module Sca
 
+import Base.getindex,Base.length,Base.show
+
 include("sca-leakages.jl")
 include("sca-core.jl")
 include("sca-scoring.jl")

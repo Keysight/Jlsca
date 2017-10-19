@@ -20,18 +20,15 @@ function go()
     params = AesSboxAttack()
   end
 
-  if isa(params, AesMCAttack)
+  if isa(params.attack, AesMCAttack)
     params.analysis.leakages = [Bit(i) for i in 0:31]
   else
-    if isa(params, AesSboxAttack)
+    if isa(params.attack, AesSboxAttack)
       params.analysis.leakages = [Bit(i) for i in 0:7]
-    elseif isa(params, DesSboxAttack)
+    elseif isa(params.attack, DesSboxAttack)
       params.analysis.leakages = [Bit(i) for i in 0:3]
     end
   end
-
-  numberOfAverages = length(params.keyByteOffsets)
-  numberOfCandidates = getNumberOfCandidates(params)
 
   trs = InspectorTrace(filename)
 

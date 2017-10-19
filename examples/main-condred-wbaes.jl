@@ -45,8 +45,6 @@ function gofaster()
   params.keyByteOffsets = collect(1:16)
   params.phases = [PHASE1]
 
-  numberOfAverages = length(params.keyByteOffsets)
-  numberOfCandidates = getNumberOfCandidates(params)
 
   toBitsEfficient = true
 
@@ -61,7 +59,7 @@ function gofaster()
       # this converts to packed BitVectors (efficiently, if toBitsEfficient is set)
       addSamplePass(trs, tobits)
 
-      setPostProcessor(trs, CondReduce(SplitByData($numberOfAverages, $numberOfCandidates), $localtrs))
+      setPostProcessor(trs, CondAvg(SplitByTracesBlock()))
   end
 
   numberOfTraces = @fetch length(Main.trs)

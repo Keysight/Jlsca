@@ -26,6 +26,7 @@ function keylength2Nr(keylength)
     elseif keylength == 32
         return 14
     end
+    throw(ErrorException("invalid keylength $keylength"))
 end
 
 const Nb = 4

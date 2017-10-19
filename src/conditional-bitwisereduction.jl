@@ -76,10 +76,6 @@ function add(c::CondReduce, trs::Trace, traceIdx::Int)
   for idx in eachindex(data)
     val = data[idx]
 
-    if isa(c.worksplit, SplitByData) && !(toVal(c.worksplit, Int(idx), Int(val)) in c.worksplit.range)
-      continue
-    end
-
     if isnull(samples)
      samples = Nullable(getSamples(trs, traceIdx))
      if length(get(samples)) == 0
@@ -111,10 +107,7 @@ function add(c::CondReduce, trs::Trace, traceIdx::Int)
 end
 
 function merge(this::CondReduce, other::CondReduce)
-  if isa(this.worksplit, SplitByTraces)
-    this.globcounter += other.globcounter
-  end
-
+  this.globcounter += other.globcounter
   for (idx,dictofavgs) in other.traceIdx
     if !haskey(this.traceIdx, idx)
       this.traceIdx[idx] = dictofavgs
@@ -151,9 +144,8 @@ function get(c::CondReduce)
       end
     end
   end
-
-
-  datas = Matrix[]
+  
+  datas = Array[]
   reducedsamples = Matrix[]
 
   maxVal = 0
@@ -201,7 +193,6 @@ function get(c::CondReduce)
       sampleSnap[j,:] = samples[idxes]
     end
 
-    dataSnap = reshape(convert(Array{dataType,1}, dataSnap), length(dataSnap),1)
     push!(datas, dataSnap)
     push!(reducedsamples, sampleSnap)
   end

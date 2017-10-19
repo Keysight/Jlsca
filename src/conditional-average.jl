@@ -53,10 +53,6 @@ function add(c::CondAvg, trs::Trace, traceIdx::Int)
   for idx in eachindex(data)
     val = data[idx]
 
-    if isa(c.worksplit, SplitByData) && !(toVal(c.worksplit, Int(idx), Int(val)) in c.worksplit.range)
-      continue
-    end
-
     if isnull(samples)
      samples = Nullable(getSamples(trs, traceIdx))
      if length(get(samples)) == 0
@@ -83,9 +79,7 @@ function add(c::CondAvg, trs::Trace, traceIdx::Int)
 end
 
 function merge(this::CondAvg, other::CondAvg)
-  if isa(this.worksplit, SplitByTraces)
-    this.globcounter += other.globcounter
-  end
+  this.globcounter += other.globcounter
   for (idx,dictofavgs) in other.averages
     if !haskey(this.averages, idx)
       this.averages[idx] = dictofavgs
@@ -131,7 +125,7 @@ function get(c::CondAvg)
     end
   end
 
-  datas = Matrix[]
+  datas = Array[]
   averages = Matrix[]
 
   maxVal = 0
@@ -153,7 +147,6 @@ function get(c::CondAvg)
     for i in 1:length(dataSnap)
       sampleSnap[i,:] = c.averages[k][dataSnap[i]]
     end
-    dataSnap = reshape(convert(Array{dataType,1}, dataSnap), length(dataSnap),1)
     push!(datas, dataSnap)
     push!(averages, sampleSnap)
   end

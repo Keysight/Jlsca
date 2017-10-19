@@ -2,24 +2,11 @@
 #
 # Authors: Cees-Bart Breunesse
 
-export WorkSplit,NoSplit,SplitByData,SplitByTraces,SplitByTracesSliced,SplitByTracesBlock,getWorkerRange
+export WorkSplit,SplitByTraces,SplitByTracesSliced,SplitByTracesBlock,NoSplit,getWorkerRange
 
 abstract type WorkSplit end
 
-type NoSplit <: WorkSplit
-end
-
-type SplitByData <: WorkSplit
-  worker::Int
-  range::Range
-  numberOfCandidates::Int
-
-  function SplitByData(numberOfAverages::Int, numberOfCandidates::Int)
-    new(myid(), splitRange(numberOfAverages, numberOfCandidates, nworkers())[(myid() > 1 ? myid() -1 : myid())], numberOfCandidates)
-  end
-end
-
-toVal(w::SplitByData, averageIdx::Int, candidate::Int) = ((averageIdx-1)*w.numberOfCandidates) + candidate
+type NoSplit <: WorkSplit end
 
 function splitRange(numberOfAverages::Int, numberOfCandidates::Int, workers::Int)
   range = 0:((numberOfAverages)*numberOfCandidates-1)
@@ -82,22 +69,14 @@ function getWorkerRange(w::SplitByTracesBlock, globalRange::Range)
 end
 
 function add(c::PostProcessor, trs::Trace, globalRange::Range, update::Function)
-  if isa(c.worksplit, SplitByTraces)
+  if !isa(c.worksplit, NoSplit)
     (traceStart,traceStep,traceEnd) = getWorkerRange(c.worksplit, globalRange)
-    rangestr = @sprintf("trace range %s", traceStart:traceStep:traceEnd)
   else
     traceStart = globalRange[1]
     traceStep = 1
     traceEnd = globalRange[end]
   end
-
-  if isa(c.worksplit, SplitByData)
-    rangestr = @sprintf("data range %s", c.worksplit.range)
-  end
-
-  if isa(c.worksplit, NoSplit)
-    rangestr = "all traces"
-  end
+  rangestr = @sprintf("trace range %s", traceStart:traceStep:traceEnd)
 
   @printf("Running processor %s on %s, using trace set with %d data passes, %d sample passes\n", string(typeof(c)), rangestr, length(trs.dataPasses), length(trs.passes))
   total = 0

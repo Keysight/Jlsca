@@ -7,31 +7,91 @@ using ..Log
 
 import ..Trs.reset
 
-export Attack,Analysis,LRA,MIA,CPA,IncrementalCPA
-export analysis,attack
-export sca
-export scatask,analysis
-export Status
+export DpaAttack,Attack,Analysis,LRA,MIA,CPA,IncrementalCPA
+export Status,Direction
 export printParameters,getParameters
-export Direction,Phase
-export getNumberOfCandidates
-export Target
-export nrKeyByteValues
-export keyByteValues
-export target
-export getCorrectRoundKeyMaterial
-export recoverKey
+export sca
+export Target,target
+export guesses,numberOfPhases,numberOfTargets,correctKeyMaterial,recoverKey,getDataPass,getTargets
+export totalNumberOfTargets
+
+@enum Direction FORWARD=1 BACKWARD=2
+@enum Status FINISHED PHASERESULT INTERMEDIATESCORES INTERMEDIATECORRELATION BREAK
+
+const PHASE1 = 1
+const PHASE2 = 2
+const PHASE3 = 3
+const PHASE4 = 4
+const PHASE5 = 5
+const PHASE6 = 6
+
+export PHASE1,PHASE2,PHASE3,PHASE4,PHASE5,PHASE6
+for s in instances(Direction); @eval export $(Symbol(s)); end
+for s in instances(Status); @eval export $(Symbol(s)); end
 
 abstract type Attack end
-
-printParameters(a::Attack) = print("Unknown attack")
-
 abstract type Analysis end
 abstract type NonIncrementalAnalysis <: Analysis end
-
 abstract type Target{In <:Integer, Out <: Integer} end
+abstract type Maximization end
 
-# four types of analysis methods: CPA and MIA and LRA and IncrementalCPA 
+type GlobalMaximization <: Maximization end
+type NormalizedMaximization <: Maximization end
+
+abstract type Combination end
+
+type Sum <: Combination end
+show(io::IO, a::Sum) = print(io, "+")
+
+type DpaAttack
+  attack::Attack
+  analysis::Analysis
+  dataOffset::Int
+  knownKey::Nullable{Vector{UInt8}}
+  updateInterval::Nullable{Int}
+  phases::Nullable{Vector{Int}}
+  phaseInput::Nullable{Vector{UInt8}}
+  outputkka::Nullable{AbstractString}
+  targetOffsets::Nullable{Vector{Int}}
+  scoresCallBack::Nullable{Function}
+  leakageCombinator::Combination
+  maximization::Maximization
+  # caching stuff below, not configurable, overwritten for each sca run
+  targets::Vector{Vector{Target}}
+  phasefn::Vector{Nullable{Function}}
+  phaseData::Vector{UInt8}
+
+  function DpaAttack(attack::Attack, analysis::Analysis)
+    new(attack,analysis,1,Nullable(),Nullable(),Nullable(),Nullable(),Nullable(),Nullable(), Nullable(), Sum(), GlobalMaximization())
+  end
+end
+
+function printParameters(a::DpaAttack)
+  printParameters(a.attack)
+  @printf("analysis:   %s\n", string(typeof(a.analysis).name.name))
+  printParameters(a.analysis)
+  @printf("data at:    %s\n", string(a.dataOffset))
+  if !isnull(a.phases)
+    @printf("phases:     %s\n", string(get(a.phases)))
+  end
+  if !isnull(a.targetOffsets)
+    @printf("key bytes:  %s\n", string(get(a.targetOffsets)))
+  end
+  if !isnull(a.knownKey)
+    @printf("known key:  %s\n", bytes2hex(get(a.knownKey)))
+  end
+end
+
+printParameters(a::Attack) = print("Unknown attack")
+guesses(a::Target{In,Out}) where {In,Out} = collect(UInt8, 0:255)
+numberOfPhases(a::Attack) = 1
+numberOfTargets(a::Attack, phase::Int) = 1
+getTargets(a::Attack, phase::Int, phaseInput::Vector{UInt8}) = []
+recoverKey(a::Attack, recoverKeyMaterial::Vector{UInt8}) = recoverKeyMaterial
+getDataPass(a::Attack, phase::Int, phaseInput::Vector{UInt8}) = Nullable()
+totalNumberOfTargets(a::Attack) = sum(x -> numberOfTargets(a,x), 1:numberOfPhases(a))
+
+# four types of analysis methods: CPA and MIA and LRA and IncrementalCPA
 type CPA <: NonIncrementalAnalysis
   leakages::Vector{Leakage}
   postProcess::Vector{Function}
@@ -104,66 +164,67 @@ getNrLeakageFunctions(a::MIA) = length(a.leakages)
 getNrLeakageFunctions(a::IncrementalCPA) = length(a.leakages)
 
 
-function computeScores(a::CPA, data::Matrix{In}, samples::AbstractArray{Float64}, keyByteOffsets::Vector{Int}, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
+function computeScores(a::CPA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
   (tr,tc) = size(samples)
-  (dr,dc) = size(data)
+  (dr,) = size(data)
   tr == dr || throw(DimensionMismatch())
 
-  HL::Matrix{UInt8} = predict(data, keyByteOffsets, target, kbvals, a.leakages)
+  HL::Matrix{UInt8} = predict(data, target, kbvals, a.leakages)
   C = cor(samples, HL)
   return C
 end
 
-function computeScores(a::MIA, data::Matrix{In}, samples::AbstractArray{Float64}, keyByteOffsets::Vector{Int}, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
+function computeScores(a::MIA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
   (tr,tc) = size(samples)
-  (dr,dc) = size(data)
+  (dr,) = size(data)
   tr == dr || throw(DimensionMismatch())
 
-  HL::Matrix{UInt8} = predict(data, keyByteOffsets, target, kbvals, a.leakages)
+  HL::Matrix{UInt8} = predict(data, target, kbvals, a.leakages)
   C = mia(samples, HL, a.sampleBuckets)
   return C
 end
 
-function computeScores(a::LRA, data::Matrix{In}, samples::AbstractArray{Float64}, keyByteOffsets::Vector{Int}, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
-   C = lra(data, samples, keyByteOffsets, target, a.basisModel, kbvals)
+function computeScores(a::LRA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
+   C = lra(data, samples, target, a.basisModel, kbvals)
   return C
 end
 
-function attack(super::Task, a::NonIncrementalAnalysis, trs::Trace, range::Range, keyByteOffsets::Vector{Int}, target::Target{In,Out}, kbvals::Vector{UInt8}, scoresAndOffsets) where {In,Out}
+function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Trace, rows::Range, scoresAndOffsets)
 
-  local kbsamples::Matrix{Float64}
-  local kbdata::Matrix{In}
+  local kbsamples
+  local kbdata
 
-  (((data, samples), eof),elapsedtime,totalbytesallocated,garbagecollectiontime,alloccounters) = @timed readTraces(trs, range)
+  targetOffsets = getTargetOffsets(params, phase)
 
-  Log.writecsv(a.logfile, elapsedtime)
+  ((data, samples), eof) = readTraces(trs, rows)
 
   if data == nothing || samples == nothing
     return
   end
 
-  for kb in 1:length(keyByteOffsets)
+  for o in 1:length(targetOffsets)
     if hasPostProcessor(trs)
-      kbsamples = samples[kb]
-      kbdata = data[kb]
+      kbsamples = samples[o]
+      kbdata = data[o]
     else
       kbsamples = samples
-      kbdata = reshape(data[:,kb], size(data)[1], 1)
+      kbdata = @view data[:,o]
     end
 
-    (rows,samplecols) = size(kbsamples)
-    (rows,datacols) = size(kbdata)
-
-    Log.writecsv(a.logfile, rows, samplecols, datacols * getNrLeakageFunctions(a) * length(kbvals))
+    (nrrows,samplecols) = size(kbsamples)
 
     # FIXME: need to pick something sane here
     maxCols = get(a.maxCols, 10000)
 
-    totalelapsedtime = 0.0
+    target = getTarget(params, phase, targetOffsets[o])
+    kbvals = guesses(target)
+    nrKbvals = length(kbvals)
 
     for sr in 1:maxCols:samplecols
       srEnd = min(sr+maxCols-1, samplecols)
+
       @printf("%s on samples shape %s (range %s) and data shape %s\n", string(typeof(a).name.name), size(kbsamples), string(sr:srEnd), size(kbdata))
+
       if size(kbsamples)[2] == 0
         @printf("no samples!\n")
         scores = nothing
@@ -171,73 +232,72 @@ function attack(super::Task, a::NonIncrementalAnalysis, trs::Trace, range::Range
       end
 
       v = @view kbsamples[:,sr:srEnd]
-      
-      # run the attack
-      (C,elapsedtime,totalbytesallocated,garbagecollectiontime,alloccounters) = @timed computeScores(a, kbdata, v, [keyByteOffsets[kb]], target, kbvals)
 
-      totalelapsedtime += elapsedtime
+      # run the attack
+      C = computeScores(a, kbdata, v, target, kbvals)
 
       # nop the nans
       C[isnan.(C)] = 0
 
-      yieldto(super, (INTERMEDIATECORRELATION, (C, [keyByteOffsets[kb]])))
 
       for fn in a.postProcess
-        C[:] = fn(C)
+        C = fn(C)
       end
 
       # get the scores for all leakage functions
-      updateScoresAndOffsets!(scoresAndOffsets, C, 1, kb, getNrLeakageFunctions(a), length(kbvals))
-
+      for l in 1:getNrLeakageFunctions(a)
+        oo = (l-1)*nrKbvals
+        vv = @view C[:,oo+1:oo+nrKbvals]
+        yieldto(super, (INTERMEDIATECORRELATION, (phase, o, l, vv)))
+        updateScoresAndOffsets!(params.maximization, scoresAndOffsets, vv, l, o)
+      end
     end
+
     # let somebody do something with the scores for these traces
-    yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, rows, [kb], keyByteOffsets)))
-
-    Log.writecsv(a.logfile, totalelapsedtime)
-
+    yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs), nrrows, [o])))
   end
 end
 
-function attack(super::Task, a::IncrementalCPA, trs::Trace, range::Range, keyByteOffsets::Vector{Int}, target::Target, kbvals::Vector{UInt8}, scoresAndOffsets)
+function attack(a::IncrementalCPA, params::DpaAttack, phase::Int, super::Task, trs::Trace, rows::Range, scoresAndOffsets)
+  targetOffsets = getTargetOffsets(params, phase)
+
   if isa(trs, DistributedTrace)
     @sync for w in workers()
-      @spawnat w init(Main.trs.postProcInstance, keyByteOffsets, target, kbvals, a.leakages)
+      @spawnat w init(Main.trs.postProcInstance, params, phase)
     end
   else
-    init(trs.postProcInstance, keyByteOffsets, target, kbvals, a.leakages)
+    init(trs.postProcInstance, params, phase)
   end
 
-  ((C,eof),elapsedtime,totalbytesallocated,garbagecollectiontime,alloccounters) = @timed readTraces(trs, range)
+  (C,eof) = readTraces(trs, rows)
 
+  (samplecols,hypocols) = size(C)
 
-  rows = length(range)
-  (samplecols,hypocols) = size(C) 
-
-  # raw correlation data
-  yieldto(super, (INTERMEDIATECORRELATION, (C, keyByteOffsets)))
-  
   @printf("%s produced (%d, %d) correlation matrix\n", string(typeof(a).name.name), samplecols, hypocols)
 
-  Log.writecsv(a.logfile, elapsedtime)
-
   for fn in a.postProcess
-    C[:] = fn(C)
+    C = fn(C)
   end
 
-  for kb in 1:length(keyByteOffsets)
-    updateScoresAndOffsets!(scoresAndOffsets, C, kb, kb, length(a.leakages), length(kbvals))
+  nrLeakages = length(a.leakages)
 
-    Log.writecsv(a.logfile, rows, samplecols, hypocols)
-
-    Log.writecsv(a.logfile, 0)    
+  for kb in 1:length(targetOffsets)
+    nrKbvals = length(guesses(getTarget(params, phase, targetOffsets[kb])))
+    for l in 1:nrLeakages
+      oo = (l-1)*nrKbvals + (kb-1)*nrLeakages*nrKbvals
+      vv = @view C[:,oo+1:oo+nrKbvals]
+      yieldto(super, (INTERMEDIATECORRELATION, (phase, kb, l, vv)))
+      updateScoresAndOffsets!(params.maximization, scoresAndOffsets, vv, l, kb)
+    end
   end
+
 
   # let somebody do something with the scores for these traces
-  yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs), collect(1:length(keyByteOffsets)), keyByteOffsets)))
+  yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs),getCounter(trs), targetOffsets)))
 end
 
 # does the attack & analysis per xxx traces, should be called from an scatask
-function analysis(super::Task, params::Attack, phase::Int, trs::Trace, firstTrace::Int, numberOfTraces::Int, target::Target, keyByteOffsets::Vector{Int})
+function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::Range)
     local scoresAndOffsets
 
     if !isnull(params.updateInterval) && !hasPostProcessor(trs)
@@ -245,120 +305,171 @@ function analysis(super::Task, params::Attack, phase::Int, trs::Trace, firstTrac
         updateInterval = Nullable()
     end
 
+    firstTrace = rows[1]
+    numberOfTraces = length(rows)
+
     offset = firstTrace
     stepSize = min(numberOfTraces, get(params.updateInterval, numberOfTraces))
+    targetOffsets = getTargetOffsets(params,phase)
 
-    scoresAndOffsets = allocateScoresAndOffsets(getNrLeakageFunctions(params.analysis), nrKeyByteValues(params), length(keyByteOffsets))
+    scoresAndOffsets = ScoresAndOffsets(params, phase)
+
     eof = false
 
-    Log.writecsvheader(params.analysis.logfile, "#traces","#sec prep",map(x -> "#rows kb $x, #cols samples kb $x, #cols hypo kb $x, #secs kb $x", 1:length(keyByteOffsets))...)
-    
     for offset in firstTrace:stepSize:numberOfTraces
-      range = offset:(offset+min(stepSize, numberOfTraces - offset + 1)-1)
+      interval = offset:(offset+min(stepSize, numberOfTraces - offset + 1)-1)
 
       if eof
         break
       end
-      
-      Log.writecsv(params.analysis.logfile, length(firstTrace:range[end]))
 
       clearScoresAndOffsets!(scoresAndOffsets)
 
-      attack(super, params.analysis, trs, range, keyByteOffsets, target, keyByteValues(params), scoresAndOffsets)
-
-      Log.writecsvnewline(params.analysis.logfile)
-
-      # only for testing
-      yieldto(super, (ONLYFORTEST, (scoresAndOffsets, getCounter(trs), collect(1:length(keyByteOffsets)), keyByteOffsets)))
+      attack(params.analysis, params, phase, super, trs, interval, scoresAndOffsets)
     end
 
 
     # reset the state of trace post processor (conditional averager)
     reset(trs)
 
-    # return the final combined scores to scatask
-    scores = getCombinedScores(scoresAndOffsets)
-
-    return scores
+    return scoresAndOffsets
 end
 
-@enum Direction FORWARD=1 BACKWARD=2
+function scatask(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, numberOfTraces::Int, phase::Int)
 
-const PHASE1 = 1 
-const PHASE2 = 2 
-const PHASE3 = 3
-const PHASE4 = 4 
-const PHASE5 = 5 
-const PHASE6 = 6
-export PHASE1,PHASE2,PHASE3,PHASE4,PHASE5,PHASE6
+  roundfn = getDataPass(params, phase)
 
-@enum Status FINISHED PHASERESULT INTERMEDIATESCORES ONLYFORTEST INTERMEDIATECORRELATION BREAK
+  if params.dataOffset != 1
+    addDataPass(trs, x -> x[params.dataOffset:end])
+  end
 
-for s in instances(Direction); @eval export $(Symbol(s)); end
-# for s in instances(Phase); @eval export $(Symbol(s)); end
-for s in instances(Status); @eval export $(Symbol(s)); end
+  if !isnull(roundfn)
+    addDataPass(trs, get(roundfn))
+  end
+
+  fullattack = isFullAttack(params, phase)
+
+  if !fullattack
+    addDataPass(trs, x -> x[get(params.targetOffsets)])
+  end
+
+  # do the attack
+  scoresAndOffsets = analysis(super, params, phase, trs, firstTrace:numberOfTraces)
+
+  if !fullattack
+    popDataPass(trs)
+  end
+
+  if !isnull(roundfn)
+    popDataPass(trs)
+  end
+
+  if params.dataOffset != 1
+    popDataPass(trs)
+  end
+
+  if !fullattack
+    return
+  end
+
+  # get the recovered key material
+  roundkey::Vector{UInt8} = getRoundKey(params, params.attack, phase, scoresAndOffsets)
+  yieldto(super, (PHASERESULT, roundkey))
+
+  if numberOfPhases(params.attack) == phase
+    yieldto(super, (FINISHED,nothing))
+  end
+end
+
+function getTargetOffsets(a::DpaAttack, phase::Int)
+  return get(a.targetOffsets, collect(1:numberOfTargets(a, phase)))
+end
+
+function isFullAttack(a::DpaAttack, phase::Int)
+  return isnull(a.targetOffsets) || (numberOfTargets(a, phase) == length(get(params.targetOffsets)))
+end
+
+numberOfTargets(a::DpaAttack, phase::Int) = length(a.targets[phase])
+getTargets(a::DpaAttack, phase::Int) = a.targets[phase]
+getTarget(a::DpaAttack, phase::Int, targetOffset::Int) = a.targets[phase][targetOffset]
+getDataPass(a::DpaAttack, phase::Int) = a.phasefn[phase]
 
 # generic sca function, this one is called in all the unit tests and the main functions
-function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=length(trs), printSubs::Bool=false, scoresCallBack::Nullable{Function}=Nullable{Function}(), corrCallBack=Nullable{Function}(),testcallback=Nullable{Function}())
+function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::Int=length(trs))
   @printf("\nJlsca running in Julia version: %s, %d processes/%d workers/%d threads per worker\n\n", VERSION, nprocs(), nworkers(), Threads.nthreads())
 
   printParameters(params)
+
   local key = nothing
   local status = nothing
-  local phaseInput = params.phaseInput
+  local phaseInput = get(params.phaseInput, Vector{UInt8}(0))
   local phaseOutput = Vector{UInt8}(0)
 
-  if length(params.phases) == 0
-    params.phases = getPhases(params)
-  end
-
-
-  if !isnull(params.outputkka) && !isnull(params.knownKey)
-    # kkaFilename = @sprintf("%s.kka_%s.csv", trs.filename, toShortString(params))
-    kkaFilename = get(params.outputkka)
-    truncate(kkaFilename)
+  if !isnull(params.knownKey)
+    knownrkmaterial = correctKeyMaterial(params.attack, get(params.knownKey))
   end
 
   finished = false
+  phase = 1
 
-  for phase in params.phases
-    if finished
-      break
-    end
+  params.targets = Vector{Vector{Target}}(0)
+  params.phasefn = Vector{Nullable{Function}}(0)
 
-    @printf("\nphase: %s\n", phase)
+  while !finished
     if phase > 1
       if !isnull(params.knownKey)
-        knownrkmaterial = mapreduce(x -> getCorrectRoundKeyMaterial(params, x), vcat, 1:(phase-1))
-        phaseInput = knownrkmaterial
+        knownrklen = sum(x -> numberOfTargets(params,x), 1:phase-1)
+        phaseInput = knownrkmaterial[1:knownrklen]
       else
         phaseInput = phaseOutput
       end
-      @printf("phase input: %s\n", !isnull(phaseInput) ? bytes2hex(phaseInput) : "none")
+    end
+
+    targets = getTargets(params.attack, phase, phaseInput)
+    @assert length(targets) > 0
+    params.targets = [params.targets; [targets]]
+
+    phasefn = getDataPass(params.attack, phase, phaseInput)
+    params.phasefn = [params.phasefn; phasefn]
+
+    if !isnull(params.phases) && !(phase in get(params.phases, []))
+      phaseOutput = phaseInput
+      phase += 1
+      if phase > numberOfPhases(params.attack) 
+        finished = true
+      end
+      continue
+    end
+
+    print("\nphase: $(phase) / $(numberOfPhases(params.attack)), #targets $(length(targets))\n")
+    if length(phaseInput) > 0
+      @printf("phase input: %s\n", bytes2hex(phaseInput))
     end
     print("\n")
+
+    params.phaseData = phaseInput
 
     ct = current_task()
 
     # create the scatask with some sugar to catch exceptions
     t = @task begin
-       try
-          scatask(ct, trs, params, firstTrace, numberOfTraces, phase, phaseInput)
-          yieldto(ct, (BREAK,0))
-        catch e
-          bt = catch_backtrace()  
-          showerror(STDERR, e, bt)
-          print(STDERR, "\n")
-          Base.throwto(ct, ErrorException("task dead, look at stack trace above"))
-        end
+      try
+        scatask(ct, trs, params, firstTrace, numberOfTraces, phase)
+        yieldto(ct, (BREAK,0))
+      catch e
+        bt = catch_backtrace()
+        showerror(STDERR, e, bt)
+        print(STDERR, "\n")
+        Base.throwto(ct, ErrorException("task dead, look at stack trace above"))
       end
+    end
 
     while !istaskdone(t) && t.state != :failed
       (status, statusData) = yieldto(t)
 
       if status == FINISHED
         finished = true
-        key = recoverKey(params, phaseOutput)
+        key = recoverKey(params.attack, phaseOutput)
         if key != nothing
           @printf("recovered key: %s\n", bytes2hex(key))
           if !isnull(params.knownKey)
@@ -366,21 +477,17 @@ function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=
           end
         end
       elseif status == INTERMEDIATESCORES
-        (scoresAndOffsets, numberOfTraces2, keyOffsets, prettyKeyOffsets) = statusData
-        printScores(params, phase, scoresAndOffsets, numberOfTraces2,keyOffsets,prettyKeyOffsets)
+        (scoresAndOffsets, numberOfTracesProcessed, numberOfRowsAfterProcessing, keyOffsets) = statusData
+        printScores(params, phase, scoresAndOffsets, numberOfTracesProcessed, numberOfRowsAfterProcessing ,keyOffsets)
 
         if !isnull(params.outputkka) && !isnull(params.knownKey)
-          add2kka(scoresAndOffsets, dataWidth, keyOffsets, numberOfTraces2, get(knownKey), kkaFilename)
+          add2kka(params, phase, scoresAndOffsets, numberOfTracesProcessed, numberOfRowsAfterProcessing, keyOffsets)
         end
       elseif status == PHASERESULT
         phaseOutput = vcat(phaseOutput, statusData)
       elseif status == INTERMEDIATECORRELATION
-        if !isnull(corrCallBack)
-          get(corrCallBack)(statusData...)
-        end
-      elseif status == ONLYFORTEST
-        if !isnull(scoresCallBack)
-          get(scoresCallBack)(phase, params, scoresAndOffsets, length(keyOffsets), keyOffsets, numberOfTraces2)
+        if !isnull(params.scoresCallBack)
+          get(params.scoresCallBack)(statusData...)
         end
       elseif status == BREAK
         break
@@ -388,7 +495,11 @@ function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=
         @printf("WARNING: don't know how to handle %s produced by scatask\n", string(status))
       end
     end
+
+    phase += 1
   end
+
+  params.phaseInput = phaseOutput
 
   if !isnull(params.outputkka) && !isnull(params.knownKey)
     @printf("KKA output in %s\n", get(params.outputkka))
@@ -398,30 +509,38 @@ function sca(trs::Trace, params::Attack, firstTrace::Int=1, numberOfTraces::Int=
 end
 
 
+# FIXME: move this somewhere else, or kill it off
 # fills the attack parameters with data from the file name
 function getParameters(filename::AbstractString, direction::Direction)
-  local params::Attack
+  local params::DpaAttack
+  local attack::Attack
 
   m = match(r"aes([0-9]+)_(..)_([^_]*)_([a-zA-Z0-9]*)", filename)
   if m != nothing
     if m.captures[2] == "sb"
-      params = AesSboxAttack()
+      attack = AesSboxAttack()
+      analysis = CPA()
+      analysis.leakages = [Bit(i) for i in 0:7]
+      params = DpaAttack(attack, analysis)
     elseif m.captures[2] == "mc"
-      params = AesMCAttack()
+      attack = AesMCAttack()
+      analysis = CPA()
+      params = DpaAttack(attack, analysis)
+      params.analysis.leakages = [Bit(i) for i in 0:31]
     end
-    params.keyLength::AesKeyLength = div(parse(m.captures[1]),8)
+    attack.keyLength::AesKeyLength = div(parse(m.captures[1]),8)
     modeStr = m.captures[3]
     if modeStr == "ciph"
-      params.mode = CIPHER
+      attack.mode = CIPHER
     elseif modeStr == "invciph"
-      params.mode = INVCIPHER
+      attack.mode = INVCIPHER
     elseif modeStr == "eqinvciph"
-      params.mode = EQINVCIPHER
+      attack.mode = EQINVCIPHER
     end
 
     params.knownKey = hex2bytes(m.captures[4])
-    params.keyByteOffsets = collect(1:16)
-    params.direction = direction
+    attack.direction = direction
+
     if direction == FORWARD
       params.dataOffset = 1
     else
@@ -432,24 +551,25 @@ function getParameters(filename::AbstractString, direction::Direction)
 
   m = match(r"([t]{0,1}des[1-3]{0,1})_([^_]*)_([a-zA-Z0-9]*)", filename)
   if m != nothing
-    params = DesSboxAttack()
-    params.analysis = CPA()
-    params.analysis.leakages = [Bit(i) for i in 0:3]
+    attack = DesRoundAttack()
+    analysis = CPA()
+    analysis.leakages = [HW()]
+    params = DpaAttack(attack, analysis)
     modeStr = m.captures[1]
     if modeStr == "des"
-      params.mode = DES
+      attack.mode = DES
     elseif modeStr == "tdes1"
-      params.mode = TDES1
+      attack.mode = TDES1
     elseif modeStr == "tdes2"
-      params.mode = TDES2
+      attack.mode = TDES2
     elseif modeStr == "tdes3"
-      params.mode = TDES3
+      attack.mode = TDES3
     end
 
-    params.encrypt = (m.captures[2] == "enc" ? true : false)
+    attack.encrypt = (m.captures[2] == "enc" ? true : false)
 
     params.knownKey = hex2bytes(m.captures[3])
-    params.direction = direction
+    attack.direction = direction
     if direction == FORWARD
       params.dataOffset = 1
     else
@@ -461,15 +581,17 @@ function getParameters(filename::AbstractString, direction::Direction)
   m = match(r"sha1_([a-zA-Z0-9]{40})", filename)
   if m != nothing
     if direction == FORWARD
-      params = Sha1InputAttack()
+      attack = Sha1InputAttack()
+      analysis = CPA()
+      analysis.leakages = [HW()]
+      params = DpaAttack(attack,analysis)
       params.dataOffset = 1
-      params.analysis = CPA()
-      params.analysis.leakages = [HW()]
     else
-      params = Sha1OutputAttack()
+      attack = Sha1OutputAttack()
+      analysis = CPA()
+      analysis.leakages = [HW()]
+      params = DpaAttack(attack,analysis)
       params.dataOffset = 17
-      params.analysis = CPA()
-      params.analysis.leakages = [HW()]
     end
     params.knownKey = hex2bytes(m.captures[1])
     return params

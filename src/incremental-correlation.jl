@@ -6,7 +6,6 @@
 include("incremental-statistics.jl")
 
 import ..Trs.add,..Trs.getGlobCounter
-import ..Trs.toVal
 export IncrementalCorrelation,init,add,getGlobCounter
 
 type IncrementalCorrelation <: PostProcessor
@@ -15,10 +14,11 @@ type IncrementalCorrelation <: PostProcessor
   covXY::Dict{Int,IncrementalCovarianceTiled}
   meanXinitialized::Bool
   meanX::IncrementalMeanVariance
-  keyByteOffsets::Vector{Int}
-  target::Target
-  kbvals::Vector
+  targetOffsets::Vector{Int}
   leakages::Vector{Leakage}
+  targets::Vector{Target}
+  hypocache::Vector{Vector{UInt8}}
+  targetcache::Vector{Vector}
 
   function IncrementalCorrelation()
     IncrementalCorrelation(NoSplit())
@@ -29,11 +29,18 @@ type IncrementalCorrelation <: PostProcessor
   end
 end
 
-function init(c::IncrementalCorrelation, keyByteOffsets::Vector{Int}, target::Target, kbvals::Vector, leakages::Vector{Leakage})
-  c.keyByteOffsets = keyByteOffsets
-  c.target = target
-  c.kbvals = kbvals
-  c.leakages = leakages
+createTargetCache(t::Target{In,Out}) where {In,Out} = Vector{Out}(guesses(t))
+
+function init(c::IncrementalCorrelation, params::DpaAttack, phase::Int)
+  c.targetOffsets = getTargetOffsets(params, phase)
+  c.leakages = params.analysis.leakages
+  c.targets = getTargets(params, phase)
+  c.hypocache = Vector{Vector{UInt8}}(length(c.targetOffsets))
+  c.targetcache = Vector{Vector}(length(c.targetOffsets))
+  for i in 1:length(c.targetOffsets)
+    c.hypocache[i] = Vector{UInt8}(length(guesses(c.targets[i])) * length(c.leakages))
+    c.targetcache[i] = createTargetCache(c.targets[i])
+  end
 end
 
 function reset(c::IncrementalCorrelation)
@@ -42,22 +49,21 @@ function reset(c::IncrementalCorrelation)
   c.counter = 0
 end
 
-function toLeakages!(c::IncrementalCorrelation, tt::Target{In,Out}, hypo::Vector{UInt8}, idx::Int, input::Union{UInt8,UInt16}) where {In,Out}
-  kbOffset = c.keyByteOffsets[idx]
-  nrOfKbVals = length(c.kbvals)
+function toLeakages!(c::IncrementalCorrelation, hypo::Vector{UInt8}, outputs::Vector{Out}, t::Target{In,Out}, input::In) where {In,Out}
+  kbvals = guesses(t)
+  nrOfKbVals = length(kbvals)
   nrOfFuns = length(c.leakages)
   nrOfTargets = length(input)
 
-
-  targets = Vector{Out}(nrOfKbVals)
-  @inbounds for t in 1:nrOfKbVals
-    targets[t] = target(tt, input, kbOffset, c.kbvals[t])
+  @inbounds for o in 1:nrOfKbVals
+    outputs[o] = target(t, input, kbvals[o])
   end
 
   @inbounds for l in 1:nrOfFuns
+    lt = c.leakages[l]
     hypoidx = (l-1)*nrOfKbVals
-    for t in 1:nrOfKbVals
-      hypo[hypoidx+t] = leak(c.leakages[l], targets[t])
+    for o in 1:nrOfKbVals
+      hypo[hypoidx+o] = leak(lt, outputs[o])
     end
   end
 
@@ -65,42 +71,6 @@ function toLeakages!(c::IncrementalCorrelation, tt::Target{In,Out}, hypo::Vector
 end
 
 function add(c::IncrementalCorrelation, trs::Trace, traceIdx::Int)
-  add(c, c.worksplit, trs, traceIdx)
-end
-
-function add(c::IncrementalCorrelation, worksplit::SplitByData, trs::Trace, traceIdx::Int)
-  data::AbstractVector = getData(trs, traceIdx)
-  if length(data) == 0
-    return
-  end
-
-  samples::Vector{trs.sampleType} = getSamples(trs, traceIdx)
-  if length(samples) == 0
-    return
-  end
-
-  hypo = zeros(UInt8, length(c.leakages) * length(c.kbvals))
-
-  for idx in eachindex(data)
-    val = data[idx]
-
-    if !(toVal(c.worksplit, Int(idx), Int(val)) in c.worksplit.range)
-      continue
-    end
-
-    toLeakages!(c, c.target, hypo, idx, val)
-
-    if !haskey(c.covXY, idx)
-      c.covXY[idx] = IncrementalCovarianceTiled(length(samples), length(hypo))
-    end
-
-    add!(c.covXY[idx], samples, hypo)
-  end
-
-  c.counter += 1
-end
-
-function add(c::IncrementalCorrelation, worksplit::Union{NoSplit,SplitByTraces}, trs::Trace, traceIdx::Int)
   data::AbstractVector = getData(trs, traceIdx)
   if length(data) == 0
     return
@@ -112,21 +82,22 @@ function add(c::IncrementalCorrelation, worksplit::Union{NoSplit,SplitByTraces},
   end
 
   if !c.meanXinitialized
-    c.meanX = IncrementalMeanVariance(length(samples))
     c.meanXinitialized = true
+    c.meanX = IncrementalMeanVariance(length(samples))
+    for idx in 1:length(c.targetOffsets)
+      hypo = c.hypocache[idx]
+      c.covXY[idx] = IncrementalCovarianceTiled(c.meanX, IncrementalMeanVariance(length(hypo)))
+    end
   end
 
   samplesN = samples .- c.meanX.mean
 
-  for idx in eachindex(data)
+  for idx in 1:length(c.targetOffsets)
     val = data[idx]
 
-    hypo = zeros(UInt8, length(c.leakages) * length(c.kbvals))
-    toLeakages!(c, c.target, hypo, idx, val)
-
-    if !haskey(c.covXY, idx)
-      c.covXY[idx] = IncrementalCovarianceTiled(c.meanX, IncrementalMeanVariance(length(hypo)))
-    end
+    hypo = c.hypocache[idx]
+    outputs = c.targetcache[idx]
+    toLeakages!(c, hypo, outputs, c.targets[c.targetOffsets[idx]], val)
 
     add!(c.covXY[idx], samples, hypo, samplesN, false)
   end
@@ -136,18 +107,7 @@ function add(c::IncrementalCorrelation, worksplit::Union{NoSplit,SplitByTraces},
   c.counter += 1
 end
 
-
-function merge(this::IncrementalCorrelation, worksplit::SplitByData, other::IncrementalCorrelation)
-  for (idx,cov) in other.covXY
-    if !haskey(this.covXY, idx)
-      this.covXY[idx] = cov
-    else
-      add!(this.covXY[idx], other.covXY[idx])
-    end
-  end
-end
-
-function merge(this::IncrementalCorrelation, worksplit::Union{NoSplit,SplitByTraces}, other::IncrementalCorrelation)
+function merge(this::IncrementalCorrelation, other::IncrementalCorrelation)
   this.counter += other.counter
   for (idx,cov) in other.covXY
     if !haskey(this.covXY, idx)
@@ -168,11 +128,11 @@ function get(c::IncrementalCorrelation)
         continue
       else
         other = @fetchfrom worker Main.trs.postProcInstance
-        merge(c, c.worksplit, other)
+        merge(c, other)
       end
     end
   end
-
+  
   idxes = sort(collect(keys(c.covXY)))
 
   rows = c.covXY[1].numberOfX

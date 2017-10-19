@@ -20,9 +20,6 @@ function ParallelCondAvgTest(splitmode)
 
     params.analysis = CPA()
 
-    numberOfAverages = length(params.keyByteOffsets)
-    numberOfCandidates = getNumberOfCandidates(params)
-
     @everyworker begin
       using Jlsca.Trs
       trs = InspectorTrace($fullfilename)
@@ -30,33 +27,32 @@ function ParallelCondAvgTest(splitmode)
         setPostProcessor(trs, CondAvg(SplitByTracesSliced()))
       elseif $splitmode == 2
         setPostProcessor(trs, CondAvg(SplitByTracesBlock()))
-      elseif $splitmode == 3
-        setPostProcessor(trs, CondAvg(SplitByData($numberOfAverages, $numberOfCandidates)))
       end
     end
 
-    sando = Vector{Tuple{Matrix{Float64}, Matrix{UInt}}}(2)
+    sando = Vector{Matrix{Float64}}(totalNumberOfTargets(params.attack) * 2)
     sandoIdx = 1
 
-    cb::Function = (phase,params,scoresAndOffsets,dataWidth,keyOffsets,numberOfTraces2) -> (sando[sandoIdx] = scoresAndOffsets[1]; sandoIdx += 1)
+    cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
+    params.scoresCallBack = cb
 
-    key = sca(DistributedTrace(),params,1, len, false, Nullable{Function}(cb))
+    key = sca(DistributedTrace(),params,1, len)
 
     @test(key == get(params.knownKey))
 
     params.analysis = CPA()
 
     trs = InspectorTrace(fullfilename)
-    setPostProcessor(trs, CondAvg(NoSplit()))
+    setPostProcessor(trs, CondAvg())
 
-    key = sca(trs,params,1, len, false, Nullable{Function}(cb))
+    key = sca(trs,params,1, len)
 
     @test(key == get(params.knownKey))
 
-    @test sandoIdx == 3
-
-    @test sando[1][1] ≈ sando[2][1]
-    @test sando[1][2] == sando[2][2]
+    @test sandoIdx == length(sando) + 1
+    for i in 1:totalNumberOfTargets(params.attack)
+        @test sando[i] ≈ sando[i+totalNumberOfTargets(params.attack)]
+    end
 end
 
 function ParallelCondAvgTestWithInterval()
@@ -72,9 +68,6 @@ function ParallelCondAvgTestWithInterval()
     params.analysis = CPA()
     params.updateInterval = Nullable(updateInterval)
 
-    numberOfAverages = length(params.keyByteOffsets)
-    numberOfCandidates = getNumberOfCandidates(params)
-
     @everyworker begin
       using Jlsca.Trs
       trs = InspectorTrace($fullfilename)
@@ -82,12 +75,13 @@ function ParallelCondAvgTestWithInterval()
     end
 
     numberOfScas = div(len, updateInterval) + ((len % updateInterval) > 0 ? 1 : 0)
-    sando = Vector{Tuple{Matrix{Float64}, Matrix{UInt}, Int}}(numberOfScas*2)
+    sando = Vector{Matrix{Float64}}(totalNumberOfTargets(params.attack) * numberOfScas * 2)
     sandoIdx = 1
 
-    cb::Function = (phase,params,scoresAndOffsets,dataWidth,keyOffsets,numberOfTraces2) -> (sando[sandoIdx] = (copy(scoresAndOffsets[1][1]),copy(scoresAndOffsets[1][2]),numberOfTraces2); sandoIdx += 1)
+    cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
+    params.scoresCallBack = cb
 
-    key = sca(DistributedTrace(),params,1, len, false, Nullable{Function}(cb))
+    key = sca(DistributedTrace(),params,1, len)
 
     @test(key == get(params.knownKey))
 
@@ -99,20 +93,18 @@ function ParallelCondAvgTestWithInterval()
       len2 = min(len, updateInterval*s)
 
       trs = InspectorTrace(fullfilename)
-      setPostProcessor(trs, CondAvg(NoSplit()))
+      setPostProcessor(trs, CondAvg())
 
-      key = sca(trs,params,1, len2, false, Nullable{Function}(cb))
+      key = sca(trs,params,1, len2)
 
       @test(key == get(params.knownKey))
     end
 
-    @test sandoIdx == numberOfScas*2+1
-    
-    for s in 1:numberOfScas
-      @test sando[s][1] ≈ sando[s+numberOfScas][1]
-      @test sando[s][2] == sando[s+numberOfScas][2]
-      @test sando[s][3] == sando[s+numberOfScas][3]
+    @test sandoIdx == length(sando) + 1
+    for i in 1:totalNumberOfTargets(params.attack)
+        @test sando[i] ≈ sando[i+totalNumberOfTargets(params.attack)*numberOfScas]
     end
+
 end
 
 
@@ -120,6 +112,6 @@ end
 
 ParallelCondAvgTest(1)
 ParallelCondAvgTest(2)
-ParallelCondAvgTest(3)
+# ParallelCondAvgTest(3)
 
 ParallelCondAvgTestWithInterval()

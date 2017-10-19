@@ -19,20 +19,17 @@ function gofaster()
 
   params.analysis = LRA()
 
-  # if isa(params, AesMCAttack)
+  # if isa(params.attack, AesMCAttack)
   #   params.analysis.leakages = [Bit(i) for i in 0:31]
   # else
-  #   if isa(params, AesSboxAttack)
+  #   if isa(params.attack, AesSboxAttack)
   #     # params.analysis.leakages = [Bit(i) for i in 0:7]
   #     params.analysis.leakages = [HW()]
-  #   elseif isa(params, DesSboxAttack)
+  #   elseif isa(params.attack, DesSboxAttack)
   #     # params.analysis.leakages = [Bit(i) for i in 0:3]
   #     params.analysis.leakages = [HW()]
   #   end
   # end
-
-  numberOfAverages = length(params.keyByteOffsets)
-  numberOfCandidates = getNumberOfCandidates(params)
 
   @everyworker begin
       using Jlsca.Trs
@@ -47,8 +44,7 @@ function gofaster()
       # alignstate = CorrelationAlignFFT(reference, referenceOffset, maxShift)
       # addSamplePass(trs, x -> ((shift,corval) = correlationAlign(x, alignstate); corval > corvalMin ? circshift(x, shift) : Vector{eltype(x)}(0)))
 
-      setPostProcessor(trs, CondAvg(SplitByData($numberOfAverages, $numberOfCandidates)))
-      # setPostProcessor(trs, CondAvg(SplitByTracesBlock()))
+      setPostProcessor(trs, CondAvg(SplitByTracesBlock()))
       # setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
   end
 
