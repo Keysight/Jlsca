@@ -330,7 +330,7 @@ function getDataPass(params::AesSboxAttack, phase::Int, phaseInput::Vector{UInt8
     end
     roundfn = Nullable(roundfn_)
   else
-    roundfn = Nullable()
+    roundfn = Nullable(x -> x[1:16])
   end
 
   return roundfn

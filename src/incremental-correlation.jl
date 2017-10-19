@@ -53,6 +53,7 @@ function toLeakages!(c::IncrementalCorrelation, hypo::Vector{UInt8}, outputs::Ve
   kbvals = guesses(t)
   nrOfKbVals = length(kbvals)
   nrOfFuns = length(c.leakages)
+  nrOfTargets = length(input)
 
   @inbounds for o in 1:nrOfKbVals
     outputs[o] = target(t, input, kbvals[o])
