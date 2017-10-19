@@ -13,9 +13,10 @@ export printParameters,getParameters
 export sca
 export Target,target
 export guesses,numberOfPhases,numberOfTargets,correctKeyMaterial,recoverKey,getDataPass,getTargets
+export totalNumberOfTargets
 
 @enum Direction FORWARD=1 BACKWARD=2
-@enum Status FINISHED PHASERESULT INTERMEDIATESCORES ONLYFORTEST INTERMEDIATECORRELATION BREAK
+@enum Status FINISHED PHASERESULT INTERMEDIATESCORES INTERMEDIATECORRELATION BREAK
 
 const PHASE1 = 1
 const PHASE2 = 2
@@ -89,6 +90,7 @@ numberOfTargets(a::Attack, phase::Int) = 1
 getTargets(a::Attack, phase::Int, phaseInput::Vector{UInt8}) = []
 recoverKey(a::Attack, recoverKeyMaterial::Vector{UInt8}) = recoverKeyMaterial
 getDataPass(a::Attack, phase::Int, phaseInput::Vector{UInt8}) = Nullable()
+totalNumberOfTargets(a::Attack) = sum(x -> numberOfTargets(a,x), 1:numberOfPhases(a))
 
 # four types of analysis methods: CPA and MIA and LRA and IncrementalCPA
 type CPA <: NonIncrementalAnalysis
@@ -325,9 +327,6 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
       clearScoresAndOffsets!(scoresAndOffsets)
 
       attack(params.analysis, params, phase, super, trs, interval, scoresAndOffsets)
-
-      # FIXME: only for testing, fix the damn tests and remove this nonsense
-      yieldto(super, (ONLYFORTEST, (scoresAndOffsets, getCounter(trs), collect(1:length(targetOffsets)), targetOffsets)))
     end
 
 
@@ -397,7 +396,7 @@ getTarget(a::DpaAttack, phase::Int, targetOffset::Int) = a.targets[phase][target
 getDataPass(a::DpaAttack, phase::Int) = a.phasefn[phase]
 
 # generic sca function, this one is called in all the unit tests and the main functions
-function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::Int=length(trs), printSubs::Bool=false, scoresCallBack::Nullable{Function}=Nullable{Function}(), corrCallBack=Nullable{Function}(),testcallback=Nullable{Function}())
+function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::Int=length(trs))
   @printf("\nJlsca running in Julia version: %s, %d processes/%d workers/%d threads per worker\n\n", VERSION, nprocs(), nworkers(), Threads.nthreads())
 
   printParameters(params)
@@ -490,10 +489,6 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
       elseif status == INTERMEDIATECORRELATION
         if !isnull(params.scoresCallBack)
           get(params.scoresCallBack)(statusData...)
-        end
-      elseif status == ONLYFORTEST
-        if !isnull(scoresCallBack)
-          get(scoresCallBack)(phase, params, scoresAndOffsets, length(keyOffsets), keyOffsets, numberOfTraces2)
         end
       elseif status == BREAK
         break

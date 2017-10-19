@@ -47,9 +47,9 @@ function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         end
 
         if conditional
-          key = sca(DistributedTrace(),params,1, 200, false)
+          key = sca(DistributedTrace(),params,1, 200)
         else
-          key = sca(trs,params,1, 200, false)
+          key = sca(trs,params,1, 200)
         end
 
         @test(key == get(params.knownKey))
