@@ -3,7 +3,7 @@
 # Author: Cees-Bart Breunesse
 
 
-export Leakage,Bit,HW,leak
+export Leakage,Bit,HW,leak,hw
 export basisModelSingleBits
 
 abstract type Leakage end

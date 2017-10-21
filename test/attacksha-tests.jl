@@ -4,9 +4,11 @@
 
 using Base.Test
 
-using Jlsca.Sca
-using Jlsca.Sca.hw
-using Jlsca.Trs
+@everywhere begin
+  using Jlsca.Sca
+  using Jlsca.Sca.hw
+  using Jlsca.Trs
+end
 
 function testShaTraces(conditional::Bool,direction::Direction, analysis::Analysis, hack::Bool=false)
     tracedir = "../shatraces"
@@ -25,7 +27,6 @@ function testShaTraces(conditional::Bool,direction::Direction, analysis::Analysi
         # create Trace instance
         if conditional
           @everyworker begin
-            using Jlsca.Trs
             trs = InspectorTrace($fullfilename)
             
             # samples are intermediates, convert to "leakage" here.

@@ -399,7 +399,7 @@ function getCorr(state::IncrementalCovarianceTiled)
   return corr
 end
 
-function getScoresAndOffsets(state::IncrementalCovariance, reducer::Function)
+function getRankData(state::IncrementalCovariance, reducer::Function)
   scores = zeros(Float64, size(state.cov)[2])
   offsets = zeros(Int, size(state.cov)[2])
   corrCol = zeros(Float64, size(state.cov)[1])

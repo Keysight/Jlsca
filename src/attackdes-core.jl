@@ -330,7 +330,7 @@ function pick(scorecol::Vector{Float64}, col::Int, block::UInt8)
 end
 
 # a better way to get a round key from the scores
-function getRoundKey(a::DpaAttack, params::DesAttack, phase::Int, sc::ScoresAndOffsets)
+function getRoundKey(a::DpaAttack, params::DesAttack, phase::Int, sc::RankData)
   if phase in [PHASE3;PHASE5]    
     nrTargets = sc.nrTargets
     phaseOutput = a.phaseData
@@ -354,12 +354,12 @@ function getRoundKey(a::DpaAttack, params::DesAttack, phase::Int, sc::ScoresAndO
 
 
     for c in 1:nrTargets
-      combinedscores = getScores(a.leakageCombinator,a,sc,c)
+      combinedscores = getScores(sc,c)
       rk[c] = pick(combinedscores,c,wrongrk[c])
     end
 
     return rk
   else
-    return map(x -> UInt8(sortperm(getScores(a.leakageCombinator,a,sc,x), rev=true)[1] - 1), 1:sc.nrTargets)
+    return map(x -> UInt8(sortperm(getScores(sc,x), rev=true)[1] - 1), 1:sc.nrTargets)
   end
 end

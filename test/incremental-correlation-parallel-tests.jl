@@ -2,8 +2,6 @@
 #
 # Author: Cees-Bart Breunesse
 
-# Run: julia -p3 -Lsca.jl <thisfile>
-
 using Base.Test
 
 using Jlsca.Sca
