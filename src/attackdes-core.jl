@@ -332,7 +332,7 @@ end
 # a better way to get a round key from the scores
 function getRoundKey(a::DpaAttack, params::DesAttack, phase::Int, sc::RankData)
   if phase in [PHASE3;PHASE5]    
-    nrTargets = sc.nrTargets
+    targets = getTargets(sc, phase)
     phaseOutput = a.phaseData
     wrongdeskey = recoverKeyHelper(params, phase-1, phaseOutput[end-15:end-8], phaseOutput[end-7:end])
 
@@ -350,16 +350,16 @@ function getRoundKey(a::DpaAttack, params::DesAttack, phase::Int, sc::RankData)
     end
 
 
-    rk = zeros(UInt8, nrTargets)
+    rk = zeros(UInt8, length(targets))
 
 
-    for c in 1:nrTargets
-      combinedscores = getScores(sc,c)
-      rk[c] = pick(combinedscores,c,wrongrk[c])
+    for c in 1:length(targets)
+      combinedscores = getScores(sc,phase,targets[c])
+      rk[c] = pick(combinedscores,targets[c],wrongrk[c])
     end
 
     return rk
   else
-    return map(x -> UInt8(sortperm(getScores(sc,x), rev=true)[1] - 1), 1:sc.nrTargets)
+    return map(x -> UInt8(sortperm(getScores(sc,phase,x), rev=true)[1] - 1), getTargets(sc, phase))
   end
 end
