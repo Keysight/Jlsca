@@ -45,6 +45,8 @@ type CondReduce <: Cond
   end
 end
 
+show(io::IO, a::CondReduce) = print(io, "Cond reduce")
+
 function reset(c::CondReduce)
   c.mask = Dict{Int,BitVector}()
   c.traceIdx = Dict{Int,Dict{Int,Int}}()

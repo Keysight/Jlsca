@@ -14,9 +14,10 @@ export sca
 export Target,target
 export guesses,numberOfPhases,numberOfTargets,correctKeyMaterial,recoverKey,getDataPass,getTargets
 export totalNumberOfTargets
+export RankData,RankData
 
 @enum Direction FORWARD=1 BACKWARD=2
-@enum Status FINISHED PHASERESULT INTERMEDIATESCORES INTERMEDIATECORRELATION BREAK
+@enum Status FINISHED PHASERESULT INTERMEDIATERANKS INTERMEDIATESCORES BREAK
 
 const PHASE1 = 1
 const PHASE2 = 2
@@ -54,15 +55,38 @@ type DpaAttack
   outputkka::Nullable{AbstractString}
   targetOffsets::Nullable{Vector{Int}}
   scoresCallBack::Nullable{Function}
+  evolutionCb::Nullable{Function}
   leakageCombinator::Combination
   maximization::Maximization
   # caching stuff below, not configurable, overwritten for each sca run
   targets::Vector{Vector{Target}}
   phasefn::Vector{Nullable{Function}}
   phaseData::Vector{UInt8}
+  correctKeyMaterial::Vector{UInt8}
+  intervals::Int
+  rankData
 
   function DpaAttack(attack::Attack, analysis::Analysis)
-    new(attack,analysis,1,Nullable(),Nullable(),Nullable(),Nullable(),Nullable(),Nullable(), Nullable(), Sum(), GlobalMaximization())
+    new(attack,analysis,1,Nullable(),Nullable(),Nullable(),Nullable(),Nullable(),Nullable(), Nullable(), Nullable(), Sum(), GlobalMaximization())
+  end
+end
+
+export RankData
+
+type RankData
+  numberOfTraces
+  scores
+  offsets
+  combinedScores
+  intervals
+  nrLeakages
+
+  function RankData(params::DpaAttack)
+    numberOfTraces = Dict{Int, IntSet}()
+    combinedScores = Dict{Int, Dict{Int, Matrix{Float64}}}()
+    scores = Dict{Int, Dict{Int, Dict{Int, Matrix{Float64}}}}()
+    offsets = Dict{Int, Dict{Int, Dict{Int, Matrix{Int}}}}()
+    return new(numberOfTraces,scores,offsets,combinedScores,params.intervals,getNrLeakageFunctions(params.analysis))
   end
 end
 
@@ -75,7 +99,7 @@ function printParameters(a::DpaAttack)
     @printf("phases:     %s\n", string(get(a.phases)))
   end
   if !isnull(a.targetOffsets)
-    @printf("key bytes:  %s\n", string(get(a.targetOffsets)))
+    @printf("targets:    %s\n", string(get(a.targetOffsets)))
   end
   if !isnull(a.knownKey)
     @printf("known key:  %s\n", bytes2hex(get(a.knownKey)))
@@ -103,6 +127,8 @@ type CPA <: NonIncrementalAnalysis
   end
 end
 
+show(io::IO, a::CPA) = print(io, "CPA")
+
 type MIA <: NonIncrementalAnalysis
   leakages::Vector{Leakage}
   postProcess::Vector{Function}
@@ -114,6 +140,8 @@ type MIA <: NonIncrementalAnalysis
     return new([HW()], [x -> abs.(x)], Nullable(), SimpleCSV(), 9)
   end
 end
+
+show(io::IO, a::MIA) = print(io, "MIA")
 
 type LRA <: NonIncrementalAnalysis
   basisModel::Function
@@ -130,6 +158,8 @@ type LRA <: NonIncrementalAnalysis
   end
 end
 
+show(io::IO, a::LRA) = print(io, "LRA")
+
 type IncrementalCPA <: Analysis
   leakages::Vector{Leakage}
   postProcess::Vector{Function}
@@ -140,6 +170,8 @@ type IncrementalCPA <: Analysis
     return new([HW()], [x -> abs.(x)], x -> max(abs.(x)), SimpleCSV())
   end
 end
+
+show(io::IO, a::IncrementalCPA) = print(io, "Incremental CPA")
 
 function printParameters(a::IncrementalCPA)
   @printf("leakages:   %s\n", a.leakages)
@@ -157,6 +189,8 @@ function printParameters(a::MIA)
   @printf("leakages:   %s\n", a.leakages)
   @printf("#buckets:   %d\n", a.sampleBuckets)
 end
+
+export getNrLeakageFunctions
 
 getNrLeakageFunctions(a::LRA) = 1
 getNrLeakageFunctions(a::CPA) = length(a.leakages)
@@ -189,7 +223,7 @@ function computeScores(a::LRA, data::AbstractArray{In}, samples::AbstractArray, 
   return C
 end
 
-function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Trace, rows::Range, scoresAndOffsets)
+function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Trace, rows::Range, rankData::RankData)
 
   local kbsamples
   local kbdata
@@ -197,6 +231,8 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
   targetOffsets = getTargetOffsets(params, phase)
 
   ((data, samples), eof) = readTraces(trs, rows)
+
+  nrTraces = getCounter(trs)
 
   if data == nothing || samples == nothing
     return
@@ -248,17 +284,18 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
       for l in 1:getNrLeakageFunctions(a)
         oo = (l-1)*nrKbvals
         vv = @view C[:,oo+1:oo+nrKbvals]
-        yieldto(super, (INTERMEDIATECORRELATION, (phase, o, l, vv)))
-        updateScoresAndOffsets!(params.maximization, scoresAndOffsets, vv, l, o)
+        yieldto(super, (INTERMEDIATESCORES, (phase, o, l, vv)))
+        update!(params.maximization, rankData, phase, vv, targetOffsets[o], l, nrTraces)
       end
+      setCombined!(params.leakageCombinator, rankData, phase, targetOffsets[o], nrTraces)
     end
 
     # let somebody do something with the scores for these traces
-    yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs), nrrows, [o])))
+    yieldto(super, (INTERMEDIATERANKS, (rankData, nrTraces, nrrows, [targetOffsets[o]])))
   end
 end
 
-function attack(a::IncrementalCPA, params::DpaAttack, phase::Int, super::Task, trs::Trace, rows::Range, scoresAndOffsets)
+function attack(a::IncrementalCPA, params::DpaAttack, phase::Int, super::Task, trs::Trace, rows::Range, rankData::RankData)
   targetOffsets = getTargetOffsets(params, phase)
 
   if isa(trs, DistributedTrace)
@@ -270,6 +307,8 @@ function attack(a::IncrementalCPA, params::DpaAttack, phase::Int, super::Task, t
   end
 
   (C,eof) = readTraces(trs, rows)
+
+  nrTraces = getCounter(trs)
 
   (samplecols,hypocols) = size(C)
 
@@ -286,19 +325,19 @@ function attack(a::IncrementalCPA, params::DpaAttack, phase::Int, super::Task, t
     for l in 1:nrLeakages
       oo = (l-1)*nrKbvals + (kb-1)*nrLeakages*nrKbvals
       vv = @view C[:,oo+1:oo+nrKbvals]
-      yieldto(super, (INTERMEDIATECORRELATION, (phase, kb, l, vv)))
-      updateScoresAndOffsets!(params.maximization, scoresAndOffsets, vv, l, kb)
+      yieldto(super, (INTERMEDIATESCORES, (phase, kb, l, vv)))
+      update!(params.maximization, rankData, phase, vv, targetOffsets[kb], l, nrTraces)
     end
+    setCombined!(params.leakageCombinator, rankData, phase, targetOffsets[kb], nrTraces)
   end
 
-
   # let somebody do something with the scores for these traces
-  yieldto(super, (INTERMEDIATESCORES, (scoresAndOffsets, getCounter(trs),getCounter(trs), targetOffsets)))
+  yieldto(super, (INTERMEDIATERANKS, (rankData, getCounter(trs),getCounter(trs), collect(1:length(targetOffsets)))))
 end
 
 # does the attack & analysis per xxx traces, should be called from an scatask
 function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::Range)
-    local scoresAndOffsets
+    local rankData
 
     if !isnull(params.updateInterval) && !hasPostProcessor(trs)
         @printf("WARNING: update interval only supported for traces with a post processor, option ignored\n")
@@ -312,7 +351,7 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
     stepSize = min(numberOfTraces, get(params.updateInterval, numberOfTraces))
     targetOffsets = getTargetOffsets(params,phase)
 
-    scoresAndOffsets = ScoresAndOffsets(params, phase)
+    rankData = params.rankData
 
     eof = false
 
@@ -323,16 +362,14 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
         break
       end
 
-      clearScoresAndOffsets!(scoresAndOffsets)
-
-      attack(params.analysis, params, phase, super, trs, interval, scoresAndOffsets)
+      attack(params.analysis, params, phase, super, trs, interval, rankData)
     end
 
 
     # reset the state of trace post processor (conditional averager)
     reset(trs)
 
-    return scoresAndOffsets
+    return rankData
 end
 
 function scatask(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, numberOfTraces::Int, phase::Int)
@@ -354,7 +391,7 @@ function scatask(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, nu
   end
 
   # do the attack
-  scoresAndOffsets = analysis(super, params, phase, trs, firstTrace:numberOfTraces)
+  rankData = analysis(super, params, phase, trs, firstTrace:numberOfTraces)
 
   if !fullattack
     popDataPass(trs)
@@ -373,7 +410,7 @@ function scatask(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, nu
   end
 
   # get the recovered key material
-  roundkey::Vector{UInt8} = getRoundKey(params, params.attack, phase, scoresAndOffsets)
+  roundkey::Vector{UInt8} = getRoundKey(params, params.attack, phase, rankData)
   yieldto(super, (PHASERESULT, roundkey))
 
   if numberOfPhases(params.attack) == phase
@@ -386,13 +423,32 @@ function getTargetOffsets(a::DpaAttack, phase::Int)
 end
 
 function isFullAttack(a::DpaAttack, phase::Int)
-  return isnull(a.targetOffsets) || (numberOfTargets(a, phase) == length(get(params.targetOffsets)))
+  return isnull(a.targetOffsets) || (numberOfTargets(a, phase) == length(get(a.targetOffsets)))
 end
 
-numberOfTargets(a::DpaAttack, phase::Int) = length(a.targets[phase])
+numberOfPhases(a::DpaAttack) = numberOfPhases(a.attack)
+numberOfTargets(a::DpaAttack, phase::Int) = numberOfTargets(a.attack,phase)
+numberOfGuesses(a::DpaAttack, phase::Int, target::Int) = length(guesses(a.targets[phase][target]))
 getTargets(a::DpaAttack, phase::Int) = a.targets[phase]
+
+export getTarget
+
 getTarget(a::DpaAttack, phase::Int, targetOffset::Int) = a.targets[phase][targetOffset]
 getDataPass(a::DpaAttack, phase::Int) = a.phasefn[phase]
+
+export offset
+
+offset(a::DpaAttack, phase::Int, target::Int) = (phase > 1 ? sum(x -> numberOfTargets(a,x), 1:phase-1) : 0) + (target-1)
+offset(a::DpaAttack, phase::Int) = offset(a,phase,1)
+
+export getCorrectKey
+
+function getCorrectKey(params::DpaAttack, phase::Int, target::Int)
+  @assert !isnull(params.knownKey)
+  o = offset(params, phase, target)
+  kb = params.correctKeyMaterial[o+1]
+  return kb
+end
 
 # generic sca function, this one is called in all the unit tests and the main functions
 function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::Int=length(trs))
@@ -407,13 +463,17 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
 
   if !isnull(params.knownKey)
     knownrkmaterial = correctKeyMaterial(params.attack, get(params.knownKey))
+    params.correctKeyMaterial = knownrkmaterial
   end
+
 
   finished = false
   phase = 1
 
   params.targets = Vector{Vector{Target}}(0)
   params.phasefn = Vector{Nullable{Function}}(0)
+  params.intervals = !isnull(params.updateInterval) ? (div(numberOfTraces, get(params.updateInterval)) + ((numberOfTraces % get(params.updateInterval)) > 0 ? 1 : 0)) : 1
+  params.rankData = RankData(params)
 
   while !finished
     if phase > 1
@@ -476,16 +536,12 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
             @printf("knownkey match: %s\n", string(key == get(params.knownKey)))
           end
         end
-      elseif status == INTERMEDIATESCORES
-        (scoresAndOffsets, numberOfTracesProcessed, numberOfRowsAfterProcessing, keyOffsets) = statusData
-        printScores(params, phase, scoresAndOffsets, numberOfTracesProcessed, numberOfRowsAfterProcessing ,keyOffsets)
-
-        if !isnull(params.outputkka) && !isnull(params.knownKey)
-          add2kka(params, phase, scoresAndOffsets, numberOfTracesProcessed, numberOfRowsAfterProcessing, keyOffsets)
-        end
+      elseif status == INTERMEDIATERANKS
+        (rankData, numberOfTracesProcessed, numberOfRowsAfterProcessing, keyOffsets) = statusData
+        printScores(params, phase, rankData, numberOfTracesProcessed, numberOfRowsAfterProcessing ,keyOffsets)
       elseif status == PHASERESULT
         phaseOutput = vcat(phaseOutput, statusData)
-      elseif status == INTERMEDIATECORRELATION
+      elseif status == INTERMEDIATESCORES
         if !isnull(params.scoresCallBack)
           get(params.scoresCallBack)(statusData...)
         end
@@ -503,6 +559,11 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
 
   if !isnull(params.outputkka) && !isnull(params.knownKey)
     @printf("KKA output in %s\n", get(params.outputkka))
+    correctKeyRanks2CSV(params)
+  end
+
+  if !isnull(params.evolutionCb) 
+    get(params.evolutionCb)(params.rankData)
   end
 
   return key

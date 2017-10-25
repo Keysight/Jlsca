@@ -253,6 +253,8 @@ function recoverKey(params::AesMCAttack, phaseInput::Vector{UInt8})
   return recoverKeyHelper(reordered, mode, direction)
 end
 
+numberOfTargets(params::AesMCAttack, phase::Int) = 4
+
 function getTargets(params::AesMCAttack, phase::Int, phaseInput::Vector{UInt8})
   if (params.direction == FORWARD && params.mode == CIPHER) || (params.direction == BACKWARD && params.mode != CIPHER)
     if params.xor

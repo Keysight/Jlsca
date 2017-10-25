@@ -5,7 +5,7 @@
 
 export CondAvg
 
-import Base.get
+import Base.get,Base.show
 
 type CondAvg <: Cond
   averages::Dict{Int,Dict{Int,Vector{Float64}}}
@@ -25,6 +25,8 @@ type CondAvg <: Cond
     new(averages, counters, 0, worksplit)
   end
 end
+
+show(io::IO, a::CondAvg) = print(io, "Cond avg")
 
 function reset(c::CondAvg)
   c.averages = Dict{Int,Dict{Int,Vector{Float64}}}()
@@ -151,7 +153,7 @@ function get(c::CondAvg)
     push!(averages, sampleSnap)
   end
 
-  @printf("\nAveraged %d input traces, %s data type, %s sample type\n", c.globcounter, string(dataType), string(eltype(averages[1])))
+  @printf("\nAveraged %d input traces into %d averages, %s data type, %s sample type\n", c.globcounter, length(keys(c.counters)), string(dataType), string(eltype(averages[1])))
 
 
   return (datas,averages)

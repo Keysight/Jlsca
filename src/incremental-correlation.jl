@@ -29,6 +29,8 @@ type IncrementalCorrelation <: PostProcessor
   end
 end
 
+show(io::IO, a::IncrementalCorrelation) = print(io, "Incremental correlation")
+
 createTargetCache(t::Target{In,Out}) where {In,Out} = Vector{Out}(guesses(t))
 
 function init(c::IncrementalCorrelation, params::DpaAttack, phase::Int)

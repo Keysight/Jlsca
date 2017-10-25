@@ -77,10 +77,11 @@ type DesSboxOut <: Target{UInt8,UInt8}
 end
 
 target(this::DesSboxOut, sixbits::Union{UInt16, UInt8}, kb::UInt8) = Sbox(this.sbidx)[getIdx((sixbits & 0x3f) ⊻ kb) + 1]
-
+show(io::IO, a::DesSboxOut) = print(io, "Sbox $(a.sbidx) out")
 guesses(a::DesSboxOut) = desguesses
 
 type DesSboxOutXORin <: Target{UInt8,UInt8}  end
+
 
 function target(this::DesSboxOutXORin, sixbits::Union{UInt16, UInt8}, kb::UInt8)
   inp =  ((sixbits & 0x3f) ⊻ kb) & 0xf
@@ -88,6 +89,7 @@ function target(this::DesSboxOutXORin, sixbits::Union{UInt16, UInt8}, kb::UInt8)
   return inp ⊻ outp
 end
 
+show(io::IO, a::DesSboxOutXORin) = print(io, "Sbox $(a.sbidx) out XOR in")
 guesses(a::DesSboxOutXORin) = desguesses
 
 type RoundOut <: Target{UInt16,UInt16} 
@@ -95,7 +97,7 @@ type RoundOut <: Target{UInt16,UInt16}
 end
 
 target(this::RoundOut, tenbits::UInt16, kb::UInt8) = Sbox(this.sbidx)[getIdx((tenbits & 0x3f) ⊻ kb) + 1] ⊻ (tenbits >> 6)
-
+show(io::IO, a::RoundOut) = print(io, "Round out, sbox $(a.sbidx)")
 guesses(a::RoundOut) = desguesses
 
 # round functions
@@ -328,9 +330,9 @@ function pick(scorecol::Vector{Float64}, col::Int, block::UInt8)
 end
 
 # a better way to get a round key from the scores
-function getRoundKey(a::DpaAttack, params::DesAttack, phase::Int, sc::ScoresAndOffsets)
+function getRoundKey(a::DpaAttack, params::DesAttack, phase::Int, sc::RankData)
   if phase in [PHASE3;PHASE5]    
-    nrTargets = sc.nrTargets
+    targets = getTargets(sc, phase)
     phaseOutput = a.phaseData
     wrongdeskey = recoverKeyHelper(params, phase-1, phaseOutput[end-15:end-8], phaseOutput[end-7:end])
 
@@ -348,16 +350,16 @@ function getRoundKey(a::DpaAttack, params::DesAttack, phase::Int, sc::ScoresAndO
     end
 
 
-    rk = zeros(UInt8, nrTargets)
+    rk = zeros(UInt8, length(targets))
 
 
-    for c in 1:nrTargets
-      combinedscores = getScores(a.leakageCombinator,a,sc,c)
-      rk[c] = pick(combinedscores,c,wrongrk[c])
+    for c in 1:length(targets)
+      combinedscores = getScores(sc,phase,targets[c])
+      rk[c] = pick(combinedscores,targets[c],wrongrk[c])
     end
 
     return rk
   else
-    return map(x -> UInt8(sortperm(getScores(a.leakageCombinator,a,sc,x), rev=true)[1] - 1), 1:sc.nrTargets)
+    return map(x -> UInt8(sortperm(getScores(sc,phase,x), rev=true)[1] - 1), getTargets(sc, phase))
   end
 end

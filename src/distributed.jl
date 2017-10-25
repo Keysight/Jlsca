@@ -55,13 +55,18 @@ type SplitByTracesBlock <: SplitByTraces
 end
 
 function getWorkerRange(w::SplitByTracesBlock, globalRange::Range)
+  len = length(globalRange)
+  n = nworkers()
+  blocksize  = div(len,n)
   if nprocs() > 1
-    traceStart = (w.worker - 2) * div(globalRange[end], nworkers()) + 1
+    traceStart = globalRange[1] + (w.worker - 2)*blocksize
+
     if w.worker == findmax(workers())[1]
       traceEnd = globalRange[end]
     else
-      traceEnd = (w.worker - 1) * div(globalRange[end], nworkers())
+      traceEnd = traceStart + blocksize - 1
     end
+
     return (traceStart, 1, traceEnd)
   else
     return (globalRange[1],1,globalRange[end])
@@ -78,7 +83,7 @@ function add(c::PostProcessor, trs::Trace, globalRange::Range, update::Function)
   end
   rangestr = @sprintf("trace range %s", traceStart:traceStep:traceEnd)
 
-  @printf("Running processor %s on %s, using trace set with %d data passes, %d sample passes\n", string(typeof(c)), rangestr, length(trs.dataPasses), length(trs.passes))
+  @printf("Running processor \"%s\" on %s, %d data passes, %d sample passes\n", c, rangestr, length(trs.dataPasses), length(trs.passes))
   total = 0
   bla = 0
   try

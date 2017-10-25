@@ -2,8 +2,6 @@
 #
 # Author: Cees-Bart Breunesse
 
-# Run: julia -p3 -Lsca.jl <thisfile>
-
 using Base.Test
 
 using Jlsca.Sca
@@ -106,7 +104,7 @@ function ParallelIncrementalCPATest(splitmode)
     end
 end
 
-function ParallelIncrementalCPATestWithInterval()
+function ParallelIncrementalCPATestWithInterval(splitmode)
     len = 200
     updateInterval = 49
 
@@ -123,7 +121,11 @@ function ParallelIncrementalCPATestWithInterval()
     @everyworker begin
       using Jlsca.Trs
       trs = InspectorTrace($fullfilename)
-      setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
+      if $splitmode == 1
+        setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
+      elseif $splitmode == 2
+        setPostProcessor(trs, IncrementalCorrelation(SplitByTracesBlock()))
+      end
     end
 
     numberOfScas = div(len, updateInterval) + ((len % updateInterval) > 0 ? 1 : 0)
@@ -163,10 +165,9 @@ end
 
 IncrementalCPATest(1)
 IncrementalCPATest(2)
-# IncrementalCPATest(3)
 
 ParallelIncrementalCPATest(1)
 ParallelIncrementalCPATest(2)
-# ParallelIncrementalCPATest(3)
 
-ParallelIncrementalCPATestWithInterval()
+ParallelIncrementalCPATestWithInterval(1)
+ParallelIncrementalCPATestWithInterval(2)
