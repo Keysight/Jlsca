@@ -61,7 +61,7 @@ function ParallelCondReduceTest(splitmode)
 end
 
 
-function ParallelCondReduceTestWithInterval()
+function ParallelCondReduceTestWithInterval(splitmode)
     len = 200
     updateInterval = 49
 
@@ -82,7 +82,11 @@ function ParallelCondReduceTestWithInterval()
       using Jlsca.Trs
       trs = InspectorTrace($fullfilename, true)
       addSamplePass(trs, tobits)
-      setPostProcessor(trs, CondReduce(SplitByTracesSliced(), $localtrs))
+      if $splitmode == 1
+        setPostProcessor(trs, CondReduce(SplitByTracesSliced(), $localtrs))
+      elseif $splitmode == 2
+        setPostProcessor(trs, CondReduce(SplitByTracesBlock(), $localtrs))
+      end
     end
 
     numberOfScas = div(len, updateInterval) + ((len % updateInterval) > 0 ? 1 : 0)
@@ -125,4 +129,5 @@ ParallelCondReduceTest(1)
 ParallelCondReduceTest(2)
 # ParallelCondReduceTest(3)
 
-ParallelCondReduceTestWithInterval()
+ParallelCondReduceTestWithInterval(1)
+ParallelCondReduceTestWithInterval(2)

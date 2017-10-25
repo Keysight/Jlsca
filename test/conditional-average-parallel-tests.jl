@@ -53,7 +53,7 @@ function ParallelCondAvgTest(splitmode)
     end
 end
 
-function ParallelCondAvgTestWithInterval()
+function ParallelCondAvgTestWithInterval(splitmode)
     len = 200
     updateInterval = 49
 
@@ -69,7 +69,11 @@ function ParallelCondAvgTestWithInterval()
     @everyworker begin
       using Jlsca.Trs
       trs = InspectorTrace($fullfilename)
-      setPostProcessor(trs, CondAvg(SplitByTracesSliced()))
+      if $splitmode == 1
+        setPostProcessor(trs, CondAvg(SplitByTracesSliced()))
+      elseif $splitmode == 2
+        setPostProcessor(trs, CondAvg(SplitByTracesBlock()))
+      end
     end
 
     numberOfScas = div(len, updateInterval) + ((len % updateInterval) > 0 ? 1 : 0)
@@ -112,4 +116,5 @@ ParallelCondAvgTest(1)
 ParallelCondAvgTest(2)
 # ParallelCondAvgTest(3)
 
-ParallelCondAvgTestWithInterval()
+ParallelCondAvgTestWithInterval(1)
+ParallelCondAvgTestWithInterval(2)
