@@ -140,7 +140,7 @@ function get(c::CondAvg)
   elseif maxVal <= 2^16
     dataType = UInt16
   else
-    throw(Exception("Unsupported and not recommended ;)"))
+    throw(ErrorException("Unsupported and not recommended ;)"))
   end
 
   for k in sort(collect(keys(c.counters)))
