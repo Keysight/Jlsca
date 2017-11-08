@@ -54,6 +54,14 @@ function hw(x::UInt32)
   return ret
 end
 
+function hw(x::UInt128)
+  ret::UInt8 = 0
+  for i in 0:3
+    ret += hw(UInt32((x >> (i*32)) & 0xffffffff))
+  end
+  return ret
+end
+
 
 # some models for LRA
 
