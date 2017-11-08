@@ -25,7 +25,7 @@ function shatest4()
 		update(state, b"a")
 	end
 
-	@test final(state) == expected
+	@test Sha.final(state) == expected
 end
 
 function shatest5() 
