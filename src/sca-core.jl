@@ -495,7 +495,7 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
     if !isnull(params.phases) && !(phase in get(params.phases, []))
       phaseOutput = phaseInput
       phase += 1
-      if phase > numberOfPhases(params.attack) 
+      if phase > min(maximum(get(params.phases)), numberOfPhases(params.attack))
         finished = true
       end
       continue
