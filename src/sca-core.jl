@@ -297,13 +297,15 @@ end
 
 function attack(a::IncrementalCPA, params::DpaAttack, phase::Int, super::Task, trs::Trace, rows::Range, rankData::RankData)
   targetOffsets = getTargetOffsets(params, phase)
+  leakages = params.analysis.leakages
+  targets = getTargets(params, phase)
 
   if isa(trs, DistributedTrace)
     @sync for w in workers()
-      @spawnat w init(Main.trs.postProcInstance, params, phase)
+      @spawnat w init(Main.trs.postProcInstance, targetOffsets, leakages, targets)
     end
   else
-    init(trs.postProcInstance, params, phase)
+    init(trs.postProcInstance, targetOffsets, leakages, targets)
   end
 
   (C,eof) = readTraces(trs, rows)
