@@ -33,10 +33,10 @@ show(io::IO, a::IncrementalCorrelation) = print(io, "Incremental correlation")
 
 createTargetCache(t::Target{In,Out}) where {In,Out} = Vector{Out}(guesses(t))
 
-function init(c::IncrementalCorrelation, params::DpaAttack, phase::Int)
-  c.targetOffsets = getTargetOffsets(params, phase)
-  c.leakages = params.analysis.leakages
-  c.targets = getTargets(params, phase)
+function init(c::IncrementalCorrelation, targetOffsets::Vector{Int}, leakages::Vector{Leakage}, targets::Vector{Target})
+  c.targetOffsets = targetOffsets
+  c.leakages = leakages
+  c.targets = targets
   c.hypocache = Vector{Vector{UInt8}}(length(c.targetOffsets))
   c.targetcache = Vector{Vector}(length(c.targetOffsets))
   for i in 1:length(c.targetOffsets)
