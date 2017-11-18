@@ -33,9 +33,11 @@ for s in instances(Status); @eval export $(Symbol(s)); end
 abstract type Attack end
 abstract type Analysis end
 abstract type NonIncrementalAnalysis <: Analysis end
+abstract type IncrementalAnalysis <: Analysis end
 abstract type Target{In <:Integer, Out <: Integer} end
 abstract type Maximization end
 
+type AbsoluteGlobalMaximization <: Maximization end
 type GlobalMaximization <: Maximization end
 type NormalizedMaximization <: Maximization end
 
@@ -57,7 +59,8 @@ type DpaAttack
   scoresCallBack::Nullable{Function}
   evolutionCb::Nullable{Function}
   leakageCombinator::Combination
-  maximization::Maximization
+  maximization::Nullable{Maximization}
+  maxCols::Nullable{Int}
   # caching stuff below, not configurable, overwritten for each sca run
   targets::Vector{Vector{Target}}
   phasefn::Vector{Nullable{Function}}
@@ -67,7 +70,7 @@ type DpaAttack
   rankData
 
   function DpaAttack(attack::Attack, analysis::Analysis)
-    new(attack,analysis,1,Nullable(),Nullable(),Nullable(),Nullable(),Nullable(),Nullable(), Nullable(), Nullable(), Sum(), GlobalMaximization())
+    new(attack,analysis,1,Nullable(),Nullable(),Nullable(),Nullable(),Nullable(),Nullable(), Nullable(), Nullable(), Sum(), Nullable() , Nullable())
   end
 end
 
@@ -106,7 +109,7 @@ function printParameters(a::DpaAttack)
   end
 end
 
-printParameters(a::Attack) = print("Unknown attack")
+printParameters(a::Attack) = print("Unknown attack\n")
 guesses(a::Target{In,Out}) where {In,Out} = collect(UInt8, 0:255)
 numberOfPhases(a::Attack) = 1
 numberOfTargets(a::Attack, phase::Int) = 1
@@ -115,115 +118,9 @@ recoverKey(a::Attack, recoverKeyMaterial::Vector{UInt8}) = recoverKeyMaterial
 getDataPass(a::Attack, phase::Int, phaseInput::Vector{UInt8}) = Nullable()
 totalNumberOfTargets(a::Attack) = sum(x -> numberOfTargets(a,x), 1:numberOfPhases(a))
 
-# four types of analysis methods: CPA and MIA and LRA and IncrementalCPA
-type CPA <: NonIncrementalAnalysis
-  leakages::Vector{Leakage}
-  postProcess::Vector{Function}
-  maxCols::Nullable{Int}
-  logfile::SimpleCSV
-
-  function CPA()
-    return new([HW()], [x -> abs.(x)], Nullable(), SimpleCSV())
-  end
-end
-
-show(io::IO, a::CPA) = print(io, "CPA")
-
-type MIA <: NonIncrementalAnalysis
-  leakages::Vector{Leakage}
-  postProcess::Vector{Function}
-  maxCols::Nullable{Int}
-  logfile::SimpleCSV
-  sampleBuckets::Int
-
-  function MIA()
-    return new([HW()], [x -> abs.(x)], Nullable(), SimpleCSV(), 9)
-  end
-end
-
-show(io::IO, a::MIA) = print(io, "MIA")
-
-type LRA <: NonIncrementalAnalysis
-  basisModel::Function
-  postProcess::Vector{Function}
-  maxCols::Nullable{Int}
-  logfile::SimpleCSV
-
-  function LRA(basisModel)
-    return new(basisModel, [], Nullable(), SimpleCSV())
-  end
-
-  function LRA()
-    return new(basisModelSingleBits, [], Nullable(), SimpleCSV())
-  end
-end
-
-show(io::IO, a::LRA) = print(io, "LRA")
-
-type IncrementalCPA <: Analysis
-  leakages::Vector{Leakage}
-  postProcess::Vector{Function}
-  reducer::Function
-  logfile::SimpleCSV
-
-  function IncrementalCPA()
-    return new([HW()], [x -> abs.(x)], x -> max(abs.(x)), SimpleCSV())
-  end
-end
-
-show(io::IO, a::IncrementalCPA) = print(io, "Incremental CPA")
-
-function printParameters(a::IncrementalCPA)
-  @printf("leakages:   %s\n", a.leakages)
-end
-
-function printParameters(a::LRA)
-  @printf("basismodel: %s\n", a.basisModel)
-end
-
-function printParameters(a::CPA)
-  @printf("leakages:   %s\n", a.leakages)
-end
-
-function printParameters(a::MIA)
-  @printf("leakages:   %s\n", a.leakages)
-  @printf("#buckets:   %d\n", a.sampleBuckets)
-end
-
 export getNrLeakageFunctions
 
-getNrLeakageFunctions(a::LRA) = 1
-getNrLeakageFunctions(a::CPA) = length(a.leakages)
-getNrLeakageFunctions(a::MIA) = length(a.leakages)
-getNrLeakageFunctions(a::IncrementalCPA) = length(a.leakages)
-
-
-function computeScores(a::CPA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
-  (tr,tc) = size(samples)
-  (dr,) = size(data)
-  tr == dr || throw(DimensionMismatch())
-
-  HL::Matrix{UInt8} = predict(data, target, kbvals, a.leakages)
-  C = cor(samples, HL)
-  return C
-end
-
-function computeScores(a::MIA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
-  (tr,tc) = size(samples)
-  (dr,) = size(data)
-  tr == dr || throw(DimensionMismatch())
-
-  HL::Matrix{UInt8} = predict(data, target, kbvals, a.leakages)
-  C = mia(samples, HL, a.sampleBuckets)
-  return C
-end
-
-function computeScores(a::LRA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
-   C = lra(data, samples, target, a.basisModel, kbvals)
-  return C
-end
-
-function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Trace, rows::Range, rankData::RankData)
+function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Trace, rows::Range, cols::Range, rankData::RankData)
 
   local kbsamples
   local kbdata
@@ -249,53 +146,41 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
 
     (nrrows,samplecols) = size(kbsamples)
 
-    # FIXME: need to pick something sane here
-    maxCols = get(a.maxCols, 10000)
-
     target = getTarget(params, phase, targetOffsets[o])
     kbvals = guesses(target)
     nrKbvals = length(kbvals)
 
-    for sr in 1:maxCols:samplecols
-      srEnd = min(sr+maxCols-1, samplecols)
+    @printf("%s on samples shape %s (range %s) and data shape %s\n", string(typeof(a).name.name), size(kbsamples), cols, size(kbdata))
 
-      @printf("%s on samples shape %s (range %s) and data shape %s\n", string(typeof(a).name.name), size(kbsamples), string(sr:srEnd), size(kbdata))
-
-      if size(kbsamples)[2] == 0
-        @printf("no samples!\n")
-        scores = nothing
-        continue
-      end
-
-      v = @view kbsamples[:,sr:srEnd]
-
-      # run the attack
-      C = computeScores(a, kbdata, v, target, kbvals)
-
-      # nop the nans
-      C[isnan.(C)] = 0
-
-
-      for fn in a.postProcess
-        C = fn(C)
-      end
-
-      # get the scores for all leakage functions
-      for l in 1:getNrLeakageFunctions(a)
-        oo = (l-1)*nrKbvals
-        vv = @view C[:,oo+1:oo+nrKbvals]
-        yieldto(super, (INTERMEDIATESCORES, (phase, o, l, vv)))
-        update!(params.maximization, rankData, phase, vv, targetOffsets[o], l, nrTraces)
-      end
-      setCombined!(params.leakageCombinator, rankData, phase, targetOffsets[o], nrTraces)
+    if size(kbsamples)[2] == 0
+      @printf("no samples!\n")
+      scores = nothing
+      continue
     end
 
+    v = kbsamples
+
+    # run the attack
+    C = computeScores(a, kbdata, v, target, kbvals)
+
+    # nop the nans
+    C[isnan.(C)] = 0
+
+    # get the scores for all leakage functions
+    for l in 1:getNrLeakageFunctions(a)
+      oo = (l-1)*nrKbvals
+      vv = @view C[:,oo+1:oo+nrKbvals]
+      yieldto(super, (INTERMEDIATESCORES, (phase, o, l, vv)))
+      update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[o], l, nrTraces)
+    end
+    setCombined!(params.leakageCombinator, rankData, phase, targetOffsets[o], nrTraces)
+
     # let somebody do something with the scores for these traces
-    yieldto(super, (INTERMEDIATERANKS, (rankData, nrTraces, nrrows, [targetOffsets[o]])))
+    yieldto(super, (INTERMEDIATERANKS, (rankData, nrTraces, nrrows, cols[end], length(cols), [targetOffsets[o]])))
   end
 end
 
-function attack(a::IncrementalCPA, params::DpaAttack, phase::Int, super::Task, trs::Trace, rows::Range, rankData::RankData)
+function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Trace, rows::Range, cols::Range, rankData::RankData)
   targetOffsets = getTargetOffsets(params, phase)
   leakages = params.analysis.leakages
   targets = getTargets(params, phase)
@@ -314,11 +199,7 @@ function attack(a::IncrementalCPA, params::DpaAttack, phase::Int, super::Task, t
 
   (samplecols,hypocols) = size(C)
 
-  @printf("%s produced (%d, %d) correlation matrix\n", string(typeof(a).name.name), samplecols, hypocols)
-
-  for fn in a.postProcess
-    C = fn(C)
-  end
+  @printf("%s on range %s produced (%d, %d) correlation matrix\n", a, cols, samplecols, hypocols)
 
   nrLeakages = length(a.leakages)
 
@@ -328,13 +209,13 @@ function attack(a::IncrementalCPA, params::DpaAttack, phase::Int, super::Task, t
       oo = (l-1)*nrKbvals + (kb-1)*nrLeakages*nrKbvals
       vv = @view C[:,oo+1:oo+nrKbvals]
       yieldto(super, (INTERMEDIATESCORES, (phase, kb, l, vv)))
-      update!(params.maximization, rankData, phase, vv, targetOffsets[kb], l, nrTraces)
+      update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[kb], l, nrTraces)
     end
     setCombined!(params.leakageCombinator, rankData, phase, targetOffsets[kb], nrTraces)
   end
 
   # let somebody do something with the scores for these traces
-  yieldto(super, (INTERMEDIATERANKS, (rankData, getCounter(trs),getCounter(trs), collect(1:length(targetOffsets)))))
+  yieldto(super, (INTERMEDIATERANKS, (rankData, getCounter(trs),getCounter(trs), cols[end], length(cols), collect(1:length(targetOffsets)))))
 end
 
 # does the attack & analysis per xxx traces, should be called from an scatask
@@ -342,34 +223,53 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
     local rankData
 
     if !isnull(params.updateInterval) && !hasPostProcessor(trs)
-        @printf("WARNING: update interval only supported for traces with a post processor, option ignored\n")
-        updateInterval = Nullable()
+        throw(ErrorException("WARNING: update interval only supported for runs with a post processor"))
     end
 
-    firstTrace = rows[1]
-    numberOfTraces = length(rows)
+    if isa(trs, DistributedTrace)
+      samplecols = @fetch length(getSamples(Main.trs,rows[1]))
+    else
+      samplecols = length(getSamples(trs,rows[1]))
+    end
 
-    offset = firstTrace
-    stepSize = min(numberOfTraces, get(params.updateInterval, numberOfTraces))
-    targetOffsets = getTargetOffsets(params,phase)
+    # FIXME: need to pick something sane here
+    maxCols = get(params.maxCols, 20000)
+    segmented = div(samplecols,maxCols) > 0
 
-    rankData = params.rankData
-
-    eof = false
-
-    for offset in firstTrace:stepSize:numberOfTraces
-      interval = offset:(offset+min(stepSize, numberOfTraces - offset + 1)-1)
-
-      if eof
-        break
+    for sr in 1:maxCols:samplecols
+      srEnd = min(sr+maxCols-1, samplecols)
+      if segmented
+        addSamplePass(trs, x -> x[sr:srEnd])
       end
 
-      attack(params.analysis, params, phase, super, trs, interval, rankData)
+      firstTrace = rows[1]
+      numberOfTraces = length(rows)
+
+      offset = firstTrace
+      stepSize = min(numberOfTraces, get(params.updateInterval, numberOfTraces))
+      targetOffsets = getTargetOffsets(params,phase)
+
+      rankData = params.rankData
+
+      eof = false
+
+      for offset in firstTrace:stepSize:numberOfTraces
+        interval = offset:(offset+min(stepSize, numberOfTraces - offset + 1)-1)
+
+        if eof
+          break
+        end
+
+        attack(params.analysis, params, phase, super, trs, interval, sr:srEnd, rankData)
+      end
+
+      if segmented
+        popSamplePass(trs)
+      end
+
+      # reset the state of trace post processor (conditional averager)
+      reset(trs)
     end
-
-
-    # reset the state of trace post processor (conditional averager)
-    reset(trs)
 
     return rankData
 end
@@ -412,7 +312,7 @@ function scatask(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, nu
   end
 
   # get the recovered key material
-  roundkey::Vector{UInt8} = getRoundKey(params, params.attack, phase, rankData)
+  roundkey::Vector{UInt8} = getPhaseKey(params, params.attack, phase, rankData)
   yieldto(super, (PHASERESULT, roundkey))
 
   if numberOfPhases(params.attack) == phase
@@ -539,8 +439,8 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
           end
         end
       elseif status == INTERMEDIATERANKS
-        (rankData, numberOfTracesProcessed, numberOfRowsAfterProcessing, keyOffsets) = statusData
-        printScores(params, phase, rankData, numberOfTracesProcessed, numberOfRowsAfterProcessing ,keyOffsets)
+        (rankData, numberOfTracesProcessed, numberOfRowsAfterProcessing, numberOfColsProcessed, numberOfColsAfterProcessing, keyOffsets) = statusData
+        printScores(params, phase, rankData, numberOfTracesProcessed, numberOfRowsAfterProcessing, numberOfColsProcessed, numberOfColsAfterProcessing, keyOffsets)
       elseif status == PHASERESULT
         phaseOutput = vcat(phaseOutput, statusData)
       elseif status == INTERMEDIATESCORES
@@ -568,95 +468,5 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
     get(params.evolutionCb)(params.rankData)
   end
 
-  return key
-end
-
-
-# FIXME: move this somewhere else, or kill it off
-# fills the attack parameters with data from the file name
-function getParameters(filename::AbstractString, direction::Direction)
-  local params::DpaAttack
-  local attack::Attack
-
-  m = match(r"aes([0-9]+)_(..)_([^_]*)_([a-zA-Z0-9]*)", filename)
-  if m != nothing
-    if m.captures[2] == "sb"
-      attack = AesSboxAttack()
-      analysis = CPA()
-      analysis.leakages = [Bit(i) for i in 0:7]
-      params = DpaAttack(attack, analysis)
-    elseif m.captures[2] == "mc"
-      attack = AesMCAttack()
-      analysis = CPA()
-      params = DpaAttack(attack, analysis)
-      params.analysis.leakages = [Bit(i) for i in 0:31]
-    end
-    attack.keyLength::AesKeyLength = div(parse(m.captures[1]),8)
-    modeStr = m.captures[3]
-    if modeStr == "ciph"
-      attack.mode = CIPHER
-    elseif modeStr == "invciph"
-      attack.mode = INVCIPHER
-    elseif modeStr == "eqinvciph"
-      attack.mode = EQINVCIPHER
-    end
-
-    params.knownKey = hex2bytes(m.captures[4])
-    attack.direction = direction
-
-    if direction == FORWARD
-      params.dataOffset = 1
-    else
-      params.dataOffset = 17
-    end
-    return params
-  end
-
-  m = match(r"([t]{0,1}des[1-3]{0,1})_([^_]*)_([a-zA-Z0-9]*)", filename)
-  if m != nothing
-    attack = DesRoundAttack()
-    analysis = CPA()
-    analysis.leakages = [HW()]
-    params = DpaAttack(attack, analysis)
-    modeStr = m.captures[1]
-    if modeStr == "des"
-      attack.mode = DES
-    elseif modeStr == "tdes1"
-      attack.mode = TDES1
-    elseif modeStr == "tdes2"
-      attack.mode = TDES2
-    elseif modeStr == "tdes3"
-      attack.mode = TDES3
-    end
-
-    attack.encrypt = (m.captures[2] == "enc" ? true : false)
-
-    params.knownKey = hex2bytes(m.captures[3])
-    attack.direction = direction
-    if direction == FORWARD
-      params.dataOffset = 1
-    else
-      params.dataOffset = 9
-    end
-    return params
-  end
-
-  m = match(r"sha1_([a-zA-Z0-9]{40})", filename)
-  if m != nothing
-    if direction == FORWARD
-      attack = Sha1InputAttack()
-      analysis = CPA()
-      analysis.leakages = [HW()]
-      params = DpaAttack(attack,analysis)
-      params.dataOffset = 1
-    else
-      attack = Sha1OutputAttack()
-      analysis = CPA()
-      analysis.leakages = [HW()]
-      params = DpaAttack(attack,analysis)
-      params.dataOffset = 17
-    end
-    params.knownKey = hex2bytes(m.captures[1])
-    return params
-  end
+  return params.rankData 
 end

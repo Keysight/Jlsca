@@ -39,7 +39,7 @@ function ParallelCondReduceTest(splitmode)
     cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
     params.scoresCallBack = cb
 
-    key = sca(DistributedTrace(),params,1, len)
+    key = getKey(params, sca(DistributedTrace(),params,1, len))
 
     @test(key == get(params.knownKey))
 
@@ -50,7 +50,7 @@ function ParallelCondReduceTest(splitmode)
     addSamplePass(trs, tobits)
     setPostProcessor(trs, CondReduce(trs))
 
-    key = sca(trs,params,1, len)
+    key = getKey(params, sca(trs,params,1, len))
 
     @test(key == get(params.knownKey))
 
@@ -96,7 +96,7 @@ function ParallelCondReduceTestWithInterval(splitmode)
     cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
     params.scoresCallBack = cb
 
-    key = sca(DistributedTrace(),params,1, len)
+    key = getKey(params, sca(DistributedTrace(),params,1, len))
 
     @test(key == get(params.knownKey))
 
@@ -111,7 +111,7 @@ function ParallelCondReduceTestWithInterval(splitmode)
       addSamplePass(trs, tobits)
       setPostProcessor(trs, CondReduce(trs))
 
-      key = sca(trs,params,1, len2)
+      key = getKey(params, sca(trs,params,1, len2))
 
       @test(key == get(params.knownKey))
     end

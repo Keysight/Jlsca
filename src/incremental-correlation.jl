@@ -6,7 +6,25 @@
 include("incremental-statistics.jl")
 
 import ..Trs.add,..Trs.getGlobCounter
-export IncrementalCorrelation,init,add,getGlobCounter
+export IncrementalCorrelation
+
+type IncrementalCPA <: IncrementalAnalysis
+  leakages::Vector{Leakage}
+
+  function IncrementalCPA()
+    return new([HW()])
+  end
+end
+
+show(io::IO, a::IncrementalCPA) = print(io, "Incremental CPA")
+
+function printParameters(a::IncrementalCPA)
+  @printf("leakages:   %s\n", a.leakages)
+end
+
+getNrLeakageFunctions(a::IncrementalCPA) = length(a.leakages)
+
+maximization(a::IncrementalCPA) = AbsoluteGlobalMaximization()
 
 type IncrementalCorrelation <: PostProcessor
   worksplit::WorkSplit
@@ -34,6 +52,11 @@ show(io::IO, a::IncrementalCorrelation) = print(io, "Incremental correlation")
 createTargetCache(t::Target{In,Out}) where {In,Out} = Vector{Out}(guesses(t))
 
 function init(c::IncrementalCorrelation, targetOffsets::Vector{Int}, leakages::Vector{Leakage}, targets::Vector{Target})
+  if c.meanXinitialized 
+    # FIXME quietly ignore
+    return
+  end
+  
   c.targetOffsets = targetOffsets
   c.leakages = leakages
   c.targets = targets

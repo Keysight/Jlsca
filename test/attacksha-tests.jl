@@ -43,9 +43,9 @@ function testShaTraces(conditional::Bool,direction::Direction, analysis::Analysi
 
 
         if conditional
-          key = sca(DistributedTrace(),params,1,100)
+          key = getKey(params, sca(DistributedTrace(),params,1,100))
         else
-          key = sca(trs,params,1, 100)
+          key = getKey(params, sca(trs,params,1, 100))
         end
 
         if hack

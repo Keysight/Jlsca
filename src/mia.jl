@@ -8,9 +8,36 @@
 # MiaColumnData for the samples to be recomputed each time. Should be improved
 # although the bulk of the work is in the p(x,y) computation
 
-export mia
+type MIA <: NonIncrementalAnalysis
+  leakages::Vector{Leakage}
+  sampleBuckets::Int
 
-using ProgressMeter
+  function MIA()
+    return new([HW()], 9)
+  end
+end
+
+show(io::IO, a::MIA) = print(io, "MIA")
+
+function printParameters(a::MIA)
+  @printf("leakages:   %s\n", a.leakages)
+  @printf("#buckets:   %d\n", a.sampleBuckets)
+end
+
+getNrLeakageFunctions(a::MIA) = length(a.leakages)
+
+maximization(a::MIA) = GlobalMaximization()
+
+function computeScores(a::MIA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
+  (tr,tc) = size(samples)
+  (dr,) = size(data)
+  tr == dr || throw(DimensionMismatch())
+
+  # DPA prediction
+  HL::Matrix{UInt8} = predict(data, target, kbvals, a.leakages)
+  C = mia(samples, HL, a.sampleBuckets)
+  return C
+end
 
 type MiaColumnData{T}
   uniques::Set{T}
@@ -119,17 +146,17 @@ function mia(O::AbstractArray, P::Matrix, nrOfObuckets=9)
 
   # dump(Ocolumndata[1])
 
-  progress = Progress(co*cp,1)
+  # progress = Progress(co*cp,1)
 
   for p in 1:cp
     Pcolumndata = MiaColumnData{eltype(P)}(P[:,p])
     for o in 1:co
       C[o,p] = mia(Ocolumndata[o], Pcolumndata)
-      next!(progress)
+      # next!(progress)
     end
   end
 
-  finish!(progress)
+  # finish!(progress)
 
   return C
 end

@@ -35,9 +35,9 @@ function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysi
 
 
         if conditional
-          key = sca(DistributedTrace(),params,1,200)
+          key = getKey(params, sca(DistributedTrace(),params,1,200))
         else
-          key = sca(trs,params,1, 200)
+          key = getKey(params, sca(trs,params,1, 200))
         end
 
         @test(key == get(params.knownKey))

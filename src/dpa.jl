@@ -2,12 +2,34 @@
 #
 # Authors: Cees-Bart Breunesse, Ilya Kizhvatov
 
-export predict
+type CPA <: NonIncrementalAnalysis
+  leakages::Vector{Leakage}
 
-using ProgressMeter
+  function CPA()
+    return new([HW()])
+  end
+end
 
+show(io::IO, a::CPA) = print(io, "CPA")
 
-# DPA prediction
+getNrLeakageFunctions(a::CPA) = length(a.leakages)
+
+maximization(a::CPA) = AbsoluteGlobalMaximization()
+
+function computeScores(a::CPA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
+  (tr,tc) = size(samples)
+  (dr,) = size(data)
+  tr == dr || throw(DimensionMismatch())
+
+  HL::Matrix{UInt8} = predict(data, target, kbvals, a.leakages)
+  C = cor(samples, HL)
+  return C
+end
+
+function printParameters(a::CPA)
+  @printf("leakages:   %s\n", a.leakages)
+end
+
 function predict(data::AbstractArray{In,1}, t::Target{In,Out}, kcVals::Vector{UInt8}, leakages::Vector{Leakage}) where {In,Out}
   (dr,) = size(data)
   nrKcVals = length(kcVals)

@@ -398,23 +398,3 @@ function getCorr(state::IncrementalCovarianceTiled)
 
   return corr
 end
-
-function getRankData(state::IncrementalCovariance, reducer::Function)
-  scores = zeros(Float64, size(state.cov)[2])
-  offsets = zeros(Int, size(state.cov)[2])
-  corrCol = zeros(Float64, size(state.cov)[1])
-
-  xstddev = getStdDev(state.meanVarX)
-  ystddev = getStdDev(state.meanVarY)
-
-  for y in 1:size(corr)[2]
-    for x in 1:size(corr)[1]
-      corrCol[x] = 1/(state.n-1) * state.cov[x,y] / (xstddev[x] * ystddev[y])
-    end
-    (score,offset) = reducer(corColl)
-    scores[y] = score
-    offsets[y] = offset
-  end
-
-  return (scores,offsets)
-end

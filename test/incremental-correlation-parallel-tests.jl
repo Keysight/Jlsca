@@ -37,7 +37,7 @@ function IncrementalCPATest(splitmode)
     cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
     params.scoresCallBack = cb
 
-    key = sca(DistributedTrace(),params,1, len)
+    key = getKey(params, sca(DistributedTrace(),params,1, len))
 
     @test(key == get(params.knownKey))
 
@@ -46,7 +46,7 @@ function IncrementalCPATest(splitmode)
 
     trs = InspectorTrace(fullfilename)
 
-    key = sca(trs,params,1, len)
+    key = getKey(params, sca(trs,params,1, len))
 
     @test(key == get(params.knownKey))
 
@@ -84,7 +84,7 @@ function ParallelIncrementalCPATest(splitmode)
     cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
     params.scoresCallBack = cb
 
-    key = sca(DistributedTrace(),params,1, len)
+    key = getKey(params, sca(DistributedTrace(),params,1, len))
 
     @test(key == get(params.knownKey))
 
@@ -94,7 +94,7 @@ function ParallelIncrementalCPATest(splitmode)
     trs = InspectorTrace(fullfilename)
     setPostProcessor(trs, IncrementalCorrelation())
 
-    key = sca(trs,params,1, len)
+    key = getKey(params, sca(trs,params,1, len))
 
     @test(key == get(params.knownKey))
 
@@ -135,7 +135,7 @@ function ParallelIncrementalCPATestWithInterval(splitmode)
     cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
     params.scoresCallBack = cb
 
-    key = sca(DistributedTrace(),params,1, len)
+    key = getKey(params, sca(DistributedTrace(),params,1, len))
 
     @test(key == get(params.knownKey))
 
@@ -149,7 +149,7 @@ function ParallelIncrementalCPATestWithInterval(splitmode)
       trs = InspectorTrace(fullfilename)
       setPostProcessor(trs, IncrementalCorrelation())
 
-      key = sca(trs,params,1, len2)
+      key = getKey(params, sca(trs,params,1, len2))
 
       @test(key == get(params.knownKey))
     end

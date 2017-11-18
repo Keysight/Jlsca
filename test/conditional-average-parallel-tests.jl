@@ -34,7 +34,7 @@ function ParallelCondAvgTest(splitmode)
     cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
     params.scoresCallBack = cb
 
-    key = sca(DistributedTrace(),params,1, len)
+    key = getKey(params, sca(DistributedTrace(),params,1, len))
 
     @test(key == get(params.knownKey))
 
@@ -43,7 +43,7 @@ function ParallelCondAvgTest(splitmode)
     trs = InspectorTrace(fullfilename)
     setPostProcessor(trs, CondAvg())
 
-    key = sca(trs,params,1, len)
+    key = getKey(params, sca(trs,params,1, len))
 
     @test(key == get(params.knownKey))
 
@@ -83,7 +83,7 @@ function ParallelCondAvgTestWithInterval(splitmode)
     cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
     params.scoresCallBack = cb
 
-    key = sca(DistributedTrace(),params,1, len)
+    key = getKey(params, sca(DistributedTrace(),params,1, len))
 
     @test(key == get(params.knownKey))
 
@@ -97,7 +97,7 @@ function ParallelCondAvgTestWithInterval(splitmode)
       trs = InspectorTrace(fullfilename)
       setPostProcessor(trs, CondAvg())
 
-      key = sca(trs,params,1, len2)
+      key = getKey(params, sca(trs,params,1, len2))
 
       @test(key == get(params.knownKey))
     end

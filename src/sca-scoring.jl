@@ -8,14 +8,14 @@ import Base.truncate
 export printScores
 
 # print the scores pretty
-function printScores(params::DpaAttack, phase::Int, rankData::RankData, numberOfTraces::Int, numberOfRows::Int, targets::Vector{Int}, printsubs=false,  max=5, io=STDOUT) 
+function printScores(params::DpaAttack, phase::Int, rankData::RankData, numberOfTraces::Int, numberOfRows::Int, numberOfColsProcessed::Int, numberOfColsAfterProcessing::Int, targets::Vector{Int}, printsubs=false,  max=5, io=STDOUT) 
   nrLeakageFunctions = rankData.nrLeakages
   keyLength = length(targets)
   winners = zeros(UInt8, keyLength)
   phaseDataOffset = offset(params,phase)
   phaseDataLength = numberOfTargets(params, phase)
   correctKeyMaterial = !isnull(params.knownKey) ? params.correctKeyMaterial[phaseDataOffset+1:phaseDataOffset+phaseDataLength] : Vector{UInt8}(0)
-  print(io, "Results @ $numberOfRows rows ($numberOfTraces traces consumed)\n")
+  print(io, "Results @ $numberOfRows rows, $numberOfColsAfterProcessing cols ($numberOfTraces rows, $numberOfColsProcessed cols, consumed)\n")
 
   j = 1
   for target in targets
@@ -73,25 +73,6 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, numberOf
 
 end
 
-# export RankData
-
-# type RankData
-#   numberOfTraces
-#   scores
-#   offsets
-#   combinedScores
-#   intervals
-#   nrLeakages
-
-#   function RankData(params::DpaAttack)
-#     numberOfTraces = Dict{Int, IntSet}()
-#     combinedScores = Dict{Int, Dict{Int, Matrix{Float64}}}()
-#     scores = Dict{Int, Dict{Int, Dict{Int, Matrix{Float64}}}}()
-#     offsets = Dict{Int, Dict{Int, Dict{Int, Matrix{Int}}}}()
-#     return new(numberOfTraces,scores,offsets,combinedScores,params.intervals,getNrLeakageFunctions(params.analysis))
-#   end
-# end
-
 function lazyinit(a::RankData, phase::Int, target::Int, guesses::Int, leakage::Int, numberOfTraces::Int)
   if !(phase in keys(a.numberOfTraces))
     a.numberOfTraces[phase] = IntSet()
@@ -121,6 +102,19 @@ function lazyinit(a::RankData, phase::Int, target::Int, guesses::Int, leakage::I
   end
 
   return find(x -> x == numberOfTraces, a.numberOfTraces[phase])[1]
+end
+
+function update!(g::AbsoluteGlobalMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrTraces::Int)
+  (samples,guesses) = size(C)
+  r = lazyinit(a,phase,target,guesses,leakage,nrTraces)
+  (corrvals, corrvaloffsets) = findmax(abs.(C), 1)
+
+  for (idx,val) in enumerate(corrvals)
+    if val > a.scores[phase][target][leakage][idx,r]
+      a.scores[phase][target][leakage][idx,r] = val
+      a.offsets[phase][target][leakage][idx,r] = ind2sub(size(C), corrvaloffsets[idx])[1]
+    end
+  end
 end
 
 function update!(g::GlobalMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrTraces::Int)
@@ -236,12 +230,33 @@ function getOffsets(sc::RankData, phase::Int, target::Int)
   return sc.offsets[phase][target][1][:,r]
 end
 
-export getRoundKey
+export getPhaseKey
 
-function getRoundKey(params::DpaAttack, attack::Attack, phase::Int, sc::RankData)
+function getPhaseKey(params::DpaAttack, attack::Attack, phase::Int, sc::RankData)
   return map(x -> UInt8(sortperm(getScores(sc,phase,x), rev=true)[1] - 1), getTargets(sc, phase))
 end
 
+export getKey
+
+function getKey(params::DpaAttack, sc::RankData)
+  ckm = nothing
+  allPhaseData = Vector{UInt8}(0)
+  for phase in 1:numberOfPhases(params.attack)
+    if phase in keys(sc.scores)
+      phaseData = getPhaseKey(params, params.attack, phase, sc)
+    else
+      if ckm == nothing
+        ckm = correctKeyMaterial(attack, get(params.knownKey))
+      end
+      o = sum(x -> numberOfTargets(params,x), 1:phase-1)
+      l = numberOfTargets(params,p)
+      phaseData = ckm[o+1:o+l]
+    end
+    allPhaseData = vcat(allPhaseData,phaseData)
+  end
+
+  return recoverKey(params.attack, allPhaseData)
+end
 
 function truncate(fname)
     fd = open(fname, "w")

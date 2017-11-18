@@ -19,29 +19,26 @@
 
 export CondReduce
 
-using ..Log
-
 type CondReduce <: Cond
   mask::Dict{Int,BitVector}
   traceIdx::Dict{Int,Dict{Int,Int}}
   globcounter::Int
   worksplit::WorkSplit
-  trs::Trace
   bitcompressedInitialized::Bool
-  logfile::SimpleCSV
   usesamplescache::Bool
   samplescache::Dict{Int,Dict{Int,BitVector}}
+  trs::Trace
   
-  function CondReduce(trs::Trace, logfile::Nullable{String}=Nullable{String}(), usesamplescache=true)
-    CondReduce(NoSplit(), trs, logfile, usesamplescache)
+  function CondReduce(trs::Trace, usesamplescache=true)
+    CondReduce(NoSplit(), trs, usesamplescache)
   end
 
-  function CondReduce(worksplit::WorkSplit, trs::Trace, logfile::Nullable{String}=Nullable{String}(), usesamplescache=true)
+  function CondReduce(worksplit::WorkSplit, trs::Trace, usesamplescache=true)
     mask = Dict{Int,BitVector}()
     traceIdx = Dict{Int,Dict{Int,Int}}()
     # @printf("Conditional bitwise sample reduction, split %s\n", worksplit)
 
-    new(mask, traceIdx, 0, worksplit, trs, false, SimpleCSV(logfile), usesamplescache, Dict{Int,Dict{Int,BitVector}}())
+    new(mask, traceIdx, 0, worksplit, false, usesamplescache, Dict{Int,Dict{Int,BitVector}}())
   end
 end
 
@@ -68,6 +65,7 @@ end
 # only works on samples of BitVector type, do addSamplePass(trs, tobits)
 # to create this input efficiently!
 function add(c::CondReduce, trs::Trace, traceIdx::Int)
+  c.trs = trs
   data::AbstractVector = getData(trs, traceIdx)
   samples = Nullable{Vector{trs.sampleType}}()
 
@@ -121,11 +119,10 @@ function merge(this::CondReduce, other::CondReduce)
           if this.traceIdx[idx][val] != other.traceIdx[idx][val]
             cachedreftrace = getSamples(this.trs, other.traceIdx[idx][val])
             cachedsamples = getSamples(this.trs, this.traceIdx[idx][val])
-
             this.mask[idx][:] .&= .!(cachedreftrace .⊻ cachedsamples)
           end
         else
-          cachedsamples = getSamples(this.trs, other.traceIdx[idx][val])
+          # cachedsamples = getSamples(this.trs, other.traceIdx[idx][val])
 
           this.traceIdx[idx][val] = other.traceIdx[idx][val]
         end
@@ -136,6 +133,14 @@ end
 
 function get(c::CondReduce)
   @assert myid() == 1
+  if !isa(c.worksplit, NoSplit)  
+    return @fetchfrom workers()[1] realget(Main.trs.postProcInstance)
+  else
+    return realget(c)
+  end
+end
+
+function realget(c::CondReduce)
   if !isa(c.worksplit, NoSplit)
     for worker in workers()
       if worker == c.worksplit.worker
@@ -146,7 +151,7 @@ function get(c::CondReduce)
       end
     end
   end
-  
+  print("merged\n")
   datas = Array[]
   reducedsamples = Matrix[]
 
@@ -180,16 +185,13 @@ function get(c::CondReduce)
   end
 
   (keptnondups, keptnondupsandinvcols) = stats(bc)
-  Log.writecsvheader(c.logfile, "#traces","global dups", "global inv dups", map(x -> "cond sample red kb $x", 1:length(keys(c.mask)))...)
-  Log.writecsv(c.logfile, c.globcounter, keptnondups, keptnondupsandinvcols)
 
   for k in sort(collect(keys(c.traceIdx)))
     dataSnap = sort(collect(dataType, keys(c.traceIdx[k])))
     idxes = find(c.mask[k] .& globalmask)
     sampleSnap = BitArray{2}(length(dataSnap), length(idxes))
     @printf("Reduction for %d: %d left after global dup col removal, %d left after removing the inv dup cols, %d left after sample reduction\n", k, keptnondups, keptnondupsandinvcols, length(idxes))
-    Log.writecsv(c.logfile, length(idxes))
-
+  
     for j in 1:length(dataSnap)
       samples = getSamplesCached(c, k, dataSnap[j])
       sampleSnap[j,:] = samples[idxes]
@@ -199,12 +201,11 @@ function get(c::CondReduce)
     push!(reducedsamples, sampleSnap)
   end
 
-  Log.writecsvnewline(c.logfile)
-
   @printf("\nReduced %d input traces, %s data type\n", c.globcounter, string(dataType))
 
   return (datas,reducedsamples)
 end
+
 
 function getGlobCounter(c::CondReduce)
   return c.globcounter
