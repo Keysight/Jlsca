@@ -18,12 +18,8 @@ function computeScores(a::LRA, data::AbstractArray{In}, samples::AbstractArray, 
 end
 
 function printParameters(a::LRA)
-  @printf("basismodel: %s\n", a.basisModel)
+  @printf("basismodel:   %s\n", a.basisModel)
 end
-
-getNrLeakageFunctions(a::LRA) = 1
-
-maximization(a::LRA) = GlobalMaximization()
 
 # LRA for a single data column
 function lra(data::AbstractArray{In}, samples::AbstractArray, t::Target{In,Out}, basisFunction::Function, keyChunkValues::Vector{UInt8}) where {In,Out}

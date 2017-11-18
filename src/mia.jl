@@ -20,13 +20,11 @@ end
 show(io::IO, a::MIA) = print(io, "MIA")
 
 function printParameters(a::MIA)
-  @printf("leakages:   %s\n", a.leakages)
-  @printf("#buckets:   %d\n", a.sampleBuckets)
+  @printf("leakages:     %s\n", a.leakages)
+  @printf("buckets:      %d\n", a.sampleBuckets)
 end
 
 getNrLeakageFunctions(a::MIA) = length(a.leakages)
-
-maximization(a::MIA) = GlobalMaximization()
 
 function computeScores(a::MIA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
   (tr,tc) = size(samples)

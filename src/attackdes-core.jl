@@ -50,11 +50,13 @@ function numberOfPhases(params::DesAttack)
   end
 end
 
+show(io::IO, a::DesSboxAttack) = print(io, "DES Sbox")
+show(io::IO, a::DesRoundAttack) = print(io, "DES Round")
+
 function printParameters(params::DesAttack, attackStr::String)
-  @printf("DES %s attack parameters\n", attackStr)
-  @printf("mode:       %s %s\n", string(params.mode), (params.encrypt ? "ENC" : "DEC"))
-  @printf("direction:  %s\n", string(params.direction))
-  @printf("xor:        %s\n", string(params.xor))
+  @printf("mode:         %s %s\n", string(params.mode), (params.encrypt ? "ENC" : "DEC"))
+  @printf("direction:    %s\n", string(params.direction))
+  @printf("xor:          %s\n", string(params.xor))
 end
 
 printParameters(params::DesSboxAttack) = printParameters(params, "Sbox")

@@ -19,7 +19,7 @@ end
 show(io::IO, a::IncrementalCPA) = print(io, "Incremental CPA")
 
 function printParameters(a::IncrementalCPA)
-  @printf("leakages:   %s\n", a.leakages)
+  @printf("leakages:     %s\n", a.leakages)
 end
 
 getNrLeakageFunctions(a::IncrementalCPA) = length(a.leakages)

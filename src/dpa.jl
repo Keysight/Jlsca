@@ -27,7 +27,7 @@ function computeScores(a::CPA, data::AbstractArray{In}, samples::AbstractArray, 
 end
 
 function printParameters(a::CPA)
-  @printf("leakages:   %s\n", a.leakages)
+  @printf("leakages:     %s\n", a.leakages)
 end
 
 function predict(data::AbstractArray{In,1}, t::Target{In,Out}, kcVals::Vector{UInt8}, leakages::Vector{Leakage}) where {In,Out}

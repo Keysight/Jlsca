@@ -38,8 +38,17 @@ abstract type Target{In <:Integer, Out <: Integer} end
 abstract type Maximization end
 
 type AbsoluteGlobalMaximization <: Maximization end
+show(io::IO, a::AbsoluteGlobalMaximization) = print(io, "abs global max")
+
 type GlobalMaximization <: Maximization end
+show(io::IO, a::GlobalMaximization) = print(io, "global max")
+
 type NormalizedMaximization <: Maximization end
+show(io::IO, a::NormalizedMaximization) = print(io, "normalized max")
+
+maximization(a::Analysis) = GlobalMaximization()
+
+getNrLeakageFunctions(a::Analysis) = 1
 
 abstract type Combination end
 
@@ -94,22 +103,28 @@ type RankData
 end
 
 function printParameters(a::DpaAttack)
+  print("DPA parameters\n")
+  print("attack:       $(a.attack)\n")
   printParameters(a.attack)
-  @printf("analysis:   %s\n", string(typeof(a.analysis).name.name))
+  print("analysis:     $(a.analysis)\n")
   printParameters(a.analysis)
-  @printf("data at:    %s\n", string(a.dataOffset))
+  print("maximization: $(get(a.maximization, maximization(a.analysis)))\n")
+  if getNrLeakageFunctions(a.analysis) > 1
+    print("combination:  $(a.leakageCombinator)\n")
+  end
+  print("data at:      $(a.dataOffset)\n")
   if !isnull(a.phases)
-    @printf("phases:     %s\n", string(get(a.phases)))
+    print("phases:       $(get(a.phases))\n")
   end
   if !isnull(a.targetOffsets)
-    @printf("targets:    %s\n", string(get(a.targetOffsets)))
+    print("targets:      $(get(a.targetOffsets))\n")
   end
   if !isnull(a.knownKey)
-    @printf("known key:  %s\n", bytes2hex(get(a.knownKey)))
+    print("known key:    $(bytes2hex(get(a.knownKey)))\n")
   end
 end
 
-printParameters(a::Attack) = print("Unknown attack\n")
+printParameters(a::Attack) = return
 guesses(a::Target{In,Out}) where {In,Out} = collect(UInt8, 0:255)
 numberOfPhases(a::Attack) = 1
 numberOfTargets(a::Attack, phase::Int) = 1
