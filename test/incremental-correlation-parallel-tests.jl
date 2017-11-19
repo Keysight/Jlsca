@@ -4,10 +4,12 @@
 
 using Base.Test
 
-using Jlsca.Sca
-using Jlsca.Trs
+@everywhere begin
+  using Jlsca.Sca
+  using Jlsca.Trs
+end
 
-function IncrementalCPATest(splitmode)
+function IncrementalCPATest()
     len = 200
 
     fullfilename = "../aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
@@ -19,40 +21,30 @@ function IncrementalCPATest(splitmode)
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
 
-    @everyworker begin
-      using Jlsca.Sca
-      using Jlsca.Trs
+    trs = InspectorTrace(fullfilename)
+    setPostProcessor(trs, IncrementalCorrelation())
 
-      trs = InspectorTrace($fullfilename)
-      if $splitmode == 1
-        setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
-      elseif $splitmode == 2
-        setPostProcessor(trs, IncrementalCorrelation(SplitByTracesBlock()))
-      end
-    end
-
-    sando = Vector{Matrix{Float64}}(totalNumberOfTargets(params.attack) * Sca.getNrLeakageFunctions(params.analysis) * 2)
-    sandoIdx = 1
-
-    cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
-    params.scoresCallBack = cb
-
-    key = sca(DistributedTrace(),params,1, len)
-
-    @test(key == get(params.knownKey))
+    rankData1 = sca(trs,params,1, len)
+    close(trs)
 
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
 
     trs = InspectorTrace(fullfilename)
 
-    key = sca(trs,params,1, len)
+    rankData2 = sca(trs,params,1, len)
+    close(trs)
 
-    @test(key == get(params.knownKey))
-
-    @test sandoIdx == length(sando) + 1
-    for i in 1:totalNumberOfTargets(params.attack)
-        @test sando[i] ≈ sando[i+totalNumberOfTargets(params.attack)* Sca.getNrLeakageFunctions(params.analysis)]
+    @test getPhases(rankData1) == getPhases(rankData2) == collect(1:numberOfPhases(params.attack))
+    for phase in getPhases(rankData1) 
+        @test getTargets(rankData1,phase) == getTargets(rankData2,phase) == collect(1:numberOfTargets(params.attack, phase))
+        for target in getTargets(rankData1, phase)
+            @test getLeakages(rankData1,phase,target) == getLeakages(rankData2,phase,target) == collect(1:numberOfLeakages(params.analysis)) 
+            for leakage in getLeakages(rankData1, phase, target)
+              @test getScores(rankData1, phase, target, leakage) ≈ getScores(rankData2, phase, target, leakage)
+              @test getOffsets(rankData1, phase, target, leakage) == getOffsets(rankData2, phase, target, leakage)
+            end
+        end
     end
 end
 
@@ -69,7 +61,6 @@ function ParallelIncrementalCPATest(splitmode)
     params.analysis.leakages = [Bit(0),Bit(7)]
 
     @everyworker begin
-      using Jlsca.Trs
       trs = InspectorTrace($fullfilename)
       if $splitmode == 1
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
@@ -78,15 +69,8 @@ function ParallelIncrementalCPATest(splitmode)
       end
     end
 
-    sando = Vector{Matrix{Float64}}(totalNumberOfTargets(params.attack)  * Sca.getNrLeakageFunctions(params.analysis) * 2)
-    sandoIdx = 1
-
-    cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
-    params.scoresCallBack = cb
-
-    key = sca(DistributedTrace(),params,1, len)
-
-    @test(key == get(params.knownKey))
+    rankData1 = sca(DistributedTrace(),params,1, len)
+    @everyworker close(trs)
 
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
@@ -94,19 +78,26 @@ function ParallelIncrementalCPATest(splitmode)
     trs = InspectorTrace(fullfilename)
     setPostProcessor(trs, IncrementalCorrelation())
 
-    key = sca(trs,params,1, len)
+    rankData2 = sca(trs,params,1, len)
+    close(trs)
 
-    @test(key == get(params.knownKey))
-
-    @test sandoIdx == length(sando) + 1
-    for i in 1:totalNumberOfTargets(params.attack)
-        @test sando[i] ≈ sando[i+totalNumberOfTargets(params.attack)* Sca.getNrLeakageFunctions(params.analysis)]
+    @test getPhases(rankData1) == getPhases(rankData2) == collect(1:numberOfPhases(params.attack))
+    for phase in getPhases(rankData1) 
+        @test getTargets(rankData1,phase) == getTargets(rankData2,phase) == collect(1:numberOfTargets(params.attack, phase))
+        for target in getTargets(rankData1, phase)
+            @test getLeakages(rankData1,phase,target) == getLeakages(rankData2,phase,target) == collect(1:numberOfLeakages(params.analysis)) 
+            for leakage in getLeakages(rankData1, phase, target)
+              @test getScores(rankData1, phase, target, leakage) ≈ getScores(rankData2, phase, target, leakage)
+              @test getOffsets(rankData1, phase, target, leakage) == getOffsets(rankData2, phase, target, leakage)
+            end
+        end
     end
 end
 
 function ParallelIncrementalCPATestWithInterval(splitmode)
     len = 200
     updateInterval = 49
+    numberOfScas = div(len, updateInterval) + ((len % updateInterval) > 0 ? 1 : 0)
 
     fullfilename = "../aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
     @printf("file: %s\n", fullfilename)
@@ -116,10 +107,10 @@ function ParallelIncrementalCPATestWithInterval(splitmode)
 
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
-    params.updateInterval = Nullable(updateInterval)
+    params.updateInterval = updateInterval
+    params.maxCols = 600
 
     @everyworker begin
-      using Jlsca.Trs
       trs = InspectorTrace($fullfilename)
       if $splitmode == 1
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
@@ -128,43 +119,42 @@ function ParallelIncrementalCPATestWithInterval(splitmode)
       end
     end
 
-    numberOfScas = div(len, updateInterval) + ((len % updateInterval) > 0 ? 1 : 0)
-    sando = Vector{Matrix{Float64}}(totalNumberOfTargets(params.attack) * numberOfScas * Sca.getNrLeakageFunctions(params.analysis) * 2)
-    sandoIdx = 1
-
-    cb::Function = (phase,target,leakage,corr) -> (sando[sandoIdx] = Matrix{Float64}(size(corr)); sando[sandoIdx] .= corr; sandoIdx += 1)
-    params.scoresCallBack = cb
-
-    key = sca(DistributedTrace(),params,1, len)
-
-    @test(key == get(params.knownKey))
-
+    rankData1 = sca(DistributedTrace(),params,1, len)
+    @everyworker close(trs)
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
     params.updateInterval = Nullable()
+    params.maxCols = 588
+    rankData2 = Vector{RankData}(numberOfScas)
 
     for s in 1:numberOfScas
       len2 = min(len, updateInterval*s)
-
       trs = InspectorTrace(fullfilename)
+      
       setPostProcessor(trs, IncrementalCorrelation())
+      rankData2[s] = sca(trs,params,1, len2)
 
-      key = sca(trs,params,1, len2)
-
-      @test(key == get(params.knownKey))
+      close(trs)
     end
 
-    @test sandoIdx == length(sando) + 1
-    for i in 1:totalNumberOfTargets(params.attack)
-        @test sando[i] ≈ sando[i+totalNumberOfTargets(params.attack)*numberOfScas* Sca.getNrLeakageFunctions(params.analysis)]
+    for s in 1:numberOfScas    
+      @test getPhases(rankData1) == getPhases(rankData2[s]) == collect(1:numberOfPhases(params.attack))
+      for phase in getPhases(rankData1) 
+          @test getTargets(rankData1,phase) == getTargets(rankData2[s],phase) == collect(1:numberOfTargets(params.attack, phase))
+          for target in getTargets(rankData1, phase)
+            @test getLeakages(rankData1,phase,target) == getLeakages(rankData2[s],phase,target) == collect(1:numberOfLeakages(params.analysis)) 
+            for leakage in getLeakages(rankData1, phase, target)
+              @test getScoresEvolution(rankData1, phase, target, leakage)[:,s] ≈ getScores(rankData2[s], phase, target, leakage)
+              @test getOffsetsEvolution(rankData1, phase, target, leakage)[:,s] == getOffsets(rankData2[s], phase, target, leakage)
+            end
+          end
+      end
     end
 end
 
-
 @assert nworkers() > 1
 
-IncrementalCPATest(1)
-IncrementalCPATest(2)
+IncrementalCPATest()
 
 ParallelIncrementalCPATest(1)
 ParallelIncrementalCPATest(2)

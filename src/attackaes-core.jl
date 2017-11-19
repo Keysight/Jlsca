@@ -293,13 +293,13 @@ function getTargets(params::AesSboxAttack, phase::Int, phaseInput::Vector{UInt8}
   return [targetfn for i in 1:numberOfTargets(params,phase)]
 end
 
-function printParameters(params::Union{AesSboxAttack,AesMCAttack})
-  attackStr = (isa(params, AesSboxAttack) ? "Sbox" : "Mixcolumn")
+show(io::IO, a::AesSboxAttack) = print(io, "AES Sbox")
+show(io::IO, a::AesMCAttack) = print(io, "AES MC")
 
-  @printf("AES %s attack parameters\n", attackStr)
-  @printf("mode:       %s\n", string(params.mode))
-  @printf("key length: %s\n", string(params.keyLength))
-  @printf("direction:  %s\n", string(params.direction))
+function printParameters(params::Union{AesSboxAttack,AesMCAttack})
+  @printf("mode:         %s\n", string(params.mode))
+  @printf("key length:   %s\n", string(params.keyLength))
+  @printf("direction:    %s\n", string(params.direction))
 end
 
 

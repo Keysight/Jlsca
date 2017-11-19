@@ -19,5 +19,6 @@ include("attackdes-core.jl")
 include("attacksha-core.jl")
 
 include("incremental-correlation.jl")
+include("sca-defaultparams.jl")
 
 end

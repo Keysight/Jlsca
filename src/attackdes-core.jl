@@ -50,11 +50,13 @@ function numberOfPhases(params::DesAttack)
   end
 end
 
+show(io::IO, a::DesSboxAttack) = print(io, "DES Sbox")
+show(io::IO, a::DesRoundAttack) = print(io, "DES Round")
+
 function printParameters(params::DesAttack, attackStr::String)
-  @printf("DES %s attack parameters\n", attackStr)
-  @printf("mode:       %s %s\n", string(params.mode), (params.encrypt ? "ENC" : "DEC"))
-  @printf("direction:  %s\n", string(params.direction))
-  @printf("xor:        %s\n", string(params.xor))
+  @printf("mode:         %s %s\n", string(params.mode), (params.encrypt ? "ENC" : "DEC"))
+  @printf("direction:    %s\n", string(params.direction))
+  @printf("xor:          %s\n", string(params.xor))
 end
 
 printParameters(params::DesSboxAttack) = printParameters(params, "Sbox")
@@ -330,11 +332,13 @@ function pick(scorecol::Vector{Float64}, col::Int, block::UInt8)
 end
 
 # a better way to get a round key from the scores
-function getRoundKey(a::DpaAttack, params::DesAttack, phase::Int, sc::RankData)
-  if phase in [PHASE3;PHASE5]    
+function getPhaseKey(a::DpaAttack, params::DesAttack, phase::Int, sc::RankData)
+  if phase in [PHASE3;PHASE5]
     targets = getTargets(sc, phase)
     phaseOutput = a.phaseData
-    wrongdeskey = recoverKeyHelper(params, phase-1, phaseOutput[end-15:end-8], phaseOutput[end-7:end])
+    o1 = offset(a,phase-2)
+    o2 = offset(a,phase-1)
+    wrongdeskey = recoverKeyHelper(params, phase-1, phaseOutput[o1+1:o1+8], phaseOutput[o2+1:o2+8])
 
     if params.direction == BACKWARD
       encrypt = !params.encrypt

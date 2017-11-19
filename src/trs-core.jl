@@ -20,7 +20,7 @@ type SimpleFunctionPass <: Pass
   fn::Function
 end
 
-pass(a::SimpleFunctionPass, x::Vector, idx::Int) = a.fn(x)
+pass(a::SimpleFunctionPass, x::AbstractArray{T,1}, idx::Int) where {T} = a.fn(x) 
 
 # overloading these to implement an iterator
 start(trs::Trace) = 1

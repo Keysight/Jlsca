@@ -15,8 +15,10 @@ function block_mul(X::UInt128, Y::UInt128)
     return Z
 end
 
-function ghash(X::UInt128, Y::UInt128, H::UInt128) 
-    return block_mul(xor(X,Y),H)
+function ghash(X::UInt128, Y::UInt128, H::UInt128, leak::Function=(x,y)->y) 
+    O = block_mul(xor(X,Y),H)
+    leak("ghash out", O)
+    return O
 end
 
 export GcmState
@@ -65,7 +67,7 @@ end
 
 export setAuth
 
-function setAuth(a::GcmState, Ab::Vector{UInt8})
+function setAuth(a::GcmState, Ab::Vector{UInt8}, leak::Function=(x,y)->y)
     abits = length(Ab) * 8
     a.abits = abits
     apad = 128 * div(abits + 127,128) - abits
@@ -79,11 +81,11 @@ function setAuth(a::GcmState, Ab::Vector{UInt8})
             tail = 16 - apadbytes
             tmp[1:tail] = Ab[end-tail+1:end]
             X = hton(reinterpret(UInt128, tmp)[1])
-            a.S = ghash(X, a.S, a.H)
+            a.S = ghash(X, a.S, a.H, leak)
         else
             o = (b-1)*16
             X = hton(reinterpret(UInt128, Ab[o+1:o+16])[1])
-            a.S = ghash(X, a.S, a.H)
+            a.S = ghash(X, a.S, a.H, leak)
         end
     end
 end

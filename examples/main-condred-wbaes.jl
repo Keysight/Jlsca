@@ -4,16 +4,21 @@ using Jlsca.Trs
 using Jlsca.Align
 using Jlsca.Aes
 
-gf2dot(xx::Array{UInt8}, y::UInt8) = map(x -> gf2dot(x,y), xx)
+import Jlsca.Sca.leak
 
-# Uses the leakage models defined by Jakub Klemsa in his MSc thesis (see
+# Leakage models defined by Jakub Klemsa in his MSc thesis (see
 # docs/Jakub_Klemsa---Diploma_Thesis.pdf) to attack Dual AES # implementations
 # (see docs/dual aes.pdf)
+type Klemsa <: Leakage 
+  y::UInt8
+end
+leak(a::Klemsa, x::UInt8) = gf2dot(x,a.y)
+
 function gf2dot(x::UInt8, y::UInt8)
   ret::UInt8 = 0
 
   for i in 0:7
-    ret $= ((x >> i) & 1) & ((y >> i) & 1)
+    ret ⊻= ((x >> i) & 1) & ((y >> i) & 1)
   end
 
   return ret
@@ -29,27 +34,22 @@ function gofaster()
 
   # hardcoded for AES128 FORWARD, but this works for any AES, any direction, any
   # round key.
-  params = AesSboxAttack()
-  params.mode = CIPHER
-  params.keyLength = KL128
-  params.direction = FORWARD
+  params = DpaAttack(AesSboxAttack(),CPA())
+  params.attack.mode = CIPHER
+  params.attack.keyLength = KL128
+  params.attack.direction = FORWARD
   params.dataOffset = 1
-  params.analysis = CPA()
   
   # the leakage function to attack dual AESes
-  params.analysis.leakages = [x -> gf2dot(x,UInt8(y)) for y in 1:255]
+  params.analysis.leakages = [Klemsa(y) for y in 1:255]
   
   # to get what's called AES INVMUL SBOX in Daredevil
-  params.sbox = map(Aes.gf8_inv, collect(UInt8, 0:255))
+  params.attack.sbox = map(Aes.gf8_inv, collect(UInt8, 0:255))
 
-  params.keyByteOffsets = collect(1:16)
+  params.targetOffsets = collect(1:16)
   params.phases = [PHASE1]
 
-
   toBitsEfficient = true
-
-  localtrs = InspectorTrace(filename, toBitsEfficient)
-  addSamplePass(localtrs, tobits)
 
   @everyworker begin
       using Jlsca.Trs
@@ -59,7 +59,7 @@ function gofaster()
       # this converts to packed BitVectors (efficiently, if toBitsEfficient is set)
       addSamplePass(trs, tobits)
 
-      setPostProcessor(trs, CondAvg(SplitByTracesBlock()))
+      setPostProcessor(trs, CondReduce(SplitByTracesBlock()))
   end
 
   numberOfTraces = @fetch length(Main.trs)

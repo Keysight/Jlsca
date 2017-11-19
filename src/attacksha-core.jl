@@ -193,9 +193,10 @@ function getDataPass(params::Sha1InputAttack, phase::Int, phaseInput::Vector{UIn
     return Nullable(roundfn)
 end
 
+show(io::IO, a::Sha1InputAttack) = print(io, "Sha1 input")
+
 function printParameters(params::Sha1InputAttack)
-  @printf("SHA1 input attack parameters\n")
-  @printf("T xor:      %s%s\n", string(params.xor), params.xor ? @sprintf(" (xor for T0 = %d)", params.xorForT0) : "")
+  @printf("T xor:        %s%s\n", string(params.xor), params.xor ? @sprintf(" (xor for T0 = %d)", params.xorForT0) : "")
 end
 
 function numberOfTargets(params::Sha1InputAttack, phase::Int)
@@ -330,6 +331,7 @@ function correctKeyMaterial(params::Sha1OutputAttack, knownKey::Vector{UInt8})
     return reinterpret(UInt8, map(htol, kk))
 end
 
-function printParameters(params::Sha1OutputAttack)
-  @printf("SHA1 output attack parameters\n")
-end
+show(io::IO, a::Sha1OutputAttack) = print(io, "Sha1 output")
+
+# function printParameters(params::Sha1OutputAttack)
+# end

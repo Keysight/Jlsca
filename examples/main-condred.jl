@@ -1,7 +1,9 @@
 
-using Jlsca.Sca
-using Jlsca.Trs
-using Jlsca.Align
+@everywhere begin
+  using Jlsca.Sca
+  using Jlsca.Trs
+  using Jlsca.Align
+end
 
 # our vanilla  main function
 function gofaster()
@@ -14,31 +16,16 @@ function gofaster()
   direction::Direction = (length(ARGS) > 1 && ARGS[2] == "BACKWARD" ? BACKWARD : FORWARD)
   params = getParameters(filename, direction)
   if params == nothing
-    params = AesSboxAttack()
+    throw(ErrorException("Params cannot be derived from filename, assign and config your own here!"))
+    # params = DpaAttack(AesSboxAttack(),LRA())
   end
 
-  if isa(params.attack, AesMCAttack)
-    params.analysis.leakages = [Bit(i) for i in 0:31]
-  else
-    if isa(params.attack, AesSboxAttack)
-      params.analysis.leakages = [Bit(i) for i in 0:7]
-    elseif isa(params.attack, DesSboxAttack)
-      params.analysis.leakages = [Bit(i) for i in 0:3]
-    end
-  end
+  @everywhere begin
+      trs = InspectorTrace($filename,true)
 
-  localtrs = InspectorTrace(filename, true)
-  addSamplePass(localtrs, tobits)
-
-  @everyworker begin
-      using Jlsca.Trs
-      # the "true" argument will force the sample type to be UInt64, throws an exception if samples are not 8-byte aligned
-      trs = InspectorTrace($filename, true)
-
-      # this efficiently converts UInt64 to packed BitVectors
       addSamplePass(trs, tobits)
 
-      setPostProcessor(trs, CondReduce(SplitByTracesBlock(), $localtrs))
+      setPostProcessor(trs, CondReduce(SplitByTracesBlock()))
   end
 
   numberOfTraces = @fetch length(Main.trs)
