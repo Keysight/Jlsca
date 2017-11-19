@@ -4,7 +4,6 @@
 
 
 export Leakage,Bit,HW,leak,hw
-export basisModelSingleBits
 
 abstract type Leakage end
 

@@ -285,7 +285,6 @@ end
 function correctKeyRanks2CSV(params::DpaAttack)
   evo = params.rankData
   phases = getPhases(evo)
-  print("PASAS $phases\n")
   correctKeyMaterial = params.correctKeyMaterial
 
   for phase in phases

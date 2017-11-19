@@ -1,7 +1,9 @@
 
-using Jlsca.Sca
-using Jlsca.Trs
-using Jlsca.Align
+@everywhere begin
+  using Jlsca.Sca
+  using Jlsca.Trs
+  using Jlsca.Align
+end
 
 # our vanilla  main function
 function gofaster()
@@ -14,39 +16,16 @@ function gofaster()
   direction::Direction = (length(ARGS) > 1 && ARGS[2] == "BACKWARD" ? BACKWARD : FORWARD)
   params = getParameters(filename, direction)
   if params == nothing
-    params = AesSboxAttack()
+    throw(ErrorException("Params cannot be derived from filename, assign and config your own here!"))
+    # params = DpaAttack(AesSboxAttack(),MIA())
   end
 
   params.analysis = MIA()
 
-  if isa(params.attack, AesMCAttack)
-    params.analysis.leakages = [Bit(i) for i in 0:31]
-  else
-    if isa(params.attack, AesSboxAttack)
-      # params.analysis.leakages = [Bit(i) for i in 0:7]
-      params.analysis.leakages = [HW()]
-    elseif isa(params.attack, DesSboxAttack)
-      # params.analysis.leakages = [Bit(i) for i in 0:3]
-      params.analysis.leakages = [HW()]
-    end
-  end
-
-
-  @everyworker begin
-      using Jlsca.Trs
-      using Jlsca.Align
+  @everywhere begin
       trs = InspectorTrace($filename)
 
-      # # example alignment pass
-      # maxShift = 20000
-      # referenceOffset = 5000
-      # reference = trs[1][2][referenceOffset:referenceOffset+5000]
-      # corvalMin = 0.4
-      # alignstate = CorrelationAlignFFT(reference, referenceOffset, maxShift)
-      # addSamplePass(trs, x -> ((shift,corval) = correlationAlign(x, alignstate); corval > corvalMin ? circshift(x, shift) : Vector{eltype(x)}(0)))
-
       setPostProcessor(trs, CondAvg(SplitByTracesBlock()))
-      # setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
   end
 
   numberOfTraces = @fetch length(Main.trs)

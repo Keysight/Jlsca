@@ -8,6 +8,14 @@
 # MiaColumnData for the samples to be recomputed each time. Should be improved
 # although the bulk of the work is in the p(x,y) computation
 
+export MIA
+"""
+    MIA([leakages,buckets])
+
+Implements Mutual Information Analysis, as described in https://eprint.iacr.org/2007/198.pdf
+
+Default leakages are `[HW()]` and the number of buckets is 9.
+"""
 type MIA <: NonIncrementalAnalysis
   leakages::Vector{Leakage}
   sampleBuckets::Int

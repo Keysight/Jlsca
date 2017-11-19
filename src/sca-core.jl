@@ -7,12 +7,11 @@ using ..Log
 
 import ..Trs.reset
 
-export DpaAttack,Attack,Analysis,LRA,MIA,CPA,IncrementalCPA
+export CPA,IncrementalCPA
 export Status,Direction
 export printParameters,getParameters
-export sca
-export Target,target
-export guesses,numberOfPhases,numberOfTargets,correctKeyMaterial,recoverKey,getDataPass,getTargets
+export target
+export guesses,numberOfPhases,numberOfTargets,recoverKey,getDataPass,getTargets
 export totalNumberOfTargets
 export RankData,RankData
 
@@ -30,31 +29,189 @@ export PHASE1,PHASE2,PHASE3,PHASE4,PHASE5,PHASE6
 for s in instances(Direction); @eval export $(Symbol(s)); end
 for s in instances(Status); @eval export $(Symbol(s)); end
 
+export Attack
+"""
+Inherit this abstract type for your own attacks. 
+
+Implemented attacks in Jlsca:
+`AesSboxAttack`,`AesMCAttack`,`DesSboxAttack`,`DesRoundAttack`,`Sha1InputAttack`, `Sha1OutputAttack`.
+"""
 abstract type Attack end
+
+export Analysis
 abstract type Analysis end
+
+export NonIncrementalAnalysis
+"""
+Inherit this abstract type for your own non-incremental analysis. Non-incremental here means that the analysis will receive an observation matrix and a corresponding matrix of inputs. A non-incremental analysis can be combined with a post processor like conditional averaging `CondAvg` (or, for binary samples `CondReduce`) to run on large trace sets.
+
+Implemented non-incremental analysisises in Jlsca: `CPA`,`LRA`, and `MIA`.
+"""
 abstract type NonIncrementalAnalysis <: Analysis end
+
+export IncrementalAnalysis
+"""
+Inherit this abstract type for your own incremental analysis. Incremental here means that the analysis will receive a row of the observation matrix, and corresponding row of the inputs, at a time. An incremental analysis needs to implement a corresponding post processor `PostProcessor`, and cannot be combined with the existing processors (`CondAvg`,`CondReduce`). 
+
+Implemented incremental analysis in Jlsca: `IncrementalCPA` and its corresponding post processor `IncrementalCorrelation`.
+"""
 abstract type IncrementalAnalysis <: Analysis end
+
+export Target
+"""
+Inherit this abstract type to define your own target functions for your own attack. The type parameters are the input and output of the target function respectively. You'll need to implement `target` for your `Target` type. 
+
+Implemented targets in Jlsca: `MCOut`,`InvMCOut`,`SboxOut`,`InvSboxOut`,`DesSboxOut`,`RoundOut`,`ModAdd`, ....
+
+# Example
+```
+type MyTarget <: Target{UInt8,UInt8} end
+target(a::MyTarget, input::UInt8, kb::UInt8) = xor(input,kb)
+```
+"""
 abstract type Target{In <:Integer, Out <: Integer} end
+
+export Maximization
+"""
+Inherit this abstract type to define your own maximization strategy.
+
+Implemented strategies in Jlsca are: `AbsoluteGlobalMaximization`,`GlobalMaximization`,`NormalizedMaximization`.
+"""
 abstract type Maximization end
 
+export AbsoluteGlobalMaximization
+"""
+To retrieve a vector of scores from a matrix of C = (sample columns,score for guesses)
+we first take the absolute of C, then max value of each column. 
+
+# Examples
+```
+params = DpaAttack(AesSboxAttack(),CPA())
+params.maximization = AbsoluteGlobalMaximization()
+```
+"""
 type AbsoluteGlobalMaximization <: Maximization end
 show(io::IO, a::AbsoluteGlobalMaximization) = print(io, "abs global max")
 
+export GlobalMaximization
+"""
+To retrieve a vector of scores from a matrix of C = (sample columns,score for guesses)
+we take max value of each column.
+
+# Examples
+```
+params = DpaAttack(AesSboxAttack(),CPA())
+params.maximization = GlobalMaximization()
+```
+"""
 type GlobalMaximization <: Maximization end
 show(io::IO, a::GlobalMaximization) = print(io, "global max")
 
+export NormalizedMaximization
+"""
+To retrieve a vector of scores from a matrix of C = (sample columns,score for guesses)
+uses the normalization step as explained in Sect. 3.2 in [Behind the Scene of Side Channel Attacks](https://eprint.iacr.org/2013/794.pdf).
+
+# Examples
+```
+params = DpaAttack(AesSboxAttack(),CPA())
+params.maximization = NormalizedMaximization()
+```
+"""
 type NormalizedMaximization <: Maximization end
 show(io::IO, a::NormalizedMaximization) = print(io, "normalized max")
 
+export maximization
+"""
+   maximization(a::Analysis)
+
+Returns the prefered maximization for an analysis like `CPA`, `MIA` or `LRA`. 
+
+Override this function if your own `Analysis` needs a specific maximization strategy. The default is `GlobalMaximization`.
+"""
 maximization(a::Analysis) = GlobalMaximization()
 
+
+export numberOfLeakage
+"""
+    numberOfLeakages(a::Analysis)
+
+A `CPA` analysis on all-bits AES Sbox attack returns 8 here, a simple HW `CPA` attack returns 1. 
+
+Override this function if your own `Analysis` supports a variable amount of leakages or if it is different from the default `1`.
+"""
 numberOfLeakages(a::Analysis) = 1
 
+export Combination
+"""
+Inherit this type to implement your own strategy of combining leakage scores. You'll need to implement `setCombined!` for your strategy.
+
+The default and only combination function is `Sum`.
+
+# Example
+```
+type Max <: Combination end
+# import in order to override for new type
+import Base.show
+show(io::IO,a::Max) = print(io, "max")
+# import in order to override for new type
+import Jlsca.Sca.setCombined!
+function setCombined!(a::Max, sc::RankData, phase::Int, target::Int, nrTraces::Int)
+  if sc.nrLeakages > 1
+    r = length(sc.numberOfTraces[phase])
+    sc.combinedScores[phase][target][:,r] .= 0
+
+    for leakage in keys(sc.scores[phase][target])
+      sc.combinedScores[phase][target][:,r] = max.(sc.combinedScores[phase][target][:,r], sc.scores[phase][target][leakage][:,r])
+    end
+  end
+end
+
+params = DpaAttack(AesSboxAttack(),CPA())
+params.leakageCombinator = Max()
+```
+"""
 abstract type Combination end
 
+"""
+The default `Combination` strategy which simply sums the scores of all leakages. 
+"""
 type Sum <: Combination end
 show(io::IO, a::Sum) = print(io, "+")
 
+export DpaAttack
+"""
+An instance of this goes into `sca` and defines the Dpa attack. 
+
+The constructor takes two arguments: an attack of type `Attack` and an analysis of type `Analysis` to create a `DpaAttack`. For example, `params = DpaAttack(AesSboxAttack(), CPA())`. Note that the attack will be available through `params.attack`, and the analysis via `params.analysis` for later tweaking.
+
+# Optional fields
+Once an instance is created, the following fields can be tweaked to change the behavior of `sca`. 
+* `dataOffset`: (1-based) offset where in the trace data the data for `attack` is located. Default is 1.
+* `knownKey`: the key (byte vector) for this attack, if you know it. Will mark correct guesses in the textual output of `sca`, and allows you to make rank and score evolution plots.
+* `updateInterval`: causes `sca` to print out the scores, and updates the rank data, after each `updateInterval` of traces.
+*  `phases`: a range of phases (integers) that you want to attack. For example, if your attack has 5 phases and you only want to run phases 3 and 4 you'll write `params.phases = [3,4]`. By default `sca` will go through all defined attack phases.
+* `phaseInput`: if you specify `phases`, the `phaseInput` needs to contain a vector of bytes of the key material recovered by phase 1 up to the first phase in your `phases` range. Or, if you fill in `knownKey`, you don't need to specify this.
+* `targetOffsets`: the (1-based) list of offsets of the targets you want to attack. By default all targets for each phase are attacked.
+* `leakageCombinator`: specify a `Combinator` instance, `Sum` by default.
+* `maximization`: specify a `Maximization` strategy, default depends on the analysis.
+* `maxCols`: splits up the work by considering maxCols columns of the observation matrix at a time. Results per split are combined transparently. You may need to set this (to not run out of memory) for traces with lots of columns, or if you specify a large amount of leakages (for example Klemsa). 
+
+# Example
+```
+attack = AesSboxAttack()
+analysis = CPA()
+params = DpaAttack(attack, analysis)
+params.dataOffset = 2
+params.knownKey = hex2bytes("cafecee5deadcee51122334455667788cafecee5deadcee5")
+params.attack.keyLength = KL192 # 2 phases for AES192
+params.phases = [2]
+params.targetOffsets = [1,3]
+params.leakageCombinator = Sum()
+params.maximization = AbsoluteGlobalMaximization()
+params.maxCols = 200000
+```
+"""
 type DpaAttack
   attack::Attack
   analysis::Analysis
@@ -355,19 +512,72 @@ getDataPass(a::DpaAttack, phase::Int) = a.phasefn[phase]
 
 export offset
 
+"""
+    offset(params,phase[,target])
+
+If you'd concatenate all the key material recovered for all phases and targets, this function returns the offset into where key material for a given phase and target is stored. 
+"""
 offset(a::DpaAttack, phase::Int, target::Int) = (phase > 1 ? sum(x -> numberOfTargets(a,x), 1:phase-1) : 0) + (target-1)
 offset(a::DpaAttack, phase::Int) = offset(a,phase,1)
 
+function lazyinit(params::DpaAttack) 
+  if !isnull(params.knownKey) && !isdefined(params, :correctKeyMaterial)
+    knownrkmaterial = correctKeyMaterial(params.attack, get(params.knownKey))
+    params.correctKeyMaterial = knownrkmaterial
+  end
+end
+
 export getCorrectKey
 
+"""
+    getCorrectKey(params,phase,target)
+
+Returns the correct key (byte) for a given phase and target.
+
+# Examples
+```
+params = DpaAttack(AesSboxAttack(),CPA())
+params.attack.direction = BACKWARD
+params.knownKey = hex2bytes("1122334455667788cafecee5deadcee5")
+print("kb: 0x\$(hex(getCorrectKey(params,1,1)))")
+```
+
+"""
 function getCorrectKey(params::DpaAttack, phase::Int, target::Int)
-  @assert !isnull(params.knownKey)
+  !isnull(params.knownKey) || throw(ErrorException("Cannot call this without params.knownKey set"))
+  lazyinit(params)
   o = offset(params, phase, target)
   kb = params.correctKeyMaterial[o+1]
   return kb
 end
 
+export sca
+
 # generic sca function, this one is called in all the unit tests and the main functions
+"""
+    sca(trs,params,[, firstTrace,[,numberOfTraces]])
+
+Runs the Dpa attack in `params` on trace set `trs`.
+
+# Examples
+```
+# import to open trace sets
+using Jlsca.Trs
+# open trace set relative to Jlsca install folder
+trs = InspectorTrace("aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs")
+# use Aes Sbox attack
+attack = AesSboxAttack()
+# use vanilla CPA, no incremental / cond avg post processor, so everything in-memory
+analysis = CPA()
+# combine attack and analysis in Dpa parameters
+params = DpaAttack(attack,analysis)
+# run attack, and get rank data back
+rankData = sca(trs,params)
+# print the recovered key from the rank data
+print("\$(getKey(params,rankData))")
+
+```
+"""
 function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::Int=length(trs))
   @printf("\nJlsca running in Julia version: %s, %d processes/%d workers/%d threads per worker\n\n", VERSION, nprocs(), nworkers(), Threads.nthreads())
 
@@ -378,11 +588,11 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
   local phaseInput = get(params.phaseInput, Vector{UInt8}(0))
   local phaseOutput = Vector{UInt8}(0)
 
+  lazyinit(params)
+  
   if !isnull(params.knownKey)
-    knownrkmaterial = correctKeyMaterial(params.attack, get(params.knownKey))
-    params.correctKeyMaterial = knownrkmaterial
+    knownrkmaterial = params.correctKeyMaterial
   end
-
 
   finished = false
   phase = 1

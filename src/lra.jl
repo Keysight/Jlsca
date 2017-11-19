@@ -2,6 +2,14 @@
 #
 # Authors: Cees-Bart Breunesse, Ilya Kizhvatov
 
+export LRA
+"""
+    LRA([basisModel])
+
+[Non-profiled linear regression](https://eprint.iacr.org/2013/794.pdf).
+
+Default basisModel function is `basisModelSingleBits`.
+"""
 type LRA <: NonIncrementalAnalysis
   basisModel::Function
 
@@ -42,7 +50,12 @@ function lra(data::AbstractArray{In}, samples::AbstractArray, t::Target{In,Out},
 end
 
 # some models for LRA
+export basisModelSingleBits
+"""
+   basisModelSingleBits(input[, bitWidth])
 
+Returns a bits model for given input. Default bitWidth is 8. 
+"""
 function basisModelSingleBits(x::Integer, bitWidth=8)
   g = zeros(Float64, bitWidth+1)
   for i in 1:bitWidth
