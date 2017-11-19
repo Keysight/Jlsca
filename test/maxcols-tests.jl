@@ -8,7 +8,7 @@ function testVanilla()
     cols = 100
     maxCols = 21
 
-    trs = InMemory(rand(UInt8, rows,16), rand(Float64, 100, cols))
+    trs = InMemory(rand(UInt8, rows,16), rand(Float64, rows, cols))
 
     attack = AesSboxAttack()
     analysis = CPA() 
@@ -64,7 +64,7 @@ function testIncCpa()
     cols = 100
     maxCols = 21
 
-    trs = InMemory(rand(UInt8, rows,16), rand(Float64, 100, cols))
+    trs = InMemory(rand(UInt8, rows,16), rand(Float64, rows, cols))
     setPostProcessor(trs, IncrementalCorrelation())
 
     attack = AesSboxAttack()
@@ -93,7 +93,7 @@ function testCondReduce()
     cols = 100
     maxCols = 21
 
-    trs = InMemory(rand(UInt8, rows,16), rand(UInt64, 100, cols))
+    trs = InMemory(rand(UInt8, rows,16), rand(UInt64, rows, cols))
     addSamplePass(trs, tobits)
 
     setPostProcessor(trs, CondReduce())

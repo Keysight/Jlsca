@@ -325,9 +325,9 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
     @printf("%s on samples shape %s (range %s) and data shape %s\n", string(typeof(a).name.name), size(kbsamples), cols, size(kbdata))
 
     if size(kbsamples)[2] == 0
-      @printf("no samples!\n")
-      scores = nothing
-      continue
+      @printf("Nothing to do, no samples!\n")
+      # FIXME: hack to not miss data in RankData later on
+      kbsamples = zeros(nrrows,1)
     end
 
     v = kbsamples
