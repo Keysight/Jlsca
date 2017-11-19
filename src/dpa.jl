@@ -12,7 +12,7 @@ end
 
 show(io::IO, a::CPA) = print(io, "CPA")
 
-getNrLeakageFunctions(a::CPA) = length(a.leakages)
+numberOfLeakages(a::CPA) = length(a.leakages)
 
 maximization(a::CPA) = AbsoluteGlobalMaximization()
 

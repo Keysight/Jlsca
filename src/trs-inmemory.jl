@@ -4,7 +4,7 @@
 
 export InMemory
 
-# split binary has the data and samples in 2 different files, similar to how Daredevil reads its data and samples. Since there is not metadata in these files, the meta data is encoded in and read from the file names.
+# simple wrapper around in-memory matrices
 type InMemory{TS,TD} <: Trace
   samples::AbstractArray{TS,2}
   sampleType::Type

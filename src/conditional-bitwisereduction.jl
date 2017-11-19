@@ -29,11 +29,11 @@ type CondReduce <: Cond
   samplescache::Dict{Int,Dict{Int,BitVector}}
   trs::Trace
   
-  function CondReduce(trs::Trace, usesamplescache=true)
-    CondReduce(NoSplit(), trs, usesamplescache)
+  function CondReduce(usesamplescache=true)
+    CondReduce(NoSplit(), usesamplescache)
   end
 
-  function CondReduce(worksplit::WorkSplit, trs::Trace, usesamplescache=true)
+  function CondReduce(worksplit::WorkSplit, usesamplescache=true)
     mask = Dict{Int,BitVector}()
     traceIdx = Dict{Int,Dict{Int,Int}}()
     # @printf("Conditional bitwise sample reduction, split %s\n", worksplit)

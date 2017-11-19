@@ -22,7 +22,7 @@ function printParameters(a::IncrementalCPA)
   @printf("leakages:     %s\n", a.leakages)
 end
 
-getNrLeakageFunctions(a::IncrementalCPA) = length(a.leakages)
+numberOfLeakages(a::IncrementalCPA) = length(a.leakages)
 
 maximization(a::IncrementalCPA) = AbsoluteGlobalMaximization()
 

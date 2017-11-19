@@ -27,9 +27,6 @@ function gofaster()
     end
   end
 
-  localtrs = InspectorTrace(filename, true)
-  addSamplePass(localtrs, tobits)
-
   @everyworker begin
       using Jlsca.Trs
       # the "true" argument will force the sample type to be UInt64, throws an exception if samples are not 8-byte aligned
@@ -38,7 +35,7 @@ function gofaster()
       # this efficiently converts UInt64 to packed BitVectors
       addSamplePass(trs, tobits)
 
-      setPostProcessor(trs, CondReduce(SplitByTracesBlock(), $localtrs))
+      setPostProcessor(trs, CondReduce(SplitByTracesBlock()))
   end
 
   numberOfTraces = @fetch length(Main.trs)

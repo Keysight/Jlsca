@@ -24,7 +24,7 @@ function printParameters(a::MIA)
   @printf("buckets:      %d\n", a.sampleBuckets)
 end
 
-getNrLeakageFunctions(a::MIA) = length(a.leakages)
+numberOfLeakages(a::MIA) = length(a.leakages)
 
 function computeScores(a::MIA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
   (tr,tc) = size(samples)
@@ -123,10 +123,11 @@ function bucket(X::Vector{Float64}, nrXbuckets::Int)
   stepX = maxX / nrXbuckets
 
   Xbucketed = zeros(Int, length(X))
-  for (idx,val) in enumerate(X)
-    Xbucketed[idx] = min(Int(div(val+delta,stepX)), nrXbuckets - 1)
+  if stepX > 0
+    for (idx,val) in enumerate(X)
+      Xbucketed[idx] = min(Int(div(val+delta,stepX)), nrXbuckets - 1)
+    end
   end
-
   return Xbucketed
 end
 

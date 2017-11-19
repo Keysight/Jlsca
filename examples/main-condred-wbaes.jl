@@ -59,7 +59,7 @@ function gofaster()
       # this converts to packed BitVectors (efficiently, if toBitsEfficient is set)
       addSamplePass(trs, tobits)
 
-      setPostProcessor(trs, CondAvg(SplitByTracesBlock()))
+      setPostProcessor(trs, CondReduce(SplitByTracesBlock()))
   end
 
   numberOfTraces = @fetch length(Main.trs)

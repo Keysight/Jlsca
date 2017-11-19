@@ -48,7 +48,7 @@ show(io::IO, a::NormalizedMaximization) = print(io, "normalized max")
 
 maximization(a::Analysis) = GlobalMaximization()
 
-getNrLeakageFunctions(a::Analysis) = 1
+numberOfLeakages(a::Analysis) = 1
 
 abstract type Combination end
 
@@ -98,7 +98,7 @@ type RankData
     combinedScores = Dict{Int, Dict{Int, Matrix{Float64}}}()
     scores = Dict{Int, Dict{Int, Dict{Int, Matrix{Float64}}}}()
     offsets = Dict{Int, Dict{Int, Dict{Int, Matrix{Int}}}}()
-    return new(numberOfTraces,scores,offsets,combinedScores,params.intervals,getNrLeakageFunctions(params.analysis))
+    return new(numberOfTraces,scores,offsets,combinedScores,params.intervals,numberOfLeakages(params.analysis))
   end
 end
 
@@ -109,7 +109,7 @@ function printParameters(a::DpaAttack)
   print("analysis:     $(a.analysis)\n")
   printParameters(a.analysis)
   print("maximization: $(get(a.maximization, maximization(a.analysis)))\n")
-  if getNrLeakageFunctions(a.analysis) > 1
+  if numberOfLeakages(a.analysis) > 1
     print("combination:  $(a.leakageCombinator)\n")
   end
   print("data at:      $(a.dataOffset)\n")
@@ -133,7 +133,7 @@ recoverKey(a::Attack, recoverKeyMaterial::Vector{UInt8}) = recoverKeyMaterial
 getDataPass(a::Attack, phase::Int, phaseInput::Vector{UInt8}) = Nullable()
 totalNumberOfTargets(a::Attack) = sum(x -> numberOfTargets(a,x), 1:numberOfPhases(a))
 
-export getNrLeakageFunctions
+export numberOfLeakages
 
 function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Trace, rows::Range, cols::Range, rankData::RankData)
 
@@ -182,11 +182,11 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
     C[isnan.(C)] = 0
 
     # get the scores for all leakage functions
-    for l in 1:getNrLeakageFunctions(a)
+    for l in 1:numberOfLeakages(a)
       oo = (l-1)*nrKbvals
       vv = @view C[:,oo+1:oo+nrKbvals]
       yieldto(super, (INTERMEDIATESCORES, (phase, o, l, vv)))
-      update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[o], l, nrTraces)
+      update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[o], l, nrTraces, cols[1])
     end
     setCombined!(params.leakageCombinator, rankData, phase, targetOffsets[o], nrTraces)
 
@@ -224,7 +224,7 @@ function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Ta
       oo = (l-1)*nrKbvals + (kb-1)*nrLeakages*nrKbvals
       vv = @view C[:,oo+1:oo+nrKbvals]
       yieldto(super, (INTERMEDIATESCORES, (phase, kb, l, vv)))
-      update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[kb], l, nrTraces)
+      update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[kb], l, nrTraces, cols[1])
     end
     setCombined!(params.leakageCombinator, rankData, phase, targetOffsets[kb], nrTraces)
   end
@@ -248,7 +248,7 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
     end
 
     # FIXME: need to pick something sane here
-    maxCols = get(params.maxCols, 20000)
+    maxCols = get(params.maxCols, 200000)
     segmented = div(samplecols,maxCols) > 0
 
     for sr in 1:maxCols:samplecols

@@ -104,7 +104,7 @@ function lazyinit(a::RankData, phase::Int, target::Int, guesses::Int, leakage::I
   return find(x -> x == numberOfTraces, a.numberOfTraces[phase])[1]
 end
 
-function update!(g::AbsoluteGlobalMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrTraces::Int)
+function update!(g::AbsoluteGlobalMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrTraces::Int, colStart::Int)
   (samples,guesses) = size(C)
   r = lazyinit(a,phase,target,guesses,leakage,nrTraces)
   (corrvals, corrvaloffsets) = findmax(abs.(C), 1)
@@ -112,12 +112,12 @@ function update!(g::AbsoluteGlobalMaximization, a::RankData, phase::Int, C::Abst
   for (idx,val) in enumerate(corrvals)
     if val > a.scores[phase][target][leakage][idx,r]
       a.scores[phase][target][leakage][idx,r] = val
-      a.offsets[phase][target][leakage][idx,r] = ind2sub(size(C), corrvaloffsets[idx])[1]
+      a.offsets[phase][target][leakage][idx,r] = ind2sub(size(C), corrvaloffsets[idx])[1] + colStart-1
     end
   end
 end
 
-function update!(g::GlobalMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrTraces::Int)
+function update!(g::GlobalMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrTraces::Int, colStart::Int)
   (samples,guesses) = size(C)
   r = lazyinit(a,phase,target,guesses,leakage,nrTraces)
   (corrvals, corrvaloffsets) = findmax(C, 1)
@@ -125,12 +125,12 @@ function update!(g::GlobalMaximization, a::RankData, phase::Int, C::AbstractArra
   for (idx,val) in enumerate(corrvals)
     if val > a.scores[phase][target][leakage][idx,r]
       a.scores[phase][target][leakage][idx,r] = val
-      a.offsets[phase][target][leakage][idx,r] = ind2sub(size(C), corrvaloffsets[idx])[1]
+      a.offsets[phase][target][leakage][idx,r] = ind2sub(size(C), corrvaloffsets[idx])[1] + colStart-1
     end
   end
 end
 
-function update!(g::NormalizedMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrTraces::Int)
+function update!(g::NormalizedMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrTraces::Int, colStart::Int)
   (samples,guesses) = size(C)
   r = lazyinit(a,phase,target,guesses,leakage,nrTraces)
 
@@ -140,7 +140,7 @@ function update!(g::NormalizedMaximization, a::RankData, phase::Int, C::Abstract
     idx = findmax(cols)[2]
     if val > a.scores[phase][target][leakage][idx,r]
       a.scores[phase][target][leakage][idx,r] = val
-      a.offsets[phase][target][leakage][idx,r] = s
+      a.offsets[phase][target][leakage][idx,r] = s + colStart-1
     end
   end
 end
@@ -166,6 +166,12 @@ export getTargets
 
 function getTargets(evo::RankData, phase::Int)
   return sort(collect(keys(evo.combinedScores[phase])))
+end
+
+export getLeakages
+
+function getLeakages(evo::RankData, phase::Int, target::Int)
+  return sort(collect(keys(evo.scores[phase][target])))
 end
 
 export getGuesses
@@ -194,12 +200,22 @@ function getScoresEvolution(evo::RankData, phase::Int, target::Int)
   return evo.combinedScores[phase][target]
 end  
 
+function getScoresEvolution(evo::RankData, phase::Int, target::Int, leakage::Int)
+  return evo.scores[phase][target][leakage]
+end  
+
 function getScoresEvolution(evo::RankData, phase::Int, target::Int, kbval::UInt8)
   return evo.combinedScores[phase][target][kbval+1,:]
 end
 
 function getScoresEvolution(evo::RankData, phase::Int, target::Int, leakage::Int, kbval::UInt8)
   return evo.scores[phase][target][leakage][kbval+1,:]
+end
+
+export getOffsetsEvolution
+
+function getOffsetsEvolution(evo::RankData, phase::Int, target::Int, leakage::Int)
+  return evo.offsets[phase][target][leakage]
 end
 
 export getNumberOfTraces
@@ -219,6 +235,8 @@ function getScores(sc::RankData, phase::Int, target::Int)
   r = length(sc.numberOfTraces[phase])
   return sc.combinedScores[phase][target][:,r]
 end
+
+export getOffsets
 
 function getOffsets(sc::RankData, phase::Int, target::Int, leakage::Int)
   r = length(sc.numberOfTraces[phase])
