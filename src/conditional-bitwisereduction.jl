@@ -151,7 +151,7 @@ function realget(c::CondReduce)
       end
     end
   end
-  print("merged\n")
+
   datas = Array[]
   reducedsamples = Matrix[]
 
