@@ -227,6 +227,8 @@ type DpaAttack
   leakageCombinator::Combination
   maximization::Nullable{Maximization}
   maxCols::Nullable{Int}
+  saveCond::Nullable{String}
+  recoverCond::Nullable{String}
   # caching stuff below, not configurable, overwritten for each sca run
   targets::Vector{Vector{Target}}
   phasefn::Vector{Nullable{Function}}
@@ -236,7 +238,7 @@ type DpaAttack
   rankData
 
   function DpaAttack(attack::Attack, analysis::Analysis)
-    new(attack,analysis,1,Nullable(),Nullable(),Nullable(),Nullable(),Nullable(),Nullable(), Nullable(), Nullable(), Sum(), Nullable() , Nullable())
+    new(attack,analysis,1,Nullable(),Nullable(),Nullable(),Nullable(),Nullable(),Nullable(), Nullable(), Nullable(), Sum(), Nullable() , Nullable(), Nullable(),Nullable())
   end
 end
 
@@ -292,16 +294,78 @@ totalNumberOfTargets(a::Attack) = sum(x -> numberOfTargets(a,x), 1:numberOfPhase
 
 export numberOfLeakages
 
-function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Trace, rows::Range, cols::Range, rankData::RankData)
+function saveToDisk(params::DpaAttack,phase::Int,target::Int,rows::Range,kbsamples::AbstractArray,kbdata::AbstractArray)
+  if !isnull(params.saveCond)
+    sampleType = eltype(kbsamples)
+    (nrTraces,nrSamples) = size(kbsamples)
+    fname = get(params.saveCond) * "_p$(phase)_t$(target)_$(rows)_"
+    fnamedata = fname * "data_UInt8_$(nrTraces)t.bin"
+    fnamesamples = fname * "samples_$(sampleType)_$(nrTraces)t.bin"
+    trs = SplitBinary(fnamedata, 1, fnamesamples, nrSamples, sampleType, nrTraces, true)    
+    for row in 1:nrTraces
+      data = [kbdata[row]]
+      samples = kbsamples[row,:]
+      trs[row] = (data,samples)
+    end
+    close(trs)
+  end
+end
+
+function recoverFromDisk(params::DpaAttack,phase::Int,targetOffsets::Vector{Int},rows::Range)
+    datas = Array[]
+    averages = Matrix[]
+
+    for target in targetOffsets
+
+      dataregex = Regex(get(params.recoverCond) * "_p$(phase)_t$(target)_$(rows)_data_(Int64|UInt64|Int32|UInt32|Float64|Float32|Int16|UInt16|Int8|UInt8)?(_[0-9]+s)?(_[0-9]+t)?\.bin")
+      samplesregex = Regex(get(params.recoverCond) * "_p$(phase)_t$(target)_$(rows)_samples_(Int64|UInt64|Int32|UInt32|Float64|Float32|Int16|UInt16|Int8|UInt8)?(_[0-9]+s)?(_[0-9]+t)?\.bin")
+      datafname = nothing
+      samplesfname = nothing
+      for fname in readdir()
+        m = match(dataregex, fname)
+        if m != nothing
+          datafname = fname
+          continue
+        end
+        m = match(samplesregex, fname)
+        if m != nothing
+          samplesfname = fname
+          continue
+        end
+        if datafname != nothing && samplesfname != nothing
+          break
+        end
+      end
+
+      (datafname != nothing && samplesfname != nothing) || throw(ErrorException("Cannot find saved conditional output for phase $phase, target $target, rows $rows with prefix $(get(params.recoverCond))"))
+
+      print("Using conditional output from $datafname and $samplesfname\n")
+
+      trs = SplitBinary(datafname, samplesfname)
+      ((data,samples), eof) = readTraces(trs, 1:length(trs))
+      push!(datas, vec(data))
+      push!(averages,samples)
+      close(trs)
+    end
+
+    return (datas,averages)
+end
+
+function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Trace, firstTrace::Int, rows::Range, cols::Range, rankData::RankData)
 
   local kbsamples
   local kbdata
 
   targetOffsets = getTargetOffsets(params, phase)
 
-  ((data, samples), eof) = readTraces(trs, rows)
+  if isnull(params.recoverCond) 
+    ((data, samples), eof) = readTraces(trs, rows)
+    nrTraces = getCounter(trs)
+  else
+    (data,samples) = recoverFromDisk(params,phase,targetOffsets,firstTrace:rows[end])
+    nrTraces = length(firstTrace:rows[end])
+  end
 
-  nrTraces = getCounter(trs)
 
   if data == nothing || samples == nothing
     return
@@ -311,6 +375,7 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
     if hasPostProcessor(trs)
       kbsamples = samples[o]
       kbdata = data[o]
+      saveToDisk(params,phase,o,firstTrace:rows[end],kbsamples,kbdata)
     else
       kbsamples = samples
       kbdata = @view data[:,o]
@@ -352,10 +417,11 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
   end
 end
 
-function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Trace, rows::Range, cols::Range, rankData::RankData)
+function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Trace, firstTrace::Int, rows::Range, cols::Range, rankData::RankData)
   targetOffsets = getTargetOffsets(params, phase)
   leakages = params.analysis.leakages
   targets = getTargets(params, phase)
+
 
   if isa(trs, DistributedTrace)
     @sync for w in workers()
@@ -408,6 +474,8 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
     maxCols = get(params.maxCols, 200000)
     segmented = div(samplecols,maxCols) > 0
 
+    (segmented && (!isnull(params.recoverCond) || !isnull(params.saveCond))) && throw(ErrorException("Increase params.maxCols, segmentation and saving or recovering conditional output is not supported"))
+
     for sr in 1:maxCols:samplecols
       srEnd = min(sr+maxCols-1, samplecols)
       if segmented
@@ -425,14 +493,13 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
 
       eof = false
 
-      for offset in firstTrace:stepSize:numberOfTraces
-        interval = offset:(offset+min(stepSize, numberOfTraces - offset + 1)-1)
+      for offset in firstTrace:stepSize:(firstTrace-1+numberOfTraces)
+        interval = offset:(offset+min(stepSize, firstTrace - 1 + numberOfTraces - offset + 1)-1)
 
         if eof
           break
         end
-
-        attack(params.analysis, params, phase, super, trs, interval, sr:srEnd, rankData)
+        attack(params.analysis, params, phase, super, trs, firstTrace, interval, sr:srEnd, rankData)
       end
 
       if segmented
@@ -465,7 +532,7 @@ function scatask(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, nu
   end
 
   # do the attack
-  rankData = analysis(super, params, phase, trs, firstTrace:numberOfTraces)
+  rankData = analysis(super, params, phase, trs, firstTrace:(firstTrace-1+numberOfTraces))
 
   if !fullattack
     popDataPass(trs)
@@ -603,6 +670,11 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
   params.rankData = RankData(params)
 
   while !finished
+    if phase > numberOfPhases(params.attack)
+      finished = true
+      continue
+    end
+
     if phase > 1
       if !isnull(params.knownKey)
         knownrklen = sum(x -> numberOfTargets(params,x), 1:phase-1)
