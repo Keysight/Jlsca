@@ -196,6 +196,8 @@ Once an instance is created, the following fields can be tweaked to change the b
 * `leakageCombinator`: specify a `Combinator` instance, `Sum` by default.
 * `maximization`: specify a `Maximization` strategy, default depends on the analysis.
 * `maxCols`: splits up the work by considering maxCols columns of the observation matrix at a time. Results per split are combined transparently. You may need to set this (to not run out of memory) for traces with lots of columns, or if you specify a large amount of leakages (for example Klemsa). 
+* `saveCond`: this allows you to save the output of the conditional averager or other post processor, so that you can run a different sca attack without having run all traces through the processor again. Set `saveCond` to a string, and that string will be used as a prefix for all the intermediate files dumped in this mode. See `recoverCond`.
+* `recoverCond`: this allowws you to use the previously saved conditional output with `saveCond`. Use the same string here as used with `saveCond`. You cannot have both `saveCond` and `recoverCond` set, or error will occur. You should be careful with this feature, since it may blow in your face. For example, if you have this feature enabled, adding a sample pass on a subsequent run will be discarded, since it's using the cached conditional output! Be warned!
 
 # Example
 ```
@@ -210,6 +212,7 @@ params.targetOffsets = [1,3]
 params.leakageCombinator = Sum()
 params.maximization = AbsoluteGlobalMaximization()
 params.maxCols = 200000
+params.saveCond = "myprefix"
 ```
 """
 type DpaAttack
@@ -645,8 +648,10 @@ print("\$(getKey(params,rankData))")
 
 ```
 """
-function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::Int=length(trs))
+function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::Int=length(trs)-firstTrace+1)
   @printf("\nJlsca running in Julia version: %s, %d processes/%d workers/%d threads per worker\n\n", VERSION, nprocs(), nworkers(), Threads.nthreads())
+
+  issubset(firstTrace:firstTrace+numberOfTraces-1,1:length(trs)) || throw(ErrorException("Too many traces $(firstTrace):$(firstTrace+numberOfTraces-1) selected for trace set of length $(length(trs))"))
 
   printParameters(params)
 
