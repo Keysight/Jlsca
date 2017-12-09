@@ -40,13 +40,13 @@ end
 
 function testSplitBinary()
   dataSpace = 7
-  sampleType = Int16
+  sampleType = Float64
   numberOfSamplesPerTrace = 29
   numberOfTraces = 11
   samplesFilename = createTmpFile(@sprintf("_%s_%dt.bin", sampleType, numberOfTraces))
   dataFilename = createTmpFile(@sprintf("_UInt8_%dt.bin", numberOfTraces))
 
-  allSamples = reshape([rand(Int16) for i in 1:(numberOfSamplesPerTrace*numberOfTraces)], (numberOfTraces,  numberOfSamplesPerTrace))
+  allSamples = reshape([rand(sampleType) for i in 1:(numberOfSamplesPerTrace*numberOfTraces)], (numberOfTraces,  numberOfSamplesPerTrace))
   allData = reshape([rand(UInt8) for i in 1:(dataSpace*numberOfTraces)], (numberOfTraces, dataSpace))
 
   trs = SplitBinary(dataFilename, dataSpace, samplesFilename, numberOfSamplesPerTrace, sampleType, numberOfTraces, true)
