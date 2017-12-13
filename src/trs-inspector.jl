@@ -36,9 +36,13 @@ type InspectorTrace <: Trace
 
   # to create a new one
   function InspectorTrace(filename::String, dataSpace::Int, sampleType::Type, numberOfSamplesPerTrace::Int)
+    return InspectorTrace(filename,dataSpace,sampleType,numberOfSamplesPerTrace,0)
+  end
+
+  function InspectorTrace(filename::String, dataSpace::Int, sampleType::Type, numberOfSamplesPerTrace::Int, titleSpace::Int)
     !isfile(filename) || throw(ErrorException(@sprintf("file %s exists!", filename)))
 
-    (titleSpace, traceBlockPosition, lengthPosition, fileDescriptor) = writeInspectorTrsHeader(filename, dataSpace, sampleType, numberOfSamplesPerTrace)
+    (titleSpace, traceBlockPosition, lengthPosition, fileDescriptor) = writeInspectorTrsHeader(filename, dataSpace, sampleType, numberOfSamplesPerTrace, titleSpace)
     new(titleSpace, Nullable(0), dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, Union, 0, filename, traceBlockPosition, true, lengthPosition, false)
   end
 end
@@ -53,7 +57,14 @@ const DataSpace = 0x44
 const DataSpaceLength = 2
 const TitleSpace = 0x45
 const TitleSpaceLength = 1
+const GlobalTitleSpace = 0x46
+const GlobalTitleSpaceLength = 4
+
 const Description = 0x47
+
+const Offset = 0x48
+const OffsetLength = 4
+
 const TraceBlock = 0x5F
 
 const CodingByte = 0x01
@@ -160,7 +171,7 @@ function readInspectorTrsHeader(filename, bitshack::Bool)
         # sampleSpace = 8
       end
 
-      @printf("Opened %s, #traces %s, #samples %d (%s), #data %d\n", filename, isnull(numberOfTraces) ? "unknown" : @sprintf("%d", get(numberOfTraces)), numberOfSamplesPerTrace, sampleType, dataSpace)
+      @printf("Opened %s, #traces %s, #samples %d (%s), #data %d%s\n", filename, isnull(numberOfTraces) ? "unknown" : @sprintf("%d", get(numberOfTraces)), numberOfSamplesPerTrace, sampleType, dataSpace, titleSpace > 0 ? ", #title $titleSpace" : "")
 
       return (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, f)
   catch e
@@ -215,6 +226,48 @@ function writeData(trs::InspectorTrace, idx, data::Vector{UInt8})
   skip(trs.fileDescriptor, trs.titleSpace)
   write(trs.fileDescriptor, data)
   trs.filePosition += trs.dataSpace
+
+  return data
+end
+
+export readTitle
+
+"""
+Inspector specific function to read metadata (i.e. a title) from an `InspectorTrace` instance `trs` at index `idx`.
+"""
+function readTitle(trs::InspectorTrace, idx)
+  position = calcFilePositionForIdx(trs, idx)
+
+  if trs.filePosition != position
+    # this is going to throw an exception when reading from stdin
+    seek(trs.fileDescriptor, position)
+    trs.filePosition = position
+  end
+
+  data = read(trs.fileDescriptor, trs.titleSpace)
+  length(data) == trs.titleSpace || throw(EOFError())
+  trs.filePosition += trs.titleSpace
+
+  return data
+end
+
+export writeTitle
+
+"""
+Inspector specific function to write metadata `data` (a byte array, should be a readable ascii string for Inspector) from an `InspectorTrace` instance `trs` at index `idx`.
+"""
+function writeTitle(trs::InspectorTrace, idx, data::Vector{UInt8})
+  trs.titleSpace >= length(data) || throw(ErrorException(@sprintf("wrong title length %d, expecting <= %d", length(data), trs.titleSpace)))
+  position = calcFilePositionForIdx(trs, idx)
+
+  if trs.filePosition != position
+    # this is going to throw an exception when reading from stdin
+    seek(trs.fileDescriptor, position)
+    trs.filePosition = position
+  end
+
+  write(trs.fileDescriptor, data)
+  trs.filePosition += trs.titleSpace
 
   return data
 end
@@ -277,7 +330,7 @@ function writeSamples(trs::InspectorTrace, idx, samples::Vector)
   return samples
 end
 
-function writeInspectorTrsHeader(filename::String, dataSpace::Int, sampleType::Type, numberOfSamplesPerTrace::Int)
+function writeInspectorTrsHeader(filename::String, dataSpace::Int, sampleType::Type, numberOfSamplesPerTrace::Int, titleSpace::Int)
 
   sampleCoding = Union
   if sampleType == UInt8
@@ -298,11 +351,13 @@ function writeInspectorTrsHeader(filename::String, dataSpace::Int, sampleType::T
     @printf("#samples: %d\n", numberOfSamplesPerTrace)
     @printf("#data:    %d\n", dataSpace)
     @printf("type:     %s\n", string(sampleType))
+    if titleSpace > 0
+      @printf("#title:   %s\n", string(titleSpace))
+    end
+
   end
 
   fd = open(filename, "w+")
-
-  titleSpace = 0
 
   write(fd, convert(UInt8, TitleSpace))
   write(fd, convert(UInt8, TitleSpaceLength))

@@ -8,17 +8,29 @@ import Base.truncate
 export printScores
 
 # print the scores pretty
-function printScores(params::DpaAttack, phase::Int, rankData::RankData, numberOfTraces::Int, numberOfRows::Int, numberOfColsProcessed::Int, numberOfColsAfterProcessing::Int, targets::Vector{Int}, printsubs=false,  max=5, io=STDOUT) 
+function printScores(params::DpaAttack, phase::Int, rankData::RankData, nrConsumedRows::Int, nrRows::Int, nrConsumedCols::Int, nrCols::Int, targets::Vector{Int}, printsubs=false,  max=5, io=STDOUT) 
+
+  if !(phase in getPhases(rankData))
+    return
+  end
+
   nrLeakageFunctions = rankData.nrLeakages
   keyLength = length(targets)
   winners = zeros(UInt8, keyLength)
   phaseDataOffset = offset(params,phase)
   phaseDataLength = numberOfTargets(params, phase)
   correctKeyMaterial = !isnull(params.knownKey) ? params.correctKeyMaterial[phaseDataOffset+1:phaseDataOffset+phaseDataLength] : Vector{UInt8}(0)
-  print(io, "Results @ $numberOfRows rows, $numberOfColsAfterProcessing cols ($numberOfTraces rows, $numberOfColsProcessed cols, consumed)\n")
+  nrConsumedRows = getNrConsumedRows(rankData, phase)
+  nrConsumedCols = getNrConsumedCols(rankData, phase)
 
   j = 1
   for target in targets
+    if !(target in getTargets(rankData,phase))
+      continue
+    end
+    nrRows = getNrRows(rankData, phase, target)
+    nrCols = getNrCols(rankData, phase, target)
+    print(io, "Results @ $nrRows rows, $nrCols cols ($nrConsumedRows rows, $nrConsumedCols cols, consumed)\n")
     scores = getScores(rankData, phase, target)
 
     # sort peaks
@@ -73,19 +85,25 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, numberOf
 
 end
 
-function lazyinit(a::RankData, phase::Int, target::Int, guesses::Int, leakage::Int, numberOfTraces::Int)
-  if !(phase in keys(a.numberOfTraces))
-    a.numberOfTraces[phase] = IntSet()
+function lazyinit(a::RankData, phase::Int, target::Int, guesses::Int, leakage::Int, nrConsumedRows::Int, nrConsumedCols::Int, nrRows::Int, nrCols::Int)
+  if !(phase in keys(a.nrConsumedRows))
+    a.nrConsumedRows[phase] = IntSet()
+    a.nrConsumedCols[phase] = zeros(Int, a.intervals)
+    a.nrRows[phase] = Dict{Int, Vector{Int}}()
+    a.nrCols[phase] = Dict{Int, Vector{Int}}()
     a.combinedScores[phase] = Dict{Int, Matrix{Float64}}()
     a.scores[phase] = Dict{Int, Dict{Int, Matrix{Float64}}}()
     a.offsets[phase] = Dict{Int, Dict{Int, Matrix{Int}}}()
   end
 
-  push!(a.numberOfTraces[phase], numberOfTraces)
+  push!(a.nrConsumedRows[phase], nrConsumedRows)
+  r = find(x -> x == nrConsumedRows, a.nrConsumedRows[phase])[1]
   
   if !(target in keys(a.scores[phase]))
     a.scores[phase][target] = Dict{Int,Matrix{Float64}}()
     a.offsets[phase][target] = Dict{Int,Matrix{Int}}()
+    a.nrRows[phase][target] = zeros(Int, a.intervals)
+    a.nrCols[phase][target] = zeros(Int, a.intervals)
   end
   
   if !(leakage in keys(a.scores[phase][target]))
@@ -101,38 +119,46 @@ function lazyinit(a::RankData, phase::Int, target::Int, guesses::Int, leakage::I
     end
   end
 
-  return find(x -> x == numberOfTraces, a.numberOfTraces[phase])[1]
+  if leakage == 1
+    if target == 1
+      a.nrConsumedCols[phase][r] += nrConsumedCols
+    end
+    a.nrCols[phase][target][r] += nrCols
+    a.nrRows[phase][target][r] = nrRows
+  end
+
+  return r
 end
 
-function update!(g::AbsoluteGlobalMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrTraces::Int, colStart::Int)
+function update!(g::AbsoluteGlobalMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrConsumedRows::Int, nrConsumedCols::Int,  nrRows::Int, nrCols::Int, colOffset::Int)
   (samples,guesses) = size(C)
-  r = lazyinit(a,phase,target,guesses,leakage,nrTraces)
+  r = lazyinit(a,phase,target,guesses,leakage,nrConsumedRows,nrConsumedCols,nrRows,nrCols)
   (corrvals, corrvaloffsets) = findmax(abs.(C), 1)
 
   for (idx,val) in enumerate(corrvals)
     if val > a.scores[phase][target][leakage][idx,r]
       a.scores[phase][target][leakage][idx,r] = val
-      a.offsets[phase][target][leakage][idx,r] = ind2sub(size(C), corrvaloffsets[idx])[1] + colStart-1
+      a.offsets[phase][target][leakage][idx,r] = ind2sub(size(C), corrvaloffsets[idx])[1] + colOffset-1
     end
   end
 end
 
-function update!(g::GlobalMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrTraces::Int, colStart::Int)
+function update!(g::GlobalMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrConsumedRows::Int, nrConsumedCols::Int,  nrRows::Int, nrCols::Int, colOffset::Int)
   (samples,guesses) = size(C)
-  r = lazyinit(a,phase,target,guesses,leakage,nrTraces)
+  r = lazyinit(a,phase,target,guesses,leakage,nrConsumedRows,nrConsumedCols,nrRows,nrCols)
   (corrvals, corrvaloffsets) = findmax(C, 1)
 
   for (idx,val) in enumerate(corrvals)
     if val > a.scores[phase][target][leakage][idx,r]
       a.scores[phase][target][leakage][idx,r] = val
-      a.offsets[phase][target][leakage][idx,r] = ind2sub(size(C), corrvaloffsets[idx])[1] + colStart-1
+      a.offsets[phase][target][leakage][idx,r] = ind2sub(size(C), corrvaloffsets[idx])[1] + colOffset-1
     end
   end
 end
 
-function update!(g::NormalizedMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrTraces::Int, colStart::Int)
+function update!(g::NormalizedMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrConsumedRows::Int, nrConsumedCols::Int,  nrRows::Int, nrCols::Int, colOffset::Int)
   (samples,guesses) = size(C)
-  r = lazyinit(a,phase,target,guesses,leakage,nrTraces)
+  r = lazyinit(a,phase,target,guesses,leakage,nrConsumedRows,nrConsumedCols,nrRows,nrCols)
 
   for s in 1:samples
     cols = C[s,:]
@@ -140,14 +166,14 @@ function update!(g::NormalizedMaximization, a::RankData, phase::Int, C::Abstract
     idx = findmax(cols)[2]
     if val > a.scores[phase][target][leakage][idx,r]
       a.scores[phase][target][leakage][idx,r] = val
-      a.offsets[phase][target][leakage][idx,r] = s + colStart-1
+      a.offsets[phase][target][leakage][idx,r] = s + colOffset-1
     end
   end
 end
 
-function setCombined!(a::Sum, sc::RankData, phase::Int, target::Int, nrTraces::Int)
+function setCombined!(a::Sum, sc::RankData, phase::Int, target::Int, nrConsumedRows::Int)
   if sc.nrLeakages > 1
-    r = length(sc.numberOfTraces[phase])
+    r = length(sc.nrConsumedRows[phase])
     sc.combinedScores[phase][target][:,r] .= 0
 
     for leakage in keys(sc.scores[phase][target])
@@ -156,10 +182,16 @@ function setCombined!(a::Sum, sc::RankData, phase::Int, target::Int, nrTraces::I
   end
 end
 
+export getIntervals
+
+function getIntervals(evo::RankData)
+  return collect(1:evo.intervals)
+end
+
 export getPhases
 
 function getPhases(evo::RankData)
-  return sort(collect(keys(evo.numberOfTraces)))
+  return sort(collect(keys(evo.nrConsumedRows)))
 end
 
 export getTargets
@@ -218,34 +250,89 @@ function getOffsetsEvolution(evo::RankData, phase::Int, target::Int, leakage::In
   return evo.offsets[phase][target][leakage]
 end
 
-export getNumberOfTraces
+export getNrConsumedRows
 
-function getNumberOfTraces(evo::RankData, phase::Int)
-  return collect(evo.numberOfTraces[phase])
+function getNrConsumedRows(evo::RankData, phase::Int)
+  return last(evo.nrConsumedRows[phase])
+end
+
+export getNrConsumedRowsEvolution
+
+function getNrConsumedRowsEvolution(evo::RankData, phase::Int)
+  return collect(evo.nrConsumedRows[phase])
+end
+
+export getNrConsumedCols
+
+function getNrConsumedCols(evo::RankData, phase::Int)
+  r = length(evo.nrConsumedRows[phase])
+  return evo.nrConsumedCols[phase][r]
+end
+
+export getNrConsumedColsEvolution
+
+function getNrConsumedColsEvolution(evo::RankData, phase::Int)
+  return evo.nrConsumedCols[phase]
+end
+
+export getNrRows
+
+function getNrRows(evo::RankData, phase::Int, target::Int)
+  r = length(evo.nrConsumedRows[phase])
+  return evo.nrRows[phase][target][r]
+end
+
+export getNrRowsEvolution
+
+function getNrRowsEvolution(evo::RankData, phase::Int, target::Int)
+  return evo.nrRows[phase][target]
+end
+
+export getNrCols
+
+function getNrCols(evo::RankData, phase::Int, target::Int)
+  r = length(evo.nrConsumedRows[phase])
+  return evo.nrCols[phase][target][r]
+end
+
+export getNrColsEvolution
+
+function getNrColsEvolution(evo::RankData, phase::Int, target::Int)
+  return evo.nrCols[phase][target]
 end
 
 export getScores
 
 function getScores(sc::RankData, phase::Int, target::Int, leakage::Int)
-  r = length(sc.numberOfTraces[phase])
+  r = length(sc.nrConsumedRows[phase])
   return sc.scores[phase][target][leakage][:,r]
 end
 
 function getScores(sc::RankData, phase::Int, target::Int)
-  r = length(sc.numberOfTraces[phase])
+  r = length(sc.nrConsumedRows[phase])
   return sc.combinedScores[phase][target][:,r]
 end
 
 export getOffsets
 
 function getOffsets(sc::RankData, phase::Int, target::Int, leakage::Int)
-  r = length(sc.numberOfTraces[phase])
+  r = length(sc.nrConsumedRows[phase])
   return sc.offsets[phase][target][leakage][:,r]
 end
 
 function getOffsets(sc::RankData, phase::Int, target::Int)
-  r = length(sc.numberOfTraces[phase])
+  r = length(sc.nrConsumedRows[phase])
   return sc.offsets[phase][target][1][:,r]
+end
+
+function haveAllData(evo::RankData, attack::Attack, phase::Int)
+  if !(phase in getPhases(evo))
+    return false
+  elseif length(getTargets(evo, phase)) != numberOfTargets(attack,phase)
+    return false
+  else  
+    return true
+  end
 end
 
 export getPhaseKey
@@ -302,14 +389,13 @@ function correctKeyRanks2CSV(params::DpaAttack)
     end
     print(fd, "\n")
 
-    numberOfTraces = getNumberOfTraces(evo,phase)
-    
-    for r in 1:length(numberOfTraces)
-      print(fd, "$(numberOfTraces[r])")
+    nrConsumedRows = getNrConsumedRowsEvolution(evo,phase)
+    for r in 1:length(nrConsumedRows)
+      print(fd, "$(nrConsumedRows[r])")
       for target in targets
         kbval = correctKeyMaterial[offset(params,phase,target)+1]
         scores = getScoresEvolution(evo, phase, target)
-        @assert size(scores)[2] == length(numberOfTraces)
+        # @assert size(scores)[2] == length(nrConsumedRows)
         rnk = findfirst(x -> x == kbval + 1, sortperm(scores[:,r], rev=true))
         print(fd,",$(rnk)")
       end

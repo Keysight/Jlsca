@@ -195,7 +195,8 @@ Once an instance is created, the following fields can be tweaked to change the b
 * `targetOffsets`: the (1-based) list of offsets of the targets you want to attack. By default all targets for each phase are attacked.
 * `leakageCombinator`: specify a `Combinator` instance, `Sum` by default.
 * `maximization`: specify a `Maximization` strategy, default depends on the analysis.
-* `maxCols`: splits up the work by considering maxCols columns of the observation matrix at a time. Results per split are combined transparently. You may need to set this (to not run out of memory) for traces with lots of columns, or if you specify a large amount of leakages (for example Klemsa). 
+* `maxCols`: splits up the work by considering maxCols columns of the observation matrix at a time, before feeding it into a post processor. Results per split are combined transparently. You may need to set this (to not run out of memory) for traces with lots of columns, or if you specify a large amount of leakages (for example Klemsa). 
+* `maxColsPost`: almost the same as `maxCols`, but this splits up work *after* a post processor. This is only different from `maxCols` and only useful when you're using the `CondReduce` postprocessor, since this is currently the only one that would return less columns than you put in.
 * `saveCond`: this allows you to save the output of the conditional averager or other post processor, so that you can run a different sca attack without having run all traces through the processor again. Set `saveCond` to a string, and that string will be used as a prefix for all the intermediate files dumped in this mode. See `recoverCond`.
 * `recoverCond`: this allowws you to use the previously saved conditional output with `saveCond`. Use the same string here as used with `saveCond`. You cannot have both `saveCond` and `recoverCond` set, or error will occur. You should be careful with this feature, since it may blow in your face. For example, if you have this feature enabled, adding a sample pass on a subsequent run will be discarded, since it's using the cached conditional output! Be warned!
 
@@ -230,6 +231,7 @@ type DpaAttack
   leakageCombinator::Combination
   maximization::Nullable{Maximization}
   maxCols::Nullable{Int}
+  maxColsPost::Nullable{Int}
   saveCond::Nullable{String}
   recoverCond::Nullable{String}
   # caching stuff below, not configurable, overwritten for each sca run
@@ -241,14 +243,17 @@ type DpaAttack
   rankData
 
   function DpaAttack(attack::Attack, analysis::Analysis)
-    new(attack,analysis,1,Nullable(),Nullable(),Nullable(),Nullable(),Nullable(),Nullable(), Nullable(), Nullable(), Sum(), Nullable() , Nullable(), Nullable(),Nullable())
+    new(attack,analysis,1,Nullable(),Nullable(),Nullable(),Nullable(),Nullable(),Nullable(), Nullable(), Nullable(), Sum(), Nullable() , Nullable(), Nullable(),Nullable(),Nullable())
   end
 end
 
 export RankData
 
 type RankData
-  numberOfTraces
+  nrConsumedRows
+  nrConsumedCols
+  nrRows
+  nrCols
   scores
   offsets
   combinedScores
@@ -256,11 +261,14 @@ type RankData
   nrLeakages
 
   function RankData(params::DpaAttack)
-    numberOfTraces = Dict{Int, IntSet}()
+    nrConsumedRows = Dict{Int, IntSet}()
+    nrConsumedCols = Dict{Int, Vector{Int}}()
+    nrRows = Dict{Int, Dict{Int, Vector{Int}}}()
+    nrCols = Dict{Int, Dict{Int, Vector{Int}}}()
     combinedScores = Dict{Int, Dict{Int, Matrix{Float64}}}()
     scores = Dict{Int, Dict{Int, Dict{Int, Matrix{Float64}}}}()
     offsets = Dict{Int, Dict{Int, Dict{Int, Matrix{Int}}}}()
-    return new(numberOfTraces,scores,offsets,combinedScores,params.intervals,numberOfLeakages(params.analysis))
+    return new(nrConsumedRows,nrConsumedCols,nrRows,nrCols,scores,offsets,combinedScores,params.intervals,numberOfLeakages(params.analysis))
   end
 end
 
@@ -386,33 +394,40 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
 
     (nrrows,samplecols) = size(kbsamples)
 
+     # FIXME: need to pick something sane here
+    maxCols = get(params.maxColsPost, 10000)
+
     target = getTarget(params, phase, targetOffsets[o])
     kbvals = guesses(target)
     nrKbvals = length(kbvals)
 
-    @printf("%s on samples shape %s (range %s) and data shape %s\n", string(typeof(a).name.name), size(kbsamples), cols, size(kbdata))
-
     if size(kbsamples)[2] == 0
       @printf("Nothing to do, no samples!\n")
-      # FIXME: hack to not miss data in RankData later on
-      kbsamples = zeros(nrrows,1)
+      continue
     end
 
-    v = kbsamples
+    for sr in 1:maxCols:samplecols
 
-    # run the attack
-    C = computeScores(a, kbdata, v, target, kbvals)
+      srEnd = min(sr+maxCols-1, samplecols)
+      v = @view kbsamples[:,sr:srEnd]
 
-    # nop the nans
-    C[isnan.(C)] = 0
+      @printf("%s on samples shape %s (range %s) and data shape %s\n", string(typeof(a).name.name), size(v), string(sr:srEnd), size(kbdata))
 
-    # get the scores for all leakage functions
-    for l in 1:numberOfLeakages(a)
-      oo = (l-1)*nrKbvals
-      vv = @view C[:,oo+1:oo+nrKbvals]
-      yieldto(super, (INTERMEDIATESCORES, (phase, o, l, vv)))
-      update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[o], l, nrTraces, cols[1])
+      # run the attack
+      C = computeScores(a, kbdata, v, target, kbvals)
+
+      # nop the nans
+      C[isnan.(C)] = 0
+
+      # get the scores for all leakage functions
+      for l in 1:numberOfLeakages(a)
+        oo = (l-1)*nrKbvals
+        vv = @view C[:,oo+1:oo+nrKbvals]
+        yieldto(super, (INTERMEDIATESCORES, (phase, o, l, vv)))
+        update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[o], l, nrTraces, length(cols), nrrows, samplecols,cols[1])
+      end
     end
+
     setCombined!(params.leakageCombinator, rankData, phase, targetOffsets[o], nrTraces)
 
     # let somebody do something with the scores for these traces
@@ -450,7 +465,7 @@ function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Ta
       oo = (l-1)*nrKbvals + (kb-1)*nrLeakages*nrKbvals
       vv = @view C[:,oo+1:oo+nrKbvals]
       yieldto(super, (INTERMEDIATESCORES, (phase, kb, l, vv)))
-      update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[kb], l, nrTraces, cols[1])
+      update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[kb], l, nrTraces, length(cols), nrTraces, length(cols), cols[1])
     end
     setCombined!(params.leakageCombinator, rankData, phase, targetOffsets[kb], nrTraces)
   end
@@ -549,7 +564,7 @@ function scatask(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, nu
     popDataPass(trs)
   end
 
-  if !fullattack
+  if !fullattack || !haveAllData(rankData, params.attack, phase)
     return
   end
 
@@ -762,7 +777,7 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
   params.phaseInput = phaseOutput
 
   if !isnull(params.outputkka) && !isnull(params.knownKey)
-    @printf("KKA output in %s\n", get(params.outputkka))
+    @printf("KKA output in file(s) with prefix %s\n", get(params.outputkka))
     correctKeyRanks2CSV(params)
   end
 
