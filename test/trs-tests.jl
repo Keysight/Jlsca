@@ -10,16 +10,19 @@ function testInspectorTrace()
   dataSpace = 7
   sampleType = Int16
   numberOfSamplesPerTrace = 29
+  numberOfTitlebytes = 31
   numberOfTraces = 11
   traceFilename = createTmpFile("bob.trs")
 
+  allTitles = rand(UInt8, (numberOfTraces, numberOfTitlebytes))
   allSamples = reshape([rand(Int16) for i in 1:(numberOfSamplesPerTrace*numberOfTraces)], (numberOfTraces,  numberOfSamplesPerTrace))
   allData = reshape([rand(UInt8) for i in 1:(dataSpace*numberOfTraces)], (numberOfTraces, dataSpace))
 
-  trs = InspectorTrace(traceFilename, dataSpace, sampleType, numberOfSamplesPerTrace)
+  trs = InspectorTrace(traceFilename, dataSpace, sampleType, numberOfSamplesPerTrace, numberOfTitlebytes)
 
-  for i in 1:numberOfTraces
+  for i in randperm(numberOfTraces)
     trs[i] = (allData[i,:], allSamples[i,:])
+    writeTitle(trs, i, allTitles[i,:])
     @test trs[i] == (allData[i,:], allSamples[i,:])
   end
 
@@ -28,9 +31,11 @@ function testInspectorTrace()
   trs2 = InspectorTrace(traceFilename)
 
   @test length(trs2) == numberOfTraces
+  @test numberOfTitlebytes == trs2.titleSpace
 
-  for i in 1:numberOfTraces
+  for i in randperm(numberOfTraces  )
     @test trs2[i] == (allData[i,:], allSamples[i,:])
+    @test readTitle(trs2,i) == allTitles[i,:]
   end
 
   close(trs2)
