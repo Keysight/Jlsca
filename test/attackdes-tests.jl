@@ -7,7 +7,7 @@ using Base.Test
 using Jlsca.Sca
 using Jlsca.Trs
 
-function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysis, onetest::Bool=false)
+function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysis, onetest::Bool=false, xor=false)
     tracedir = "../destraces"
     filenames = readdir(tracedir)
 
@@ -19,6 +19,7 @@ function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         @printf("file: %s\n", fullfilename)
 
         params = getParameters(fullfilename, direction)
+        params.attack.xor = xor
         params.analysis = analysis
 
         # create Trace instance
@@ -59,3 +60,6 @@ x.leakages = [HW()]
 x = LRA()
 x.basisModel = x -> basisModelSingleBits(x, 4)
 @time testDesTraces(true, FORWARD, x, true)
+
+@time testDesTraces(false, BACKWARD, CPA(), false, true)
+@time testDesTraces(false, FORWARD, CPA(), false, true)

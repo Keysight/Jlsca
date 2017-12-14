@@ -4,7 +4,7 @@ function getParameters(filename::AbstractString, direction::Direction)
   local params::DpaAttack
   local attack::Attack
 
-  m = match(r"aes([0-9]+)_(..)_([^_]*)_([a-zA-Z0-9]*)", filename)
+  m = match(r"aes(128|192|256)_(sb|mc)_(ciph|eqinvciph|invciph)_([a-zA-Z0-9]{32,128}).", filename)
   if m != nothing
     if m.captures[2] == "sb"
       attack = AesSboxAttack()
@@ -38,7 +38,7 @@ function getParameters(filename::AbstractString, direction::Direction)
     return params
   end
 
-  m = match(r"([t]{0,1}des[1-3]{0,1})_([^_]*)_([a-zA-Z0-9]*)", filename)
+  m = match(r"(des|tdes1|tdes2|tdes3)_(enc|dec)_([a-zA-Z0-9]{16,48}).", filename)
   if m != nothing
     attack = DesRoundAttack()
     analysis = CPA()
@@ -67,7 +67,7 @@ function getParameters(filename::AbstractString, direction::Direction)
     return params
   end
 
-  m = match(r"sha1_([a-zA-Z0-9]{40})", filename)
+  m = match(r"sha1_([a-zA-Z0-9]{40}).", filename)
   if m != nothing
     if direction == FORWARD
       attack = Sha1InputAttack()

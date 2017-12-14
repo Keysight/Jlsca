@@ -15,6 +15,8 @@ export AesSboxAttack,AesMCAttack,AesKeyLength,AesMode
 for s in instances(AesMode); @eval export $(Symbol(s)); end
 for s in instances(AesKeyLength); @eval export $(Symbol(s)); end
 
+export AesAttack
+
 abstract type AesAttack <: Attack end
 
 # two types of attacks: sbox or mixcolumn
@@ -144,9 +146,9 @@ type McOutXORIn <: Target{UInt8,UInt32}
 end
 
 function target(a::McOutXORIn, x::UInt8, keyByte::UInt8)
-    mcIn = fill(constant, 4)
+    mcIn = fill(a.constant, 4)
     mcIn[a.position] = a.sbox[(x ⊻ keyByte) + 1]
-    mcOut = Aes.MixColumn(mcIn) ⊻ mcIn
+    mcOut = Aes.MixColumn(mcIn) .⊻ mcIn
     ret::UInt32 = 0
     for i in 1:4
       ret <<= 8
@@ -155,7 +157,27 @@ function target(a::McOutXORIn, x::UInt8, keyByte::UInt8)
     return ret
 end
 
-show(io::IO, a::McOutXORIn) = print(io, "Inverse MC out, XOR'ed w/ input")
+show(io::IO, a::McOutXORIn) = print(io, "MC out, XOR'ed w/ input")
+
+type InvMcOutXORIn <: Target{UInt8,UInt32}
+  sbox::Vector{UInt8}
+  constant::UInt8
+  position::Int
+end
+
+function target(a::InvMcOutXORIn, x::UInt8, keyByte::UInt8)
+    mcIn = fill(a.constant, 4)
+    mcIn[a.position] = a.sbox[(x ⊻ keyByte) + 1]
+    mcOut = Aes.InvMixColumn(mcIn) .⊻ mcIn
+    ret::UInt32 = 0
+    for i in 1:4
+      ret <<= 8
+      ret |= mcOut[i]
+    end
+    return ret
+end
+
+show(io::IO, a::InvMcOutXORIn) = print(io, "Inverse MC out, XOR'ed w/ input")
 
 type SboxOut <: Target{UInt8,UInt8}
   sbox::Vector{UInt8}
@@ -179,7 +201,7 @@ target(a::SboxOutXORIn, data::UInt8, keyByte::UInt8) = data ⊻ keyByte ⊻ a.sb
 show(io::IO, a::SboxOutXORIn) = print(io, "Sbox out, xor'ed w/ input")
 
 type InvSboxOutXORIn <: Target{UInt8,UInt8}
-  sbox::Vector{UInt8}
+  invsbox::Vector{UInt8}
 end
 
 target(a::InvSboxOutXORIn, data::UInt8, keyByte::UInt8) =  data ⊻ keyByte ⊻ a.invsbox[(data ⊻ keyByte) + 1]
@@ -300,6 +322,7 @@ function printParameters(params::Union{AesSboxAttack,AesMCAttack})
   @printf("mode:         %s\n", string(params.mode))
   @printf("key length:   %s\n", string(params.keyLength))
   @printf("direction:    %s\n", string(params.direction))
+  @printf("xor:          %s\n", string(params.xor))
 end
 
 

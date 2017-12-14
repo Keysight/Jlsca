@@ -7,7 +7,7 @@ using Base.Test
 using Jlsca.Sca
 using Jlsca.Trs
 
-function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysis, onetest::Bool=false)
+function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysis, onetest::Bool=false, xor=false)
     tracedir = "../aestraces"
     filenames = readdir(tracedir)
     leakageFunctions = [HW()]
@@ -20,6 +20,7 @@ function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         @printf("file: %s\n", fullfilename)
 
         params = getParameters(fullfilename, direction)
+        params.attack.xor = xor
         if isa(params.attack, AesMCAttack) && (params.attack.direction == BACKWARD || isa(analysis, LRA))
             continue
         end
@@ -65,3 +66,6 @@ end
 @time testAesTraces(false, BACKWARD, CPA())
 @time testAesTraces(false, FORWARD, CPA())
 @time testAesTraces(true, FORWARD, LRA(), true)
+
+@time testAesTraces(false, BACKWARD, CPA(),false,true)
+@time testAesTraces(false, FORWARD, CPA(),false,true)

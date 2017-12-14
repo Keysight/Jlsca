@@ -11,7 +11,7 @@ export CPA,IncrementalCPA
 export Status,Direction
 export printParameters,getParameters
 export target
-export guesses,numberOfPhases,numberOfTargets,recoverKey,getDataPass,getTargets
+export guesses,numberOfPhases,numberOfTargets,recoverKey,getDataPass,getTargets,isKeyCorrect
 export totalNumberOfTargets
 export RankData,RankData
 
@@ -302,6 +302,7 @@ getTargets(a::Attack, phase::Int, phaseInput::Vector{UInt8}) = []
 recoverKey(a::Attack, recoverKeyMaterial::Vector{UInt8}) = recoverKeyMaterial
 getDataPass(a::Attack, phase::Int, phaseInput::Vector{UInt8}) = Nullable()
 totalNumberOfTargets(a::Attack) = sum(x -> numberOfTargets(a,x), 1:numberOfPhases(a))
+isKeyCorrect(a::Attack, key1::Vector{UInt8}, key2::Vector{UInt8}) = key1 == key2
 
 export numberOfLeakages
 
@@ -752,7 +753,7 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
         if key != nothing
           @printf("recovered key: %s\n", bytes2hex(key))
           if !isnull(params.knownKey)
-            @printf("knownkey match: %s\n", string(key == get(params.knownKey)))
+            print("knownkey match: $(isKeyCorrect(params.attack,get(params.knownKey),key))\n")
           end
         end
       elseif status == INTERMEDIATERANKS

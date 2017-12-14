@@ -88,7 +88,7 @@ type DesSboxOutXORin <: Target{UInt8,UInt8}  end
 function target(this::DesSboxOutXORin, sixbits::Union{UInt16, UInt8}, kb::UInt8)
   inp =  ((sixbits & 0x3f) ⊻ kb) & 0xf
   outp = Sbox(sbidx)[inp + 1]
-  return inp ⊻ outp
+  return inp .⊻ outp
 end
 
 show(io::IO, a::DesSboxOutXORin) = print(io, "Sbox $(a.sbidx) out XOR in")
@@ -119,7 +119,7 @@ function round1(input::Vector{UInt8}, params::DesRoundAttack)
   invplefts = toNibbles(invP(ip[left]))
   if params.xor
     # does the xor for roundOut with input (that's why there's no roundOutXORIn)
-    invplefts $= toNibbles(invP(ip[right]))
+    invplefts .⊻= toNibbles(invP(ip[right]))
   end
 
   sboxins = toSixbits(E(ip[right]))
@@ -143,7 +143,7 @@ function round2(input::Vector{UInt8}, rk1::BitVector, params::DesRoundAttack)
 
   invplefts = toNibbles(invP(state[left]))
   if params.xor
-    invplefts $= toNibbles(invP(state[right]))
+    invplefts .⊻= toNibbles(invP(state[right]))
   end
 
   sboxins = toSixbits(E(state[right]))
@@ -367,3 +367,5 @@ function getPhaseKey(a::DpaAttack, params::DesAttack, phase::Int, sc::RankData)
     return map(x -> UInt8(sortperm(getScores(sc,phase,x), rev=true)[1] - 1), getTargets(sc, phase))
   end
 end
+
+isKeyCorrect(a::DesAttack, key1::Vector{UInt8}, key2::Vector{UInt8}) = (key1 .& 0xfe) == (key2 .& 0xfe)
