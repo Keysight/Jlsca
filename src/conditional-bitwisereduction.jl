@@ -27,18 +27,19 @@ type CondReduce <: Cond
   bitcompressedInitialized::Bool
   usesamplescache::Bool
   samplescache::Dict{Int,Dict{Int,BitVector}}
+  globalDCR::Bool
   trs::Trace
   
-  function CondReduce(usesamplescache=true)
-    CondReduce(NoSplit(), usesamplescache)
+  function CondReduce(globalDCR=false)
+    CondReduce(NoSplit(), globalDCR)
   end
 
-  function CondReduce(worksplit::WorkSplit, usesamplescache=true)
+  function CondReduce(worksplit::WorkSplit, globalDCR=false)
     mask = Dict{Int,BitVector}()
     traceIdx = Dict{Int,Dict{Int,Int}}()
     # @printf("Conditional bitwise sample reduction, split %s\n", worksplit)
 
-    new(mask, traceIdx, 0, worksplit, false, usesamplescache, Dict{Int,Dict{Int,BitVector}}())
+    new(mask, traceIdx, 0, worksplit, false, true, Dict{Int,Dict{Int,BitVector}}(), globalDCR)
   end
 end
 
@@ -160,21 +161,25 @@ function realget(c::CondReduce)
     maxVal = max(maxVal, findmax(keys(c.traceIdx[k]))[1])
   end
 
-  traceIdxes = IntSet()
   nrOfSamples = length(c.mask[1])
   bc = BitCompress(nrOfSamples)
-  for idx in collect(keys(c.traceIdx))
-    valdict = c.traceIdx[idx]
-    for val in collect(keys(valdict))
-      traceIdx = valdict[val]
-      if traceIdx in traceIdxes
-        continue
+
+  if c.globalDCR
+    traceIdxes = IntSet()
+    for idx in collect(keys(c.traceIdx))
+      valdict = c.traceIdx[idx]
+      for val in collect(keys(valdict))
+        traceIdx = valdict[val]
+        if traceIdx in traceIdxes
+          continue
+        end
+        push!(traceIdxes, traceIdx)
+        bitcompress(bc, getSamplesCached(c, idx, val))
       end
-      push!(traceIdxes, traceIdx)
-      bitcompress(bc, getSamplesCached(c, idx, val))
     end
+    globalmask = toMask(bc)
+    (keptnondups, keptnondupsandinvcols) = stats(bc)
   end
-  globalmask = toMask(bc)
 
   if maxVal <= 2^8
     dataType = UInt8
@@ -184,11 +189,22 @@ function realget(c::CondReduce)
     throw(Exception("Unsupported and not recommended ;)"))
   end
 
-  (keptnondups, keptnondupsandinvcols) = stats(bc)
 
   for k in sort(collect(keys(c.traceIdx)))
     dataSnap = sort(collect(dataType, keys(c.traceIdx[k])))
-    idxes = find(c.mask[k] .& globalmask)
+    if c.globalDCR
+      dcrmask = globalmask
+    else
+      reset!(bc)
+      valdict = c.traceIdx[k]
+      for val in collect(keys(valdict))
+        traceIdx = valdict[val]
+        bitcompress(bc, getSamplesCached(c, k, val))
+      end
+      dcrmask = toMask(bc)
+      (keptnondups, keptnondupsandinvcols) = stats(bc)
+    end
+    idxes = find(c.mask[k] .& dcrmask)
     sampleSnap = BitArray{2}(length(dataSnap), length(idxes))
     @printf("Reduction for %d: %d left after global dup col removal, %d left after removing the inv dup cols, %d left after sample reduction\n", k, keptnondups, keptnondupsandinvcols, length(idxes))
   

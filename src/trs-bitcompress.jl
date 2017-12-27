@@ -15,6 +15,13 @@ type BitCompress
   end
 end
 
+function reset!(c::BitCompress)
+  fill!(c.tmp, 0)
+  fill!(c.duplicates, 0)
+  fill!(c.inverses, 0)
+  c.first = true
+end
+
 function toMask(state::BitCompress)
   mask = BitVector(length(state.duplicates))
   for (i,val) in enumerate(state.duplicates)

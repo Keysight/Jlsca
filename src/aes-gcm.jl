@@ -3,20 +3,24 @@
 # Author: Cees-Bart Breunesse
 
 const R = UInt128(0xe1) << 120
-function block_mul(X::UInt128, Y::UInt128)
+function block_mul(X::UInt128, Y::UInt128, leak::Function=(x,y)->y)
     Z = UInt128(0)
     V = UInt128(Y)
 
     for i in 0:127
-        Z = (((X >> (127 - i)) & 1) == 0) ? Z : xor(Z,V)
-        V = (V & 1) == 0 ? (V >> 1) : xor(V >> 1, R)
+        Xbit = (X >> (127 - i)) & 1
+        Vbit = V & 1
+        leak("Xbit", Bool(Xbit))
+        leak("Vbit", Bool(Vbit))
+        Z = Xbit == 0 ? Z : xor(Z,V)
+        V = Vbit == 0 ? V >> 1 : xor(V >> 1, R)
     end
 
     return Z
 end
 
 function ghash(X::UInt128, Y::UInt128, H::UInt128, leak::Function=(x,y)->y) 
-    O = block_mul(xor(X,Y),H)
+    O = block_mul(xor(X,Y),H,leak)
     leak("ghash out", O)
     return O
 end
