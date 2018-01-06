@@ -180,11 +180,13 @@ type IncrementalCovarianceTiled
   numberOfY::Int
   tilesizeX::Int
   tilesizeY::Int
+  nrTilesX::Int
+  nrTilesY::Int
   meanVarX::IncrementalMeanVariance
   meanVarY::IncrementalMeanVariance
   covXY::Matrix{IncrementalCovariance}
-  cacheXn::Vector{Vector}
-  cacheYn::Vector{Vector}
+  cacheXn::Vector{Vector{Float64}}
+  cacheYn::Vector{Vector{Float64}}
   cacheCount::Int
   cacheMax::Int
 
@@ -216,7 +218,35 @@ type IncrementalCovarianceTiled
       end
     end
 
-    new(numberOfX, numberOfY, tilesizeX, tilesizeY, meanVarX, meanVarY, covXY, Vector{Vector}(caches), Vector{Vector}(caches), 0, caches)
+    new(numberOfX, numberOfY, tilesizeX, tilesizeY, nrTilesX, nrTilesY, meanVarX, meanVarY, covXY, Vector{Vector{Float64}}(caches), Vector{Vector{Float64}}(caches), 0, caches)
+  end
+end
+
+function dothreadwork(state::IncrementalCovarianceTiled, y::Int)
+  const nrTilesX = state.nrTilesX
+  const tilesizeX = state.tilesizeX
+  const tilesizeY = state.tilesizeY
+  const numberOfX = state.numberOfX
+  const numberOfY = state.numberOfY
+
+  minY = (y-1)*tilesizeY+1
+  maxY = min(minY+tilesizeY-1, numberOfY)
+  for x in 1:nrTilesX
+    minX = (x-1)*tilesizeX+1
+    maxX = min(minX+tilesizeX-1, numberOfX)
+
+    for t in 1:state.cacheCount
+      dataXn = state.cacheXn[t]
+      dataYn = state.cacheYn[t]
+
+      # add!(state.covXY[x,y], dataXn, minX, maxX, dataYn, minY, maxY, false,)
+
+      state.covXY[x,y].n += 1
+      const n = state.covXY[x,y].n
+      const ndiv::Float64 = (n-1)/n
+
+      updateCov!(state.covXY[x,y].cov, dataXn, minX, maxX, dataYn, minY, maxY, ndiv)
+    end
   end
 end
 
@@ -225,33 +255,8 @@ function flushcache!(state::IncrementalCovarianceTiled)
     return
   end
 
-  const (nrTilesX,nrTilesY) = size(state.covXY)
-  const tilesizeX = state.tilesizeX
-  const tilesizeY = state.tilesizeY
-  const numberOfX = state.numberOfX
-  const numberOfY = state.numberOfY
-
-  Threads.@threads for y in 1:nrTilesY
-    minY = (y-1)*tilesizeY+1
-    maxY = min(minY+tilesizeY-1, numberOfY)
-    for x in 1:nrTilesX
-      minX = (x-1)*tilesizeX+1
-      maxX = min(minX+tilesizeX-1, numberOfX)
-
-      for t in 1:state.cacheCount
-        dataXn = state.cacheXn[t]
-        dataYn = state.cacheYn[t]
-
-
-        # add!(state.covXY[x,y], dataXn, minX, maxX, dataYn, minY, maxY, false,)
-
-        state.covXY[x,y].n += 1
-        const n = state.covXY[x,y].n
-        const ndiv::Float64 = (n-1)/n
-
-        updateCov!(state.covXY[x,y].cov, dataXn, minX, maxX, dataYn, minY, maxY, ndiv)
-      end
-    end
+  Threads.@threads for y in 1:state.nrTilesY
+    dothreadwork(state,y)
   end
 
   state.cacheCount = 0
