@@ -105,16 +105,16 @@ end
 
 # end
 
-@inline function updateCov!(cov::Matrix{Float64}, dataXn::AbstractVector, dataYn::AbstractVector, ndiv::Float64)
-  updateCov!(cov, dataXn, 1, length(dataXn), dataYn, 1, length(dataYn), ndiv)
-end
+# @inline function updateCov!(cov::Matrix{Float64}, dataXn::AbstractVector, dataYn::AbstractVector, ndiv::Float64)
+#   updateCov!(cov, dataXn, 1, length(dataXn), dataYn, 1, length(dataYn), ndiv)
+# end
 
 function updateCov!(cov::Matrix{Float64}, dataXn::AbstractVector, minX::Int, maxX::Int, dataYn::AbstractVector, minY::Int, maxY::Int, ndiv::Float64)
-  for y in minY:maxY
-    @inbounds dataYny = dataYn[y] * ndiv
+  @inbounds for y in minY:maxY
+    dataYny = dataYn[y] * ndiv
     ypos = y-minY+1
     for x in minX:maxX
-      @inbounds cov[x-minX+1,ypos] += dataXn[x]*dataYny
+      cov[x-minX+1,ypos] += dataXn[x]*dataYny
     end
   end  
 end
@@ -218,7 +218,10 @@ type IncrementalCovarianceTiled
       end
     end
 
-    new(numberOfX, numberOfY, tilesizeX, tilesizeY, nrTilesX, nrTilesY, meanVarX, meanVarY, covXY, Vector{Vector{Float64}}(caches), Vector{Vector{Float64}}(caches), 0, caches)
+    cacheXn = [Vector{Float64}(numberOfX) for x in 1:caches]
+    cacheYn = [Vector{Float64}(numberOfY) for x in 1:caches]
+
+    new(numberOfX, numberOfY, tilesizeX, tilesizeY, nrTilesX, nrTilesY, meanVarX, meanVarY, covXY, cacheXn, cacheYn, 0, caches)
   end
 end
 
@@ -250,16 +253,20 @@ function dothreadwork(state::IncrementalCovarianceTiled, y::Int)
   end
 end
 
-function flushcache!(state::IncrementalCovarianceTiled)
-  if state.cacheCount == 0
-    return
-  end
-
+function dothreads(state::IncrementalCovarianceTiled)
   Threads.@threads for y in 1:state.nrTilesY
     dothreadwork(state,y)
   end
 
   state.cacheCount = 0
+  nothing
+end
+
+function flushcache!(state::IncrementalCovarianceTiled)
+  if state.cacheCount != 0
+    dothreads(state)
+  end
+  nothing
 end
 
 function add!(state::IncrementalCovarianceTiled, dataX::AbstractVector, dataY::AbstractVector, dataXn::AbstractVector=dataX.-state.meanVarX.mean, updateMeanX::Bool=true, dataYn::AbstractVector=dataY.-state.meanVarY.mean, updateMeanY::Bool=true)
@@ -267,8 +274,8 @@ function add!(state::IncrementalCovarianceTiled, dataX::AbstractVector, dataY::A
 
   state.cacheCount += 1
   const cacheCount = state.cacheCount
-  state.cacheXn[cacheCount] = dataXn
-  state.cacheYn[cacheCount] = dataYn
+  state.cacheXn[cacheCount][:] = dataXn
+  state.cacheYn[cacheCount][:] = dataYn
 
   if updateMeanX
     add!(state.meanVarX, dataX, dataXn)
