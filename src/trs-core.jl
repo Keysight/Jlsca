@@ -14,6 +14,8 @@ export start,done,next,endof,setindex!
 
 abstract type Trace end
 
+export Pass
+
 abstract type Pass end
 
 type SimpleFunctionPass <: Pass 

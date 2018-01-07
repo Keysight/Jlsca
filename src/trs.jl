@@ -14,6 +14,7 @@ include("trs-inspector-mmap.jl")
 include("trs-splitbinary.jl")
 include("trs-bitcompress.jl")
 include("trs-inmemory.jl")
+include("trs-randomtrace.jl")
 
 include("distributed.jl")
 include("conditional-average.jl")
