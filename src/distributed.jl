@@ -90,6 +90,10 @@ function add(c::PostProcessor, trs::Trace, globalRange::Range, update::Function)
     t1 = time()
     for idx in traceStart:traceStep:traceEnd
       add(c, trs, idx)
+      # uncomment for hot loop profiling
+      # if idx == traceStart
+      #   Profile.clear_malloc_data()
+      # end
       total += 1
       t2 = time()
       if t2 - t1 > 0.2
@@ -98,6 +102,8 @@ function add(c::PostProcessor, trs::Trace, globalRange::Range, update::Function)
         bla = total
       end
     end
+    # uncomment for hot loop profiling
+    # exit()
   catch e
     if !isa(e, EOFError)
       rethrow(e)

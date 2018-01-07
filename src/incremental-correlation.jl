@@ -36,7 +36,9 @@ type IncrementalCorrelation <: PostProcessor
   leakages::Vector{Leakage}
   targets::Vector{Target}
   hypocache::Vector{Vector{UInt8}}
+  guessescache::Vector{Vector{UInt8}}
   targetcache::Vector{Vector}
+  samplesN::Vector{Float64}
 
   function IncrementalCorrelation()
     IncrementalCorrelation(NoSplit())
@@ -62,9 +64,11 @@ function init(c::IncrementalCorrelation, targetOffsets::Vector{Int}, leakages::V
   c.targets = targets
   c.hypocache = Vector{Vector{UInt8}}(length(c.targetOffsets))
   c.targetcache = Vector{Vector}(length(c.targetOffsets))
+  c.guessescache = Vector{Vector{UInt8}}(length(c.targetOffsets))
   for i in 1:length(c.targetOffsets)
     c.hypocache[i] = Vector{UInt8}(length(guesses(c.targets[i])) * length(c.leakages))
     c.targetcache[i] = createTargetCache(c.targets[i])
+	  c.guessescache[i] = guesses(c.targets[i])
   end
 end
 
@@ -74,8 +78,9 @@ function reset(c::IncrementalCorrelation)
   c.counter = 0
 end
 
-function toLeakages!(c::IncrementalCorrelation, hypo::Vector{UInt8}, outputs::Vector{Out}, t::Target{In,Out}, input::In) where {In,Out}
-  kbvals = guesses(t)
+function toLeakages!(c::IncrementalCorrelation, hypo::Vector{UInt8}, outputs::Vector{Out}, idx::Int, input::In) where {In,Out}
+  t = c.targets[c.targetOffsets[idx]]
+  kbvals = c.guessescache[idx]
   nrOfKbVals = length(kbvals)
   nrOfFuns = length(c.leakages)
   nrOfTargets = length(input)
@@ -95,41 +100,50 @@ function toLeakages!(c::IncrementalCorrelation, hypo::Vector{UInt8}, outputs::Ve
   return hypo
 end
 
-function add(c::IncrementalCorrelation, trs::Trace, traceIdx::Int)
-  data::AbstractVector = getData(trs, traceIdx)
-  if length(data) == 0
-    return
-  end
-
-  samples::Vector{trs.sampleType} = getSamples(trs, traceIdx)
-  if length(samples) == 0
-    return
-  end
+function add(c::IncrementalCorrelation, data::Vector{D}, samples::Vector{S}) where {D,S}
+  nrSamples = length(samples)
 
   if !c.meanXinitialized
     c.meanXinitialized = true
-    c.meanX = IncrementalMeanVariance(length(samples))
+    c.meanX = IncrementalMeanVariance(nrSamples)
     for idx in 1:length(c.targetOffsets)
       hypo = c.hypocache[idx]
       c.covXY[idx] = IncrementalCovarianceTiled(c.meanX, IncrementalMeanVariance(length(hypo)))
     end
+    c.samplesN = Vector{Float64}(nrSamples)
   end
 
-  samplesN = samples .- c.meanX.mean
+  for x in 1:nrSamples
+	 c.samplesN[x] = Float64(samples[x]) - c.meanX.mean[x]
+  end
 
   for idx in 1:length(c.targetOffsets)
     val = data[idx]
 
     hypo = c.hypocache[idx]
     outputs = c.targetcache[idx]
-    toLeakages!(c, hypo, outputs, c.targets[c.targetOffsets[idx]], val)
+    toLeakages!(c, hypo, outputs, idx, val)
 
-    add!(c.covXY[idx], samples, hypo, samplesN, false)
+    add!(c.covXY[idx], samples, hypo, c.samplesN, false)
   end
 
-  add!(c.meanX, samples, samplesN)
+  add!(c.meanX, samples, c.samplesN)
 
   c.counter += 1
+end
+
+function add(c::IncrementalCorrelation, trs::Trace, traceIdx::Int)
+  data = getData(trs, traceIdx)
+  if length(data) == 0
+    return
+  end
+
+  samples = getSamples(trs, traceIdx)
+  if length(samples) == 0
+    return
+  end
+
+  add(c,data,samples)
 end
 
 function merge(this::IncrementalCorrelation, other::IncrementalCorrelation)
