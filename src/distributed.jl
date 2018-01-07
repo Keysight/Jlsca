@@ -93,6 +93,7 @@ function add(c::PostProcessor, trs::Trace, globalRange::Range, update::Function)
       # uncomment for hot loop profiling
       # if idx == traceStart
       #   Profile.clear_malloc_data()
+      #   Profile.start_timer()
       # end
       total += 1
       t2 = time()
@@ -103,6 +104,8 @@ function add(c::PostProcessor, trs::Trace, globalRange::Range, update::Function)
       end
     end
     # uncomment for hot loop profiling
+    # Profile.stop_timer()
+    # Profile.print(maxdepth=16,combine=true)
     # exit()
   catch e
     if !isa(e, EOFError)

@@ -109,12 +109,12 @@ end
 #   updateCov!(cov, dataXn, 1, length(dataXn), dataYn, 1, length(dataYn), ndiv)
 # end
 
-function updateCov!(cov::Matrix{Float64}, dataXn::AbstractVector, minX::Int, maxX::Int, dataYn::AbstractVector, minY::Int, maxY::Int, ndiv::Float64)
-  @inbounds for y in minY:maxY
-    dataYny = dataYn[y] * ndiv
+function updateCov!(cov::Matrix{Float64}, dataXn::Vector{Float64}, minX::Int, maxX::Int, dataYn::Vector{Float64}, minY::Int, maxY::Int, ndiv::Float64)
+  for y in minY:maxY
+    @inbounds dataYny = dataYn[y] * ndiv
     ypos = y-minY+1
     for x in minX:maxX
-      cov[x-minX+1,ypos] += dataXn[x]*dataYny
+      @inbounds  cov[x-minX+1,ypos] += dataXn[x]*dataYny
     end
   end  
 end
@@ -218,8 +218,10 @@ type IncrementalCovarianceTiled
       end
     end
 
-    cacheXn = [Vector{Float64}(numberOfX) for x in 1:caches]
-    cacheYn = [Vector{Float64}(numberOfY) for x in 1:caches]
+    # cacheXn = [Vector{Float64}(numberOfX) for x in 1:caches]
+    # cacheYn = [Vector{Float64}(numberOfY) for x in 1:caches]
+    cacheXn = Vector{Vector{Float64}}(caches)
+    cacheYn = Vector{Vector{Float64}}(caches)
 
     new(numberOfX, numberOfY, tilesizeX, tilesizeY, nrTilesX, nrTilesY, meanVarX, meanVarY, covXY, cacheXn, cacheYn, 0, caches)
   end
@@ -274,8 +276,10 @@ function add!(state::IncrementalCovarianceTiled, dataX::AbstractVector, dataY::A
 
   state.cacheCount += 1
   const cacheCount = state.cacheCount
-  state.cacheXn[cacheCount][:] = dataXn
-  state.cacheYn[cacheCount][:] = dataYn
+  # copy!(state.cacheXn[cacheCount], dataXn)
+  # copy!(state.cacheYn[cacheCount], dataYn)
+  state.cacheXn[cacheCount] = dataXn
+  state.cacheYn[cacheCount] = dataYn
 
   if updateMeanX
     add!(state.meanVarX, dataX, dataXn)
