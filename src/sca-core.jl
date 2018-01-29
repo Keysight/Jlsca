@@ -606,6 +606,9 @@ If you'd concatenate all the key material recovered for all phases and targets, 
 offset(a::DpaAttack, phase::Int, target::Int) = (phase > 1 ? sum(x -> numberOfTargets(a,x), 1:phase-1) : 0) + (target-1)
 offset(a::DpaAttack, phase::Int) = offset(a,phase,1)
 
+offset(a::Attack, phase::Int, target::Int) = (phase > 1 ? sum(x -> numberOfTargets(a,x), 1:phase-1) : 0) + (target-1)
+offset(a::Attack, phase::Int) = offset(a,phase,1)
+
 function lazyinit(params::DpaAttack) 
   if !isnull(params.knownKey) && !isdefined(params, :correctKeyMaterial)
     knownrkmaterial = correctKeyMaterial(params.attack, get(params.knownKey))

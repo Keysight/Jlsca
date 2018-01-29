@@ -127,7 +127,7 @@ function add(c::IncrementalCorrelation, trs::Trace, traceIdx::Int)
     add!(c.covXY[idx], samples, hypo, samplesN, false)
   end
 
-  add!(c.meanX, samples, samplesN)
+  add!(c.meanX, samples)
 
   c.counter += 1
 end

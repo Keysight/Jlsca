@@ -23,12 +23,13 @@ type IncrementalMeanVariance
   end
 end
 
-function add!(state::IncrementalMeanVariance, data::AbstractVector, y1::AbstractVector=data.-state.mean)
+function add!(state::IncrementalMeanVariance, data::AbstractVector)
   state.n += 1
   @inbounds for x in eachindex(state.mean)
-    state.mean[x] = state.mean[x] + (data[x] - state.mean[x]) / state.n
+    y1 = data[x] - state.mean[x]
+    state.mean[x] = state.mean[x] + y1 / state.n
     y2 = data[x] - state.mean[x]
-    state.var[x] = state.var[x] + y1[x] * y2
+    state.var[x] = state.var[x] + y1 * y2
   end
 end
 
@@ -135,11 +136,11 @@ function add!(state::IncrementalCovariance, dataX::AbstractVector, minX::Int, ma
   updateCov!(state.cov, dataXn, minX, maxX, dataYn, minY, maxY, ndiv)
 
   if updateMeanX
-    add!(state.meanVarX, dataX, dataXn)
+    add!(state.meanVarX, dataX)
   end
 
   if updateMeanY
-    add!(state.meanVarY, dataY, dataYn)
+    add!(state.meanVarY, dataY)
   end
 
 end
@@ -282,11 +283,11 @@ function add!(state::IncrementalCovarianceTiled, dataX::AbstractVector, dataY::A
   state.cacheYn[cacheCount] = dataYn
 
   if updateMeanX
-    add!(state.meanVarX, dataX, dataXn)
+    add!(state.meanVarX, dataX)
   end
 
   if updateMeanY
-    add!(state.meanVarY, dataY, dataYn)
+    add!(state.meanVarY, dataY)
   end
 
   if cacheCount < state.cacheMax

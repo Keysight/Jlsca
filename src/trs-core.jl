@@ -154,6 +154,27 @@ function readTraces(trs::Trace, range::Range)
   end
 end
 
+export TraceKind
+
+@enum TraceKind NonzeroData=1 NonzeroSamples=2 NonzeroDataSamples=3
+
+export getFirstValid
+
+function getFirstValid(trs::Trace, kind::TraceKind=NonzeroDataSamples)
+  for t in 1:length(trs)
+    (data,samples) = trs[t]
+    if kind == NonzeroDataSamples && (length(data) == 0 || length(samples) == 0)
+      continue
+    elseif kind == NonzeroSamples && length(samples) == 0
+      continue
+    elseif kind == NonzeroData && length(data) == 0
+      continue
+    end
+    return (data,samples,t)
+  end
+  throw(ErrorException("no trace of $kind found .."))
+end
+
 # read traces without conditional averaging (but with all the data and sample passes), creates huge matrices, use with care
 function readNoPostProcessTraces(trs::Trace, range::Range)
   numberOfTraces = length(trs)
