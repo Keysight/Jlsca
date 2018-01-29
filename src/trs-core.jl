@@ -160,6 +160,18 @@ export TraceKind
 
 export getFirstValid
 
+"""
+Returns the first valid trace from a trace set, where validity is (by default) non-zero data and non-zero samples. See `TraceKind`.
+
+# Examples
+```
+(data,samples,idx) = getFirstValid(trs,NonzeroDataSamples)
+# same as:
+(data,samples,idx) = getFirstValid(trs)
+
+```
+
+"""
 function getFirstValid(trs::Trace, kind::TraceKind=NonzeroDataSamples)
   for t in 1:length(trs)
     (data,samples) = trs[t]
