@@ -249,6 +249,31 @@ end
 
 export RankData
 
+"""
+An instance of this is returned by `sca`, and it contains all the information needed to plot and print ranks and scores. If you run `sca` with the `updateInterval` set, the rankdata can be used to plot rank and score evolutions too. 
+
+What is *not* contained in this instance is the "raw" correlation data. 
+
+Data in this instance should be accessed by functions. See:
+* `getIntervals`
+* `getPhases`
+* `getTargets`
+* `getLeakages`
+* `getGuesses`
+* `getRankingsEvolution`
+* `getScoresEvolution`
+* `getOffsetsEvolution`
+* `getNrConsumedRows`
+* `getNrConsumedRowsEvolution`
+* `getNrConsumedCols`
+* `getNrConsumedColsEvolution`
+* `getNrRows`
+* `getNrRowsEvolution`
+* `getNrCols`
+* `getNrColsEvolution`
+* `getScores`
+* `getOffsets`
+"""
 type RankData
   nrConsumedRows
   nrConsumedCols
@@ -676,7 +701,7 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
 
   local key = nothing
   local status = nothing
-  local phaseInput = get(params.phaseInput, Vector{UInt8}(0))
+  local phaseInput = Vector{UInt8}(0)
   local phaseOutput = Vector{UInt8}(0)
 
   lazyinit(params)
@@ -694,19 +719,22 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
   params.rankData = RankData(params)
 
   while !finished
-    if phase > numberOfPhases(params.attack)
+    if phase > min(maximum(get(params.phases, [numberOfPhases(params.attack)])), numberOfPhases(params.attack))
       finished = true
       continue
     end
 
+    phaseDataOffset = offset(params,phase)
+    phaseDataLength = numberOfTargets(params, phase)
+
     if phase > 1
       if !isnull(params.knownKey)
-        knownrklen = sum(x -> numberOfTargets(params,x), 1:phase-1)
-        phaseInput = knownrkmaterial[1:knownrklen]
+        phaseInput = knownrkmaterial[1:phaseDataOffset]
       else
         phaseInput = phaseOutput
       end
     end
+
 
     targets = getTargets(params.attack, phase, phaseInput)
     @assert length(targets) > 0
@@ -716,11 +744,14 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
     params.phasefn = [params.phasefn; phasefn]
 
     if !isnull(params.phases) && !(phase in get(params.phases, []))
-      phaseOutput = phaseInput
-      phase += 1
-      if phase > min(maximum(get(params.phases)), numberOfPhases(params.attack))
-        finished = true
+      if !isnull(params.knownKey)
+        phaseOutput = vcat(phaseOutput,knownrkmaterial[phaseDataOffset+1:phaseDataOffset+phaseDataLength])
+      elseif !isnull(params.phaseInput)
+        phaseOutput = vcat(phaseOutput,get(params.phaseInput)[phaseDataOffset+1:phaseDataOffset+phaseDataLength])
+      else
+        throw(ErrorException("need phaseInput or knownKey to attack phase $phase"))
       end
+      phase += 1
       continue
     end
 
