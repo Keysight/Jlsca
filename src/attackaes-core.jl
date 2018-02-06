@@ -236,9 +236,10 @@ function recoverKeyHelper(keymaterial::Vector{UInt8}, mode, direction)
     end
 end
 
-function recoverKey(params::AesSboxAttack, phaseInput::Vector{UInt8})
+function recoverKey(params::AesSboxAttack, phaseInputOrig::Vector{UInt8})
   mode = params.mode
   direction = params.direction
+  phaseInput = copy(phaseInputOrig)
 
   if params.keyLength == KL128
     key = recoverKeyHelper(phaseInput, mode, direction)

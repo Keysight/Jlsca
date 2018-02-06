@@ -85,6 +85,24 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, nrConsum
 
 end
 
+function add!(this::RankData, other::RankData)
+  (this.intervals == other.intervals) || throw(ErrorException("cannot add rankdata created with different updateInterval values"))
+  (this.nrLeakages == other.nrLeakages) || throw(ErrorException("cannot add rankdata created with different number of leakage models"))
+  for phase in keys(other.nrConsumedRows)
+    if phase in keys(this.nrConsumedRows)
+      throw(ErrorException("currently cannot merge phases .. implement me!"))
+    else
+      this.nrConsumedRows[phase] = copy(other.nrConsumedRows[phase])
+      this.nrConsumedCols[phase] = copy(other.nrConsumedCols[phase])
+      this.nrRows[phase] = copy(other.nrRows[phase])
+      this.nrCols[phase] = copy(other.nrCols[phase])
+      this.combinedScores[phase] = copy(other.combinedScores[phase])
+      this.scores[phase] = copy(other.scores[phase])
+      this.offsets[phase] = copy(other.offsets[phase])
+    end
+  end
+end
+
 function lazyinit(a::RankData, phase::Int, target::Int, guesses::Int, leakage::Int, nrConsumedRows::Int, nrConsumedCols::Int, nrRows::Int, nrCols::Int)
   if !(phase in keys(a.nrConsumedRows))
     a.nrConsumedRows[phase] = IntSet()
@@ -344,23 +362,7 @@ end
 export getKey
 
 function getKey(params::DpaAttack, sc::RankData)
-  ckm = nothing
-  allPhaseData = Vector{UInt8}(0)
-  for phase in 1:numberOfPhases(params.attack)
-    if phase in keys(sc.scores)
-      phaseData = getPhaseKey(params, params.attack, phase, sc)
-    else
-      if ckm == nothing
-        ckm = correctKeyMaterial(attack, get(params.knownKey))
-      end
-      o = sum(x -> numberOfTargets(params,x), 1:phase-1)
-      l = numberOfTargets(params,p)
-      phaseData = ckm[o+1:o+l]
-    end
-    allPhaseData = vcat(allPhaseData,phaseData)
-  end
-
-  return recoverKey(params.attack, allPhaseData)
+  return recoverKey(params.attack, get(params.phaseInput))
 end
 
 function truncate(fname)
