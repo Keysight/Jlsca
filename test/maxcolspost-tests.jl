@@ -16,7 +16,7 @@ function testVanilla()
 
     rankData1 = sca(trs, params, 1, length(trs))
 
-    params.maxCols = maxCols
+    params.maxColsPost = maxCols
 
     rankData2 = sca(trs, params, 1, length(trs))
 
@@ -41,13 +41,11 @@ function testCondAvg()
     attack = AesSboxAttack()
     analysis = CPA() 
     params = DpaAttack(attack,analysis)
-    params.targetOffsets = [1]
 
     rankData1 = sca(trs, params, 1, length(trs))
 
-    params.maxCols = maxCols
+    params.maxColsPost = maxCols
     params.updateInterval = div(rows,3)
-    params.targetOffsets = [1]
 
     rankData2 = sca(trs, params, 1, length(trs))
 
@@ -75,8 +73,8 @@ function testIncCpa()
 
     rankData1 = sca(trs, params, 1, length(trs))
 
-    params.maxCols = maxCols
-    # params.updateInterval = div(rows,3)
+    params.maxColsPost = maxCols
+    params.updateInterval = div(rows,3)
 
     rankData2 = sca(trs, params, 1, length(trs))
 
@@ -106,8 +104,8 @@ function testCondReduce()
 
     rankData1 = sca(trs, params, 1, length(trs))
 
-    params.maxCols = maxCols
-    # params.updateInterval = div(rows,3)
+    params.maxColsPost = maxCols
+    params.updateInterval = div(rows,3)
 
     rankData2 = sca(trs, params, 1, length(trs))
 

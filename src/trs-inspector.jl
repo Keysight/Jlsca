@@ -27,11 +27,12 @@ type InspectorTrace <: Trace
   writeable::Bool
   lengthPosition::Int
   bitshack::Bool
+  colRange::Nullable{Range}
 
   # to open an existing file
   function InspectorTrace(filename::String, bitshack::Bool = false)
     (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, fileDescriptor) = readInspectorTrsHeader(filename, bitshack)
-    new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, Union, 0, filename, traceBlockPosition, false, lengthPosition, bitshack)
+    new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, Union, 0, filename, traceBlockPosition, false, lengthPosition, bitshack, Nullable{Range}())
   end
 
   # to create a new one

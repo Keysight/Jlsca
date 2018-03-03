@@ -27,9 +27,10 @@ end
 
 type DistributedTrace <: Trace
   count::Int
+  colRange::Nullable{Range}
 
   function DistributedTrace()
-    return new(0)
+    return new(0,Nullable{Range}())
   end
 
 end

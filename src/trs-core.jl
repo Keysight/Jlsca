@@ -18,11 +18,14 @@ export Pass
 
 abstract type Pass end
 
+pass(a::Pass, x::AbstractArray{T,1}, idx::Int, cols::Range) where {T} = pass(a,x,idx)[cols] 
+
 type SimpleFunctionPass <: Pass 
   fn::Function
 end
 
 pass(a::SimpleFunctionPass, x::AbstractArray{T,1}, idx::Int) where {T} = a.fn(x) 
+
 
 # overloading these to implement an iterator
 start(trs::Trace) = 1
@@ -46,13 +49,18 @@ end
 
 function getSamples(trs::Trace, idx)
   samples = readSamples(trs, idx)
+  lastpass = length(trs.passes)
 
   # run all the passes over the trace
-  for p in trs.passes
-   samples = pass(p, samples, idx)
-   if length(samples) == 0
-     break
-   end
+  for p in eachindex(trs.passes)
+    if p == lastpass && !isnull(trs.colRange)
+      samples = pass(trs.passes[p], samples, idx, get(trs.colRange))
+    else
+      samples = pass(trs.passes[p], samples, idx)
+    end
+    if length(samples) == 0
+      break
+    end
   end
 
   return samples
@@ -298,3 +306,5 @@ function readAndPostProcessTraces(trs2::Trace, range::Range)
   return (ret, true)
 
 end
+
+inIJulia() = isdefined(Main, :IJulia) && Main.IJulia.inited

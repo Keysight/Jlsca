@@ -14,7 +14,7 @@ for s in instances(DesMode); @eval export $(Symbol(s)); end
 const left = 1:32
 const right = 33:64
 
-abstract type DesAttack <: Attack end
+abstract type DesAttack <: Attack{UInt8} end
 
 numberOfTargets(a::DesAttack, phase::Int) = 8
 
@@ -74,7 +74,7 @@ end
 const desguesses = collect(UInt8,0:63)
 
 # target functions
-type DesSboxOut <: Target{UInt8,UInt8} 
+type DesSboxOut <: Target{UInt8,UInt8,UInt8} 
   sbidx::Int
 end
 
@@ -82,7 +82,7 @@ target(this::DesSboxOut, sixbits::Union{UInt16, UInt8}, kb::UInt8) = Sbox(this.s
 show(io::IO, a::DesSboxOut) = print(io, "Sbox $(a.sbidx) out")
 guesses(a::DesSboxOut) = desguesses
 
-type DesSboxOutXORin <: Target{UInt8,UInt8}  end
+type DesSboxOutXORin <: Target{UInt8,UInt8,UInt8}  end
 
 
 function target(this::DesSboxOutXORin, sixbits::Union{UInt16, UInt8}, kb::UInt8)
@@ -94,7 +94,7 @@ end
 show(io::IO, a::DesSboxOutXORin) = print(io, "Sbox $(a.sbidx) out XOR in")
 guesses(a::DesSboxOutXORin) = desguesses
 
-type RoundOut <: Target{UInt16,UInt16} 
+type RoundOut <: Target{UInt16,UInt16,UInt8} 
   sbidx::Int
 end
 
