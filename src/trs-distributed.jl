@@ -38,6 +38,13 @@ end
 length(trs::DistributedTrace) = @fetch length(Main.trs)
 pipe(trs::DistributedTrace) = false
 
+nrSamplePasses(trs::DistributedTrace) = @fetch length(Main.trs.passes)
+
+function setColumnRange(trs::DistributedTrace, r::Nullable{Range})
+  @sync for worker in workers()
+    @spawnat worker setColumnRange(Main.trs, r)
+  end
+end
 
 function addSamplePass(trs::DistributedTrace, f::Function, prprnd=false)
   @sync for worker in workers()

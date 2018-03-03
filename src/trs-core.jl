@@ -53,7 +53,7 @@ function getSamples(trs::Trace, idx)
 
   # run all the passes over the trace
   for p in eachindex(trs.passes)
-    if p == lastpass && !isnull(trs.colRange)
+    if (p == lastpass) && !isnull(trs.colRange)
       samples = pass(trs.passes[p], samples, idx, get(trs.colRange))
     else
       samples = pass(trs.passes[p], samples, idx)
@@ -100,6 +100,16 @@ function addSamplePass(trs::Trace, p::Pass, prprnd=false)
     trs.passes = vcat(trs.passes, p)
   end
   return nothing
+end
+
+export nrSamplePasses
+
+nrSamplePasses(trs::Trace) = length(trs.passes)
+
+export setColumnRange
+
+function setColumnRange(trs::Trace, r::Nullable{Range})
+  trs.colRange = r
 end
 
 # removes a sample pass

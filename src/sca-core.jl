@@ -318,10 +318,10 @@ function printParameters(a::DpaAttack)
     print("known key:    $(bytes2hex(get(a.knownKey)))\n")
   end
   if !isnull(a.maxCols)
-    print("max cols into post processor: $(get(a.maxCols))")
+    print("max cols into post processor: $(get(a.maxCols))\n")
   end
   if !isnull(a.maxColsPost)
-    print("max cols into non-inc analysis: $(get(a.maxColsPost))")
+    print("max cols into non-inc analysis: $(get(a.maxColsPost))\n")
   end
 end
 
@@ -526,14 +526,19 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
     # FIXME: need to pick something sane here
     maxCols = get(params.maxCols, 200000)
     segmented = div(samplecols,maxCols) > 0
+    passadded = false
 
     (segmented && (!isnull(params.recoverCond) || !isnull(params.saveCond))) && throw(ErrorException("Increase params.maxCols, segmentation and saving or recovering conditional output is not supported"))
 
     for sr in 1:maxCols:samplecols
       srEnd = min(sr+maxCols-1, samplecols)
+      print("Attacking columns $(sr:srEnd)\n")
       if segmented
-        print("Attacking columns $(sr:srEnd)\n")
-        trs.colRange = sr:srEnd
+        setColumnRange(trs, Nullable{Range}(sr:srEnd))
+        if nrSamplePasses(trs) == 0
+          passadded = true
+          addSamplePass(trs, x -> x)
+        end
       end
 
       firstTrace = rows[1]
@@ -557,7 +562,10 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
       end
 
       if segmented
-        trs.colRange = Nullable{Range}()
+        setColumnRange(trs, Nullable{Range}())
+        if passadded
+          popSamplePass(trs)
+        end
       end
 
       # reset the state of trace post processor (conditional averager)
