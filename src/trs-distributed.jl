@@ -27,9 +27,10 @@ end
 
 type DistributedTrace <: Trace
   count::Int
+  colRange::Nullable{Range}
 
   function DistributedTrace()
-    return new(0)
+    return new(0,Nullable{Range}())
   end
 
 end
@@ -37,6 +38,13 @@ end
 length(trs::DistributedTrace) = @fetch length(Main.trs)
 pipe(trs::DistributedTrace) = false
 
+nrSamplePasses(trs::DistributedTrace) = @fetch length(Main.trs.passes)
+
+function setColumnRange(trs::DistributedTrace, r::Nullable{Range})
+  @sync for worker in workers()
+    @spawnat worker setColumnRange(Main.trs, r)
+  end
+end
 
 function addSamplePass(trs::DistributedTrace, f::Function, prprnd=false)
   @sync for worker in workers()

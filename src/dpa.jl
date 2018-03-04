@@ -16,7 +16,7 @@ numberOfLeakages(a::CPA) = length(a.leakages)
 
 maximization(a::CPA) = AbsoluteGlobalMaximization()
 
-function computeScores(a::CPA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
+function computeScores(a::CPA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out,Guess}, kbvals::Vector{Guess}) where {In,Out,Guess}
   (tr,tc) = size(samples)
   (dr,) = size(data)
   tr == dr || throw(DimensionMismatch())
@@ -30,7 +30,7 @@ function printParameters(a::CPA)
   @printf("leakages:     %s\n", a.leakages)
 end
 
-function predict(data::AbstractArray{In,1}, t::Target{In,Out}, kcVals::Vector{UInt8}, leakages::Vector{Leakage}) where {In,Out}
+function predict(data::AbstractArray{In,1}, t::Target{In,Out,Guess}, kcVals::Vector{UInt8}, leakages::Vector{Leakage}) where {In,Out,Guess}
   (dr,) = size(data)
   nrKcVals = length(kcVals)
   nrLeakages = length(leakages)

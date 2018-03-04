@@ -19,6 +19,7 @@ type SplitBinary <: Trace
   tracesReturned
   samplesPosition
   dataPosition
+  colRange::Nullable{Range}
 
   function SplitBinary(dataFn, samplesFn, bits::Bool = false)
     (sampleSpace, sampleType, numberOfTracesSamples) = parseFilename(samplesFn)
@@ -81,7 +82,7 @@ type SplitBinary <: Trace
       sampleType = UInt64
     end
 
-    new(nrtraces, dataSpace, sampleType, numberOfSamplesPerTrace, samplesFileDescriptor, dataFileDescriptor, [], [], Union, Union, 0, 0, 0)
+    new(nrtraces, dataSpace, sampleType, numberOfSamplesPerTrace, samplesFileDescriptor, dataFileDescriptor, [], [], Union, Union, 0, 0, 0,Nullable{Range}())
   end
 end
 

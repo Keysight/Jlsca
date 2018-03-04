@@ -14,11 +14,12 @@ type InMemory{TS,TD} <: Trace
   dataPasses
   postProcInstance
   tracesReturned
+  colRange::Nullable{Range}
 
   function InMemory(data::AbstractArray{TD,2}, samples::AbstractArray{TS,2}) where {TS,TD}
     nrTraces = size(samples)[1]
     @assert size(data)[1] == nrTraces
-    new{TS,TD}(samples, TS, data, nrTraces, [], [], Union,0)
+    new{TS,TD}(samples, TS, data, nrTraces, [], [], Union,0,Nullable{Range}())
   end
 end
 

@@ -8,7 +8,7 @@ import Base.truncate
 export printScores
 
 # print the scores pretty
-function printScores(params::DpaAttack, phase::Int, rankData::RankData, nrConsumedRows::Int, nrRows::Int, nrConsumedCols::Int, nrCols::Int, targets::Vector{Int}, printsubs=false,  max=5, io=STDOUT) 
+function printScores(params::DpaAttack, phase::Int, rankData::RankData, targets::Vector{Int}, printsubs=false,  m=5, io=STDOUT) 
 
   if !(phase in getPhases(rankData))
     return
@@ -16,7 +16,8 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, nrConsum
 
   nrLeakageFunctions = rankData.nrLeakages
   keyLength = length(targets)
-  winners = zeros(UInt8, keyLength)
+  #FIXME: broken for attacks with different target output types
+  local winners = nothing
   phaseDataOffset = offset(params,phase)
   phaseDataLength = numberOfTargets(params, phase)
   correctKeyMaterial = !isnull(params.knownKey) ? params.correctKeyMaterial[phaseDataOffset+1:phaseDataOffset+phaseDataLength] : Vector{UInt8}(0)
@@ -28,6 +29,9 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, nrConsum
     if !(target in getTargets(rankData,phase))
       continue
     end
+    if winners == nothing
+      winners = zeros(getTargetType(rankData,phase,target),keyLength)
+    end
     nrRows = getNrRows(rankData, phase, target)
     nrCols = getNrCols(rankData, phase, target)
     print(io, "Results @ $nrRows rows, $nrCols cols ($nrConsumedRows rows, $nrConsumedCols cols, consumed)\n")
@@ -36,16 +40,21 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, nrConsum
     # sort peaks
     ranks = sortperm(scores, rev=true)
 
+    m = min(m,length(ranks))
     winners[j] = ranks[1] - 1
     j += 1
 
-    @printf(io, "target: %d, phase: %d, \"%s\"\n", target, phase, getTarget(params, phase, target))
+    nrGuesses = length(getGuesses(rankData,phase,target))
+    nrNibbles = Int(ceil(log2(nrGuesses)/4))
+    nrDecimals = Int(ceil(log10(nrGuesses)))
 
-    printableIndexes = ranks[1:max]
+    @printf(io, "target: %d, phase: %d, #candidates %d, \"%s\"\n", target, phase, nrGuesses, getTarget(params, phase, target))
+
+    printableIndexes = ranks[1:m]
     if length(correctKeyMaterial) > 0
       correctKbOffset = findfirst(x -> x == (correctKeyMaterial[target] + 1), ranks)
-      if correctKbOffset > max
-        printableIndexes = [ ranks[1:max-1] ; correctKeyMaterial[target] + 1]
+      if correctKbOffset > m
+        printableIndexes = [ ranks[1:m-1] ; correctKeyMaterial[target] + 1]
       end
     end
     
@@ -62,11 +71,26 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, nrConsum
         pretty = "candidate"
       end
 
+      pad = repeat(" ", nrDecimals - ndigits(rank,10))
+      print(io, "rank: ", pad, rank)
+      print(io, ", ")
+      if length(correctKeyMaterial) > 0 && correctKeyMaterial[target] == cand
+        color = correctKbOffset == 1 ? :green : :red
+        print_with_color(color, io, pretty, bold=true)
+      else
+        print(io, pretty)
+      end
+      print(io, ": 0x", hex(cand,nrNibbles))
+      print(io, ", ")
       if nrLeakageFunctions == 1
         sample = getOffsets(rankData, phase, target)[i]
-        @printf(io, "rank: %3d, %s: 0x%02x, peak: %f @ %d\n", rank, pretty, cand, peak, sample)
+        print(io, "peak: ",  @sprintf("%f",peak))
+        print(io, " @ ", sample)
+        print(io, "\n")
       else
-        @printf(io, "rank: %3d, %s: 0x%02x, %s of peaks: %f\n", rank, pretty, cand, params.leakageCombinator, peak)
+        # @printf(io, "rank: %s%d, %s: 0x%s, %s of peaks: %f\n", pad, rank, pretty, hex(cand,nrNibbles), params.leakageCombinator, peak)
+        print(io, params.leakageCombinator, " of peaks: ", @sprintf("%f",peak))
+        print(io, "\n")
         if printsubs
           # print the max peak for each leakage function
           for leakage in 1:nrLeakageFunctions
@@ -81,7 +105,7 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, nrConsum
     end
   end
 
-  @printf(io, "recovered key material: %s\n", bytes2hex(winners))
+  @printf(io, "recovered key material: %s\n", bytes2hex(reinterpret(UInt8, map(hton, winners))))
 
 end
 
@@ -224,21 +248,51 @@ function getLeakages(evo::RankData, phase::Int, target::Int)
   return sort(collect(keys(evo.scores[phase][target])))
 end
 
+export getTargetType
+
+function getTargetType(evo::RankData, phase::Int, target::Int)
+  maxval = size(evo.combinedScores[phase][target])[1]-1
+  local mytype
+  if maxval < 2^8
+    mytype = UInt8
+  elseif  maxval < 2^16
+    mytype = UInt16
+  elseif  maxval < 2^32
+    mytype = UInt32
+  else
+    throw(ErrorException("broken"))
+  end
+
+  return mytype
+end
+
+
 export getGuesses
 
 function getGuesses(evo::RankData, phase::Int, target::Int)
-  return collect(UInt8, 0:size(evo.combinedScores[phase][target])[1]-1)
+  maxval = size(evo.combinedScores[phase][target])[1]-1
+  local mytype
+  if maxval < 2^8
+    mytype = UInt8
+  elseif  maxval < 2^16
+    mytype = UInt16
+  elseif  maxval < 2^32
+    mytype = UInt32
+  else
+    throw(ErrorException("broken"))
+  end
+  return collect(mytype, 0:maxval)
 end
 
 export getRankingsEvolution
 
-function getRankingsEvolution(evo::RankData, phase::Int, target::Int, kbval::UInt8)
+function getRankingsEvolution(evo::RankData, phase::Int, target::Int, kbval)
     (rows,cols) = size(evo.combinedScores[phase][target])
     ranks = map(r -> findfirst(x -> x == kbval + 1, sortperm(evo.combinedScores[phase][target][:,r], rev=true)), 1:cols)
     return ranks
 end
 
-function getRankingsEvolution(evo::RankData, phase::Int, target::Int, leakage::Int, kbval::UInt8)
+function getRankingsEvolution(evo::RankData, phase::Int, target::Int, leakage::Int, kbval)
     (rows,cols) = size(evo.scores[phase][target][leakage])
     ranks = map(r -> findfirst(x -> x == kbval + 1, sortperm(evo.scores[phase][target][leakage][:,r], rev=true)), 1:cols)
     return ranks
@@ -254,11 +308,11 @@ function getScoresEvolution(evo::RankData, phase::Int, target::Int, leakage::Int
   return evo.scores[phase][target][leakage]
 end  
 
-function getScoresEvolution(evo::RankData, phase::Int, target::Int, kbval::UInt8)
+function getScoresEvolution(evo::RankData, phase::Int, target::Int, kbval)
   return evo.combinedScores[phase][target][kbval+1,:]
 end
 
-function getScoresEvolution(evo::RankData, phase::Int, target::Int, leakage::Int, kbval::UInt8)
+function getScoresEvolution(evo::RankData, phase::Int, target::Int, leakage::Int, kbval)
   return evo.scores[phase][target][leakage][kbval+1,:]
 end
 
@@ -356,7 +410,9 @@ end
 export getPhaseKey
 
 function getPhaseKey(params::DpaAttack, attack::Attack, phase::Int, sc::RankData)
-  return map(x -> UInt8(sortperm(getScores(sc,phase,x), rev=true)[1] - 1), getTargets(sc, phase))
+  #FIXME: broken for attacks with different target output types
+  targettype = getTargetType(sc,phase,1)
+  return map(x -> targettype(sortperm(getScores(sc,phase,x), rev=true)[1] - 1), getTargets(sc, phase))
 end
 
 export getKey

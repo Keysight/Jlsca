@@ -205,8 +205,6 @@ type IncrementalCovarianceTiled
     nrTilesY = div(numberOfY+tilesizeY-1, tilesizeY)
     covXY = Matrix{IncrementalCovariance}(nrTilesX, nrTilesY)
 
-    # @printf("#threads %d, numberOfX %d, numberOfY %d, nrTilesX %d, nrTilesY %d\n", Threads.nthreads(), numberOfX, numberOfY, nrTilesX, nrTilesY)
-
     for y in 1:nrTilesY
       minY = (y-1)*tilesizeY+1
       maxY = min(tilesizeY, numberOfY-(y-1)*tilesizeY)
@@ -219,8 +217,6 @@ type IncrementalCovarianceTiled
       end
     end
 
-    # cacheXn = [Vector{Float64}(numberOfX) for x in 1:caches]
-    # cacheYn = [Vector{Float64}(numberOfY) for x in 1:caches]
     cacheXn = Vector{Vector{Float64}}(caches)
     cacheYn = Vector{Vector{Float64}}(caches)
 
@@ -277,8 +273,6 @@ function add!(state::IncrementalCovarianceTiled, dataX::AbstractVector, dataY::A
 
   state.cacheCount += 1
   const cacheCount = state.cacheCount
-  # copy!(state.cacheXn[cacheCount], dataXn)
-  # copy!(state.cacheYn[cacheCount], dataYn)
   state.cacheXn[cacheCount] = dataXn
   state.cacheYn[cacheCount] = dataYn
 
@@ -295,7 +289,6 @@ function add!(state::IncrementalCovarianceTiled, dataX::AbstractVector, dataY::A
   end
 
   flushcache!(state)
-
 end
 
 function add!(this::IncrementalCovarianceTiled, other::IncrementalCovarianceTiled, updateMeanX::Bool=true, updateMeanY::Bool=true)

@@ -17,7 +17,7 @@ for s in instances(AesKeyLength); @eval export $(Symbol(s)); end
 
 export AesAttack
 
-abstract type AesAttack <: Attack end
+abstract type AesAttack <: Attack{UInt8} end
 
 # two types of attacks: sbox or mixcolumn
 type AesSboxAttack <: AesAttack
@@ -99,7 +99,7 @@ function numberOfPhases(params::AesMCAttack)
 end
 
 # target functions
-type InvMcOut <: Target{UInt8,UInt32}
+type InvMcOut <: Target{UInt8,UInt32,UInt8}
   invsbox::Vector{UInt8}
   constant::UInt8
   position::Int
@@ -119,7 +119,7 @@ end
 
 show(io::IO, a::InvMcOut) = print(io, "Inverse MC out")
 
-type McOut <: Target{UInt8,UInt32}
+type McOut <: Target{UInt8,UInt32,UInt8}
   sbox::Vector{UInt8}
   constant::UInt8
   position::Int
@@ -139,7 +139,7 @@ end
 
 show(io::IO, a::McOut) = print(io, "MC out")
 
-type McOutXORIn <: Target{UInt8,UInt32}
+type McOutXORIn <: Target{UInt8,UInt32,UInt8}
   sbox::Vector{UInt8}
   constant::UInt8
   position::Int
@@ -159,7 +159,7 @@ end
 
 show(io::IO, a::McOutXORIn) = print(io, "MC out, XOR'ed w/ input")
 
-type InvMcOutXORIn <: Target{UInt8,UInt32}
+type InvMcOutXORIn <: Target{UInt8,UInt32,UInt8}
   sbox::Vector{UInt8}
   constant::UInt8
   position::Int
@@ -179,28 +179,28 @@ end
 
 show(io::IO, a::InvMcOutXORIn) = print(io, "Inverse MC out, XOR'ed w/ input")
 
-type SboxOut <: Target{UInt8,UInt8}
+type SboxOut <: Target{UInt8,UInt8,UInt8}
   sbox::Vector{UInt8}
 end
 
 target(a::SboxOut, data::UInt8, keyByte::UInt8) = a.sbox[(data ⊻ keyByte) + 1]
 show(io::IO, a::SboxOut) = print(io, "Sbox out")
 
-type InvSboxOut <: Target{UInt8,UInt8}
+type InvSboxOut <: Target{UInt8,UInt8,UInt8}
   invsbox::Vector{UInt8}
 end
 
 target(a::InvSboxOut, data::UInt8, keyByte::UInt8) = a.invsbox[(data ⊻ keyByte) + 1]
 show(io::IO, a::InvSboxOut) = print(io, "Inverse sbox out")
 
-type SboxOutXORIn <: Target{UInt8,UInt8}
+type SboxOutXORIn <: Target{UInt8,UInt8,UInt8}
   sbox::Vector{UInt8}
 end
 
 target(a::SboxOutXORIn, data::UInt8, keyByte::UInt8) = data ⊻ keyByte ⊻ a.sbox[(data ⊻ keyByte) + 1]
 show(io::IO, a::SboxOutXORIn) = print(io, "Sbox out, xor'ed w/ input")
 
-type InvSboxOutXORIn <: Target{UInt8,UInt8}
+type InvSboxOutXORIn <: Target{UInt8,UInt8,UInt8}
   invsbox::Vector{UInt8}
 end
 

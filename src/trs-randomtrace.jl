@@ -14,9 +14,10 @@ type RandomTrace <: Trace
   dataPasses
   postProcInstance
   tracesReturned
+  colRange::Nullable{Range}
 
   function RandomTrace(nrTraces::Int, dataSpace::Int, sampleType::Type, nrSamples::Int) 
-    new(dataSpace, sampleType, nrSamples,nrTraces, [], [], Union,0)
+    new(dataSpace, sampleType, nrSamples,nrTraces, [], [], Union,0,Nullable{Range}())
   end
 end
 

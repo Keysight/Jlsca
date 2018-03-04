@@ -34,10 +34,7 @@ function reset(c::CondAvg)
   c.globcounter = 0
 end
 
-function addAverage(c::CondAvg, idx::Int, val::Int, samples::AbstractVector)
-  c.counters[idx][val] += 1
-  counter::Int = c.counters[idx][val]
-  average::Vector{Float64} = c.averages[idx][val]
+function addAverage(c::CondAvg, samples::Vector, average::Vector, counter::Int)
 
   for i in eachindex(samples)
     @inbounds average[i] += (samples[i] - average[i]) / counter
@@ -45,22 +42,23 @@ function addAverage(c::CondAvg, idx::Int, val::Int, samples::AbstractVector)
 end
 
 function add(c::CondAvg, trs::Trace, traceIdx::Int)
-  data::AbstractVector = getData(trs, traceIdx)
-  samples = Nullable{Vector{trs.sampleType}}()
-
+  data = getData(trs, traceIdx)
   if length(data) == 0
     return
   end
 
+  samples = getSamples(trs, traceIdx)
+  if length(samples) == 0
+    return
+  end
+
+  add(c,samples,data,traceIdx)
+
+end
+
+function add(c::CondAvg, samples::Vector{S}, data::Vector{D}, traceIdx::Int) where {S,D}
   for idx in eachindex(data)
     val = data[idx]
-
-    if isnull(samples)
-     samples = Nullable(getSamples(trs, traceIdx))
-     if length(get(samples)) == 0
-       return
-     end
-    end
 
     if !haskey(c.counters, idx)
      c.counters[idx] = Dict{Int,Int}()
@@ -69,11 +67,13 @@ function add(c::CondAvg, trs::Trace, traceIdx::Int)
 
     if !haskey(c.counters[idx], val)
      c.counters[idx][val] = 0
-     c.averages[idx][val] = zeros(Float64, length(get(samples)))
+     c.averages[idx][val] = zeros(Float64, length(samples))
     end
 
-    addAverage(c, idx, Int(val), get(samples))
-
+    c.counters[idx][val] += 1
+    counter = c.counters[idx][val]
+    average = c.averages[idx][val]
+    addAverage(c, samples, average, counter)
   end
 
   c.globcounter += 1

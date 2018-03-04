@@ -20,7 +20,7 @@ end
 
 show(io::IO, a::LRA) = print(io, "LRA")
 
-function computeScores(a::LRA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
+function computeScores(a::LRA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out,Guess}, kbvals::Vector{Guess}) where {In,Out,Guess}
    C = lra(data, samples, target, a.basisModel, kbvals)
   return C
 end
@@ -30,7 +30,7 @@ function printParameters(a::LRA)
 end
 
 # LRA for a single data column
-function lra(data::AbstractArray{In}, samples::AbstractArray, t::Target{In,Out}, basisFunction::Function, keyChunkValues::Vector{UInt8}) where {In,Out}
+function lra(data::AbstractArray{In}, samples::AbstractArray, t::Target{In,Out,Guess}, basisFunction::Function, keyChunkValues::Vector{Guess}) where {In,Out,Guess}
     (rs, cs) = size(samples)
 
     SStot = sum((samples .- mean(samples, 1)) .^ 2, 1)'

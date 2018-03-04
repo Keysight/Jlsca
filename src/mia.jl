@@ -34,7 +34,7 @@ end
 
 numberOfLeakages(a::MIA) = length(a.leakages)
 
-function computeScores(a::MIA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out}, kbvals::Vector{UInt8}) where {In,Out}
+function computeScores(a::MIA, data::AbstractArray{In}, samples::AbstractArray, target::Target{In,Out,Guess}, kbvals::Vector{Guess}) where {In,Out,Guess}
   (tr,tc) = size(samples)
   (dr,) = size(data)
   tr == dr || throw(DimensionMismatch())

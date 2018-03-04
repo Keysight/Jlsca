@@ -26,7 +26,7 @@ end
 
 show(io::IO, a::Bit) = print(io, "bit$(a.idx)")
 
-leak(this::Bit, intermediate::Union{UInt8,UInt16,UInt32}) = UInt8((intermediate >> this.idx) & 1)
+leak(this::Bit, intermediate::Unsigned) = UInt8((intermediate >> this.idx) & 1)
 
 type HW <: Leakage
 end

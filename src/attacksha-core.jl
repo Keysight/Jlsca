@@ -6,7 +6,7 @@ using Jlsca.Sha
 
 export Sha1InputAttack,Sha1OutputAttack
 
-abstract type Sha1Attack <: Attack end
+abstract type Sha1Attack <: Attack{UInt8} end
 
 type Sha1InputAttack <: Sha1Attack
   xor::Bool
@@ -17,18 +17,18 @@ type Sha1InputAttack <: Sha1Attack
   end
 end
 
-type ModAdd <: Target{UInt8,UInt8} end
+type ModAdd <: Target{UInt8,UInt8,UInt8} end
 target(a::ModAdd, data::UInt8, keyByte::UInt8) = data + keyByte
 # target(a::ModAdd, data::UInt8, keyByte::UInt8) = UInt16(data) + keyByte
 show(io::IO, a::ModAdd) = print(io, "Modular addition")
 guesses(a::ModAdd) = collect(UInt8, 0:255)
 
-type ModAddXor <: Target{UInt16,UInt8} end
+type ModAddXor <: Target{UInt16,UInt8,UInt8} end
 target(a::ModAddXor, data::UInt16, keyByte::UInt8) = (UInt8(data >> 8) + keyByte) ⊻ UInt8(data & 0xff)
 
 guesses(a::ModAddXor) = collect(UInt8, 0:255)
 
-type FoutZ4b <: Target{UInt8,UInt8} end
+type FoutZ4b <: Target{UInt8,UInt8,UInt8} end
 
 function target(a::FoutZ4b, data::UInt8, keyByte::UInt8)  
     x = UInt8(data & 0xf)
@@ -39,7 +39,7 @@ end
 show(io::IO, a::FoutZ4b) = print(io, "Ch out, 4-bits")
 guesses(a::FoutZ4b) = collect(UInt8, 0:15)
 
-type FoutZ8b <: Target{UInt8,UInt8} 
+type FoutZ8b <: Target{UInt8,UInt8,UInt8} 
     y::UInt8
 end
 
@@ -285,7 +285,7 @@ end
 
 type Sha1OutputAttack <: Sha1Attack end
 
-type ModSub <: Target{UInt8,UInt8} end
+type ModSub <: Target{UInt8,UInt8,UInt8} end
 show(io::IO, a::ModSub) = print(io, "Modular subtraction")
 target(a::ModSub, data::UInt8, keyByte::UInt8) = data - keyByte
 

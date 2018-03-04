@@ -31,12 +31,12 @@ for s in instances(Status); @eval export $(Symbol(s)); end
 
 export Attack
 """
-Inherit this abstract type for your own attacks. 
+Inherit this abstract type for your own attacks. Type `Attack` has type parameter `Unit`, usually an UInt8, which is the type used for defining the type of functions `getDataPass`, `getTargets` and `recoverKey`. 
 
 Implemented attacks in Jlsca:
 `AesSboxAttack`,`AesMCAttack`,`DesSboxAttack`,`DesRoundAttack`,`Sha1InputAttack`, `Sha1OutputAttack`.
 """
-abstract type Attack end
+abstract type Attack{Unit <: Unsigned} end
 
 export Analysis
 abstract type Analysis end
@@ -59,17 +59,17 @@ abstract type IncrementalAnalysis <: Analysis end
 
 export Target
 """
-Inherit this abstract type to define your own target functions for your own attack. The type parameters are the input and output of the target function respectively. You'll need to implement `target` for your `Target` type. 
+Inherit this abstract type to define your own target functions for your own attack. The type parameters are the input, output and guess types of the target function respectively. You'll need to implement `target` for your `Target` type. 
 
 Implemented targets in Jlsca: `MCOut`,`InvMCOut`,`SboxOut`,`InvSboxOut`,`DesSboxOut`,`RoundOut`,`ModAdd`, ....
 
 # Example
 ```
-type MyTarget <: Target{UInt8,UInt8} end
+type MyTarget <: Target{UInt8,UInt8,UInt8} end
 target(a::MyTarget, input::UInt8, kb::UInt8) = xor(input,kb)
 ```
 """
-abstract type Target{In <:Integer, Out <: Integer} end
+abstract type Target{In <:Integer, Out <: Integer, Guess <: Integer} end
 
 export Maximization
 """
@@ -223,7 +223,7 @@ type DpaAttack
   knownKey::Nullable{Vector{UInt8}}
   updateInterval::Nullable{Int}
   phases::Nullable{Vector{Int}}
-  phaseInput::Nullable{Vector{UInt8}}
+  phaseInput::Nullable{Vector}
   outputkka::Nullable{AbstractString}
   targetOffsets::Nullable{Vector{Int}}
   scoresCallBack::Nullable{Function}
@@ -237,13 +237,13 @@ type DpaAttack
   # caching stuff below, not configurable, overwritten for each sca run
   targets::Vector{Vector{Target}}
   phasefn::Vector{Nullable{Function}}
-  phaseData::Vector{UInt8}
-  correctKeyMaterial::Vector{UInt8}
+  phaseData::Vector
+  correctKeyMaterial::Vector
   intervals::Int
   rankData
 
   function DpaAttack(attack::Attack, analysis::Analysis)
-    new(attack,analysis,1,Nullable(),Nullable(),Nullable(),Nullable(),Nullable(),Nullable(), Nullable(), Nullable(), Sum(), Nullable() , Nullable(), Nullable(),Nullable(),Nullable())
+    new(attack,analysis,1,Nullable(),Nullable(),Nullable(),Nullable(),Nullable(),Nullable(), Nullable(), Nullable(), Sum(), Nullable(),Nullable(), Nullable(),Nullable(),Nullable())
   end
 end
 
@@ -317,17 +317,25 @@ function printParameters(a::DpaAttack)
   if !isnull(a.knownKey)
     print("known key:    $(bytes2hex(get(a.knownKey)))\n")
   end
+  if !isnull(a.maxCols)
+    print("max cols into post processor: $(get(a.maxCols))\n")
+  end
+  if !isnull(a.maxColsPost)
+    print("max cols into non-inc analysis: $(get(a.maxColsPost))\n")
+  end
 end
 
 printParameters(a::Attack) = return
-guesses(a::Target{In,Out}) where {In,Out} = collect(UInt8, 0:255)
+guesses(a::Target{In,Out,Guess}) where {In,Out,Guess} = collect(Guess, typemin(Guess):typemax(Guess))
 numberOfPhases(a::Attack) = 1
 numberOfTargets(a::Attack, phase::Int) = 1
-getTargets(a::Attack, phase::Int, phaseInput::Vector{UInt8}) = []
-recoverKey(a::Attack, recoverKeyMaterial::Vector{UInt8}) = recoverKeyMaterial
-getDataPass(a::Attack, phase::Int, phaseInput::Vector{UInt8}) = Nullable()
+getTargets(a::Attack{U}, phase::Int, phaseInput::Vector{U}) where {U} = []
+recoverKey(a::Attack{U}, recoverKeyMaterial::Vector{U}) where {U} = recoverKeyMaterial
+getDataPass(a::Attack{U}, phase::Int, phaseInput::Vector{U}) where {U} = Nullable()
 totalNumberOfTargets(a::Attack) = sum(x -> numberOfTargets(a,x), 1:numberOfPhases(a))
 isKeyCorrect(a::Attack, key1::Vector{UInt8}, key2::Vector{UInt8}) = key1 == key2
+
+unittype(a::Attack{T}) where {T} = T
 
 export numberOfLeakages
 
@@ -450,14 +458,14 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
         oo = (l-1)*nrKbvals
         vv = @view C[:,oo+1:oo+nrKbvals]
         yieldto(super, (INTERMEDIATESCORES, (phase, o, l, vv)))
-        update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[o], l, nrTraces, length(cols), nrrows, samplecols,cols[1])
+        update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[o], l, nrTraces, length(cols), nrrows, samplecols,cols[1]+sr-1)
       end
     end
 
     setCombined!(params.leakageCombinator, rankData, phase, targetOffsets[o], nrTraces)
 
     # let somebody do something with the scores for these traces
-    yieldto(super, (INTERMEDIATERANKS, (rankData, nrTraces, nrrows, cols[end], length(cols), [targetOffsets[o]])))
+    yieldto(super, (INTERMEDIATERANKS, (rankData, [targetOffsets[o]])))
   end
 end
 
@@ -497,7 +505,7 @@ function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Ta
   end
 
   # let somebody do something with the scores for these traces
-  yieldto(super, (INTERMEDIATERANKS, (rankData, getCounter(trs),getCounter(trs), cols[end], length(cols), collect(1:length(targetOffsets)))))
+  yieldto(super, (INTERMEDIATERANKS, (rankData, collect(1:length(targetOffsets)))))
 end
 
 # does the attack & analysis per xxx traces, should be called from an scatask
@@ -509,21 +517,28 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
     end
 
     if isa(trs, DistributedTrace)
-      samplecols = @fetch length(getSamples(Main.trs,rows[1]))
+      (data,samples,idx) = @fetch getFirstValid(Main.trs)
     else
-      samplecols = length(getSamples(trs,rows[1]))
+      (data,samples,idx) = getFirstValid(trs)
     end
+    samplecols = length(samples)
 
     # FIXME: need to pick something sane here
     maxCols = get(params.maxCols, 200000)
     segmented = div(samplecols,maxCols) > 0
+    passadded = false
 
     (segmented && (!isnull(params.recoverCond) || !isnull(params.saveCond))) && throw(ErrorException("Increase params.maxCols, segmentation and saving or recovering conditional output is not supported"))
 
     for sr in 1:maxCols:samplecols
       srEnd = min(sr+maxCols-1, samplecols)
+      print("Attacking columns $(sr:srEnd)\n")
       if segmented
-        addSamplePass(trs, x -> x[sr:srEnd])
+        setColumnRange(trs, Nullable{Range}(sr:srEnd))
+        if nrSamplePasses(trs) == 0
+          passadded = true
+          addSamplePass(trs, x -> x)
+        end
       end
 
       firstTrace = rows[1]
@@ -547,7 +562,10 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
       end
 
       if segmented
-        popSamplePass(trs)
+        setColumnRange(trs, Nullable{Range}())
+        if passadded
+          popSamplePass(trs)
+        end
       end
 
       # reset the state of trace post processor (conditional averager)
@@ -595,7 +613,7 @@ function scatask(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, nu
   end
 
   # get the recovered key material
-  roundkey::Vector{UInt8} = getPhaseKey(params, params.attack, phase, rankData)
+  roundkey = getPhaseKey(params, params.attack, phase, rankData)
   yieldto(super, (PHASERESULT, roundkey))
 
   if numberOfPhases(params.attack) == phase
@@ -701,8 +719,8 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
 
   local key = nothing
   local status = nothing
-  local phaseInput = Vector{UInt8}(0)
-  local phaseOutput = Vector{UInt8}(0)
+  local phaseInput = Vector{unittype(params.attack)}(0)
+  local phaseOutput = Vector{unittype(params.attack)}(0)
 
   lazyinit(params)
   
@@ -757,7 +775,7 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
 
     print("\nphase: $(phase) / $(numberOfPhases(params.attack)), #targets $(length(targets))\n")
     if length(phaseInput) > 0
-      @printf("phase input: %s\n", bytes2hex(phaseInput))
+      @printf("phase input: %s\n", bytes2hex(reinterpret(UInt8, map(hton, phaseInput))))
     end
     print("\n")
 
@@ -791,8 +809,8 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
           end
         end
       elseif status == INTERMEDIATERANKS
-        (rankData, numberOfTracesProcessed, numberOfRowsAfterProcessing, numberOfColsProcessed, numberOfColsAfterProcessing, keyOffsets) = statusData
-        printScores(params, phase, rankData, numberOfTracesProcessed, numberOfRowsAfterProcessing, numberOfColsProcessed, numberOfColsAfterProcessing, keyOffsets)
+        (rankData, keyOffsets) = statusData
+        printScores(params, phase, rankData, keyOffsets)
       elseif status == PHASERESULT
         phaseOutput = vcat(phaseOutput, statusData)
       elseif status == INTERMEDIATESCORES
