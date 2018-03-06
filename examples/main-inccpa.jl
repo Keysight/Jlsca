@@ -1,3 +1,5 @@
+# Play around with this for multi-processing. IncrementalCPA benefits also from threading, tweak env variable JULIA_NUM_THREADS
+# addprocs(2)
 
 @everywhere begin
   using Jlsca.Sca
@@ -30,7 +32,7 @@ function gofaster()
       setPostProcessor(trs, IncrementalCorrelation(SplitByTracesBlock()))
   end
 
-  numberOfTraces = @fetch length(Main.trs)
+  numberOfTraces = length(trs)
 
   ret = sca(DistributedTrace(), params, 1, numberOfTraces)
 

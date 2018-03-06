@@ -27,15 +27,8 @@ function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysi
 
         # create Trace instance
         if conditional
-          @everyworker begin
-            using Jlsca.Trs
-            trs = InspectorTrace($fullfilename)
-
-            # bit expand
-            # addSamplePass(trs, tobits)
-
-            setPostProcessor(trs, CondAvg(SplitByTracesSliced()))
-          end
+            trs = InspectorTrace(fullfilename)
+            setPostProcessor(trs, CondAvg())
         else
           trs = InspectorTrace(fullfilename)
         end
@@ -47,11 +40,7 @@ function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysi
           params.analysis.leakages = [Bit(7)]
         end
 
-        if conditional
-          key = getKey(params, sca(DistributedTrace(),params,1, 200))
-        else
-          key = getKey(params, sca(trs,params,1, 200))
-        end
+        key = getKey(params, sca(trs,params,1, 200))
 
         @test(key == get(params.knownKey))
 

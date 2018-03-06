@@ -4,8 +4,8 @@
 
 using Base.Test
 
-using Jlsca.Sca
-using Jlsca.Trs
+@everywhere using Jlsca.Sca
+@everywhere using Jlsca.Trs
 
 function ParallelCondAvgTest(splitmode)
     len = 200
@@ -19,8 +19,7 @@ function ParallelCondAvgTest(splitmode)
     params.analysis = CPA()
     params.analysis.leakages = [HW()]
 
-    @everyworker begin
-      using Jlsca.Trs
+    @everywhere begin
       trs = InspectorTrace($fullfilename)
       if $splitmode == 1
         setPostProcessor(trs, CondAvg(SplitByTracesSliced()))
@@ -69,8 +68,7 @@ function ParallelCondAvgTestWithInterval(splitmode)
     params.updateInterval = Nullable(updateInterval)
     params.maxCols = 500
 
-    @everyworker begin
-      using Jlsca.Trs
+    @everywhere begin
       trs = InspectorTrace($fullfilename)
       if $splitmode == 1
         setPostProcessor(trs, CondAvg(SplitByTracesSliced()))

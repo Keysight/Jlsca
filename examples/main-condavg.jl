@@ -1,3 +1,5 @@
+# Play around with this for multi-processing.
+# addprocs(2)
 
 @everywhere begin
   using Jlsca.Sca
@@ -26,7 +28,7 @@ function gofaster()
       setPostProcessor(trs, CondAvg(SplitByTracesBlock()))
   end
 
-  numberOfTraces = @fetch length(Main.trs)
+  numberOfTraces = length(trs)
 
   ret = sca(DistributedTrace(), params, 1, numberOfTraces)
 

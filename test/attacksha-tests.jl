@@ -26,14 +26,12 @@ function testShaTraces(conditional::Bool,direction::Direction, analysis::Analysi
 
         # create Trace instance
         if conditional
-          @everyworker begin
-            trs = InspectorTrace($fullfilename)
+            trs = InspectorTrace(fullfilename)
             
             # samples are intermediates, convert to "leakage" here.
             addSamplePass(trs, x -> hw.(x))
 
             setPostProcessor(trs, CondAvg(SplitByTracesSliced()))
-          end
         else
           trs = InspectorTrace(fullfilename)
 
@@ -41,12 +39,7 @@ function testShaTraces(conditional::Bool,direction::Direction, analysis::Analysi
           addSamplePass(trs, x -> hw.(x))
         end
 
-
-        if conditional
-          key = getKey(params, sca(DistributedTrace(),params,1,100))
-        else
-          key = getKey(params, sca(trs,params,1, 100))
-        end
+        key = getKey(params, sca(trs,params,1, 100))
 
         @test(key == get(params.knownKey))
     end

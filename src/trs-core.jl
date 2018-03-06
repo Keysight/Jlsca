@@ -18,6 +18,8 @@ export Pass
 
 abstract type Pass end
 
+export pass
+
 pass(a::Pass, x::AbstractArray{T,1}, idx::Int, cols::Range) where {T} = pass(a,x,idx)[cols] 
 
 type SimpleFunctionPass <: Pass 
