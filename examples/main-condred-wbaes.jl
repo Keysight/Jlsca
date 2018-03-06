@@ -1,8 +1,8 @@
 
-using Jlsca.Sca
-using Jlsca.Trs
-using Jlsca.Align
-using Jlsca.Aes
+@everywhere using Jlsca.Sca
+@everywhere using Jlsca.Trs
+@everywhere using Jlsca.Align
+@everywhere using Jlsca.Aes
 
 import Jlsca.Sca.leak
 
@@ -51,8 +51,7 @@ function gofaster()
 
   toBitsEfficient = true
 
-  @everyworker begin
-      using Jlsca.Trs
+  @everywhere begin
       # the "true" argument will force the sample type to be UInt64, throws an exception if samples are not 8-byte aligned
       trs = InspectorTrace($filename, $toBitsEfficient)
 
@@ -62,7 +61,7 @@ function gofaster()
       setPostProcessor(trs, CondReduce(SplitByTracesBlock()))
   end
 
-  numberOfTraces = @fetch length(Main.trs)
+  numberOfTraces = length(trs)
 
   ret = sca(DistributedTrace(), params, 1, numberOfTraces)
 

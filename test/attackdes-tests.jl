@@ -24,22 +24,14 @@ function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysi
 
         # create Trace instance
         if conditional
-          @everyworker begin
-            using Jlsca.Trs
-            trs = InspectorTrace($fullfilename)
+            trs = InspectorTrace(fullfilename)
 
             setPostProcessor(trs, CondAvg(SplitByTracesSliced()))
-          end
         else
           trs = InspectorTrace(fullfilename)
         end
 
-
-        if conditional
-          key = getKey(params, sca(DistributedTrace(),params,1,200))
-        else
-          key = getKey(params, sca(trs,params,1, 200))
-        end
+        key = getKey(params, sca(trs,params,1, 200))
 
         @test(key == get(params.knownKey))
 

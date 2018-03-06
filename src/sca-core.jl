@@ -429,7 +429,7 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
     (nrrows,samplecols) = size(kbsamples)
 
      # FIXME: need to pick something sane here
-    maxCols = get(params.maxColsPost, 10000)
+    maxCols = get(params.maxColsPost, get(params.maxCols, 200000))
 
     target = getTarget(params, phase, targetOffsets[o])
     kbvals = guesses(target)
@@ -532,7 +532,7 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
 
     for sr in 1:maxCols:samplecols
       srEnd = min(sr+maxCols-1, samplecols)
-      print("Attacking columns $(sr:srEnd)\n")
+      print("Attacking columns $(sr:srEnd) out of $samplecols columns\n")
       if segmented
         setColumnRange(trs, Nullable{Range}(sr:srEnd))
         if nrSamplePasses(trs) == 0

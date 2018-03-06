@@ -4,8 +4,8 @@
 
 using Base.Test
 
-using Jlsca.Sca
-using Jlsca.Trs
+@everywhere using Jlsca.Sca
+@everywhere using Jlsca.Trs
 
 function ParallelCondReduceTest(splitmode)
     len = 200
@@ -19,8 +19,7 @@ function ParallelCondReduceTest(splitmode)
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0)]
 
-    @everyworker begin
-      using Jlsca.Trs
+    @everywhere begin
       trs = InspectorTrace($fullfilename, true)
       addSamplePass(trs, tobits)
       if $splitmode == 1
@@ -72,8 +71,7 @@ function ParallelCondReduceTestWithInterval(splitmode)
     params.updateInterval = Nullable(updateInterval)
     params.maxCols = 500
 
-    @everyworker begin
-      using Jlsca.Trs
+    @everywhere begin
       trs = InspectorTrace($fullfilename, true)
       addSamplePass(trs, tobits)
       if $splitmode == 1

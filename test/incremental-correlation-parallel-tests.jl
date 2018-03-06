@@ -60,7 +60,7 @@ function ParallelIncrementalCPATest(splitmode)
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
 
-    @everyworker begin
+    @everywhere begin
       trs = InspectorTrace($fullfilename)
       if $splitmode == 1
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
@@ -70,7 +70,7 @@ function ParallelIncrementalCPATest(splitmode)
     end
 
     rankData1 = sca(DistributedTrace(),params,1, len)
-    @everyworker close(trs)
+    @everywhere close(trs)
 
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
@@ -110,7 +110,7 @@ function ParallelIncrementalCPATestWithInterval(splitmode)
     params.updateInterval = updateInterval
     params.maxCols = 600
 
-    @everyworker begin
+    @everywhere begin
       trs = InspectorTrace($fullfilename)
       if $splitmode == 1
         setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
@@ -120,7 +120,7 @@ function ParallelIncrementalCPATestWithInterval(splitmode)
     end
 
     rankData1 = sca(DistributedTrace(),params,1, len)
-    @everyworker close(trs)
+    @everywhere close(trs)
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
     params.updateInterval = Nullable()
