@@ -263,84 +263,6 @@ function test2tiled()
   @test getCorr(covXY) ≈ getCorr(covXY1)
 end
 
-function speedtest(rows, nrX, nrY)
-
-  meanVarX = IncrementalMeanVariance(nrX)
-  meanVarY = IncrementalMeanVariance(nrY)
-  covXY = IncrementalCovariance(meanVarX, meanVarY)
-
-  for r in 1:rows
-    x = rand(Float64, nrX)
-    y = rand(Float64, nrY)
-    add!(covXY, x, y)
-  end
-
-  # Profile.print(maxdepth=12,combine=true)
-
-  return getCorr(covXY)
-end
-
-using Base.Threads
-
-function speedtesttiled(rows, nrX, nrY, tilesX, tilesY,cache)
-
-  meanVarX = IncrementalMeanVariance(nrX)
-  meanVarY = IncrementalMeanVariance(nrY)
-  covXY = IncrementalCovarianceTiled(meanVarX, meanVarY, tilesX, tilesY, cache)
-
-  for r in 1:rows
-    x = rand(Float64, nrX)
-    y = rand(Float64, nrY)
-    add!(covXY, x, y)
-  end
-
-  # Profile.print(maxdepth=12,combine=true)
-
-  return getCorr(covXY)
-end
-
-function dumpasm()
-  c = Array(Float64,3,5)
-  x = rand(Float64, 10)
-  y = rand(Float64, 10)
-
-  @code_warntype Trs.updateCov!(c, x, 1, 10, y, 1, 10, 0.9)
-  @code_native Trs.updateCov!(c, x, 1, 10, y, 1, 10, 0.9)
-
-end
-
-function bla()
-  nrX = 4
-  nrY = 5
-
-  meanVarX = IncrementalMeanVariance(nrX)
-  meanVarY = IncrementalMeanVariance(nrY)
-  covXY = IncrementalCovariance(meanVarX, meanVarY)
-
-  add!(covXY, [2.0,2.0,3.0,4.0], [5.0,6.0,7.0,8.0,9.0])
-
-  println(covXY.cov)
-end
-
-function meanspeedtest1()
-  rows = 10000
-  nrX = 512
-  nrY = 8*256*16
-
-  meanVarX = IncrementalMeanVariance(nrX)
-  meanVarY = IncrementalMeanVariance(nrY)
-
-  for r in 1:rows
-    x = rand(Float64, nrX)
-    y = rand(Float64, nrY)
-
-    normalX = x .- meanVarX.mean
-    normalY = y .- meanVarY.mean
-    add!(meanVarX, x, normalX)
-    add!(meanVarY, y, normalY)
-  end
-
-end
 
 test1tiled()
 test1ntiled()
@@ -350,17 +272,3 @@ test1()
 testmeanadd()
 test1n()
 test2()
-
-const rows = 500
-const nrX = 1500
-const nrY = 16*8*256
-const tilesX = 128
-const tilesY = 128
-const cache = 32
-
-# @time speedtest(rows,nrX,nrY)
-# @time speedtest(rows,nrX,nrY)
-# @time speedtesttiled(rows,nrX,nrY,tilesX,tilesY,cache)
-# @time speedtesttiled(rows,nrX,nrY,tilesX,tilesY,cache)
-
-# dumpasm()
