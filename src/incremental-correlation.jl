@@ -29,9 +29,8 @@ maximization(a::IncrementalCPA) = AbsoluteGlobalMaximization()
 type IncrementalCorrelation <: PostProcessor
   worksplit::WorkSplit
   counter::Int
-  covXY::Dict{Int,IncrementalCovarianceTiled}
   meanXinitialized::Bool
-  meanX::IncrementalMeanVariance
+  covXY::IncrementalCovarianceTiled
   targetOffsets::Vector{Int}
   leakages::Vector{Leakage}
   targets::Vector{Target}
@@ -44,7 +43,7 @@ type IncrementalCorrelation <: PostProcessor
   end
 
   function IncrementalCorrelation(w::WorkSplit)
-    return new(w, 0, Dict{Int,IncrementalCovarianceTiled}(), false)
+    return new(w, 0, false)
   end
 end
 
@@ -63,29 +62,27 @@ function init(c::IncrementalCorrelation, targetOffsets::Vector{Int}, leakages::V
   c.targets = targets
   #FIXME: broken for attacks with different target output types
   #FIXME: broken for leakages that don't fit in an byte
-  c.hypocache = Vector{UInt8}(length(guesses(targets[1])) * length(leakages))
+  c.hypocache = Vector{UInt8}(length(guesses(targets[1])) * length(leakages) * length(targets))
   c.targetcache = createTargetCache(targets[1])
   c.guesses = guesses(targets[1])
 end
 
 function reset(c::IncrementalCorrelation)
-  c.covXY = Dict{Int,IncrementalCovarianceTiled}()
   c.meanXinitialized = false
   c.counter = 0
 end
 
-function helpert(lt::Leakage, hypoidx::Int, outputs::Vector{Out},hypo::Vector{UInt8}) where {Out}
+function helpert(lt::Leakage, hypoidx::Int, outputs::Vector{Out},hypo::Vector{UInt8}, offset::Int) where {Out}
     nrOfKbVals = length(outputs)
     @inbounds for o in 1:nrOfKbVals
-      hypo[hypoidx+o] = leak(lt, outputs[o])
+      hypo[offset+hypoidx+o] = leak(lt, outputs[o])
     end
 end
 
-function toLeakages!(c::IncrementalCorrelation, t::Target{In,Out,Guess}, input::In) where {In,Out,Guess}
+function toLeakages!(c::IncrementalCorrelation, t::Target{In,Out,Guess}, input::In, hypo::Vector{UInt8}, offset::Int) where {In,Out,Guess}
   kbvals = c.guesses::Vector{Guess}
   nrOfKbVals = length(kbvals)
   nrOfFuns = length(c.leakages)
-  nrOfTargets = length(input)
   outputs = c.targetcache::Vector{Out}
   hypo = c.hypocache::Vector{UInt8}
 
@@ -96,33 +93,26 @@ function toLeakages!(c::IncrementalCorrelation, t::Target{In,Out,Guess}, input::
   @inbounds for l in 1:nrOfFuns
     lt = c.leakages[l]
     hypoidx = (l-1)*nrOfKbVals
-    helpert(lt,hypoidx,outputs,hypo)
+    helpert(lt,hypoidx,outputs,hypo,offset)
   end
 
-  return hypo
+  return offset + nrOfFuns*nrOfKbVals
 end
 
 function add(c::IncrementalCorrelation, samples::Vector{S}, data::Vector{D}, traceIdx::Int) where {S,D}
+  hypo = c.hypocache
   if !c.meanXinitialized
-    c.meanXinitialized = true
-    c.meanX = IncrementalMeanVariance(length(samples))
-    for idx in 1:length(c.targetOffsets)
-      hypo = c.hypocache
-      c.covXY[idx] = IncrementalCovarianceTiled(c.meanX, IncrementalMeanVariance(length(hypo)))
-    end
+      c.covXY = IncrementalCovarianceTiled(length(samples), length(hypo))
+      c.meanXinitialized = true
   end
 
-  samplesN::Vector{Float64} = samples .- c.meanX.mean
+  offset = 0
 
   for idx in 1:length(c.targetOffsets)
-    val = data[idx]
-
-    hypo = toLeakages!(c, c.targets[c.targetOffsets[idx]], val)
-
-    add!(c.covXY[idx], samples, hypo, samplesN, false)
+    offset = toLeakages!(c, c.targets[c.targetOffsets[idx]], data[idx], hypo, offset)
   end
 
-  add!(c.meanX, samples)
+  add!(c.covXY, samples, hypo)
 
   c.counter += 1
 end
@@ -144,14 +134,7 @@ end
 
 function merge(this::IncrementalCorrelation, other::IncrementalCorrelation)
   this.counter += other.counter
-  for (idx,cov) in other.covXY
-    if !haskey(this.covXY, idx)
-      this.covXY[idx] = cov
-    else
-      add!(this.covXY[idx], other.covXY[idx], false)
-    end
-  end
-  add!(this.covXY[1].meanVarX, other.covXY[1].meanVarX)
+  add!(this.covXY, other.covXY)
 end
 
 
@@ -168,22 +151,8 @@ function get(c::IncrementalCorrelation)
     end
   end
   
-  idxes = sort(collect(keys(c.covXY)))
+  C = getCorr(c.covXY)
 
-  rows = c.covXY[1].numberOfX
-  cols = sum(x -> c.covXY[x].numberOfY, idxes)
-  C = Matrix{Float64}(rows, cols)
-
-  ystart = 0
-  yend = 0
-
-  for i in idxes
-    yend += c.covXY[i].numberOfY
-    C[:,ystart+1:yend] = getCorr(c.covXY[i])
-    ystart += c.covXY[i].numberOfY
-  end
-
-  # C = mapreduce(x -> getCorr(c.covXY[x]), hcat, sort(collect(keys(c.covXY))))
   return C
 end
 

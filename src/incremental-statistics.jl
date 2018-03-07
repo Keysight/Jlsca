@@ -175,6 +175,15 @@ function add!(this::IncrementalCovariance, other::IncrementalCovariance, minX::I
   end
 end
 
+const cachechunkmagic = 2^14
+
+function mystrategy(nrX,nrY)
+  tilesY = min(128,div(nrY,Threads.nthreads()))
+  tilesX = div(cachechunkmagic,tilesY)
+  cache = 64
+  # @show (tilesX,tilesY,cache)
+  return (tilesX,tilesY,cache)
+end
 
 type IncrementalCovarianceTiled
   numberOfX::Int
@@ -191,14 +200,29 @@ type IncrementalCovarianceTiled
   cacheCount::Int
   cacheMax::Int
 
-  function IncrementalCovarianceTiled(numberOfX::Int, numberOfY::Int, tilesizeX::Int=128, tilesizeY::Int=128, caches::Int=32)
+  function IncrementalCovarianceTiled(numberOfX::Int, numberOfY::Int)
+    meanVarX = IncrementalMeanVariance(numberOfX)
+    meanVarY = IncrementalMeanVariance(numberOfY)
+
+    tilesizeX, tilesizeY, caches = mystrategy(numberOfX,numberOfY)
+
+    IncrementalCovarianceTiled(meanVarX, meanVarY, tilesizeX, tilesizeY, caches)
+  end
+
+  function IncrementalCovarianceTiled(numberOfX::Int, numberOfY::Int, tilesizeX::Int, tilesizeY::Int, caches::Int)
     meanVarX = IncrementalMeanVariance(numberOfX)
     meanVarY = IncrementalMeanVariance(numberOfY)
 
     IncrementalCovarianceTiled(meanVarX, meanVarY, tilesizeX, tilesizeY, caches)
   end
 
-  function IncrementalCovarianceTiled(meanVarX::IncrementalMeanVariance, meanVarY::IncrementalMeanVariance, tilesizeX::Int=128, tilesizeY::Int=128, caches::Int=32*Threads.nthreads())
+  function IncrementalCovarianceTiled(meanVarX::IncrementalMeanVariance, meanVarY::IncrementalMeanVariance)
+    tilesizeX, tilesizeY, caches = mystrategy(length(meanVarX.mean),length(meanVarY.mean))
+
+    IncrementalCovarianceTiled(meanVarX, meanVarY, tilesizeX, tilesizeY, caches)
+  end
+
+  function IncrementalCovarianceTiled(meanVarX::IncrementalMeanVariance, meanVarY::IncrementalMeanVariance, tilesizeX::Int, tilesizeY::Int, caches::Int)
     numberOfX = length(meanVarX.mean)
     numberOfY = length(meanVarY.mean)
     nrTilesX = div(numberOfX+tilesizeX-1, tilesizeX)
