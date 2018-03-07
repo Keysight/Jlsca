@@ -9,7 +9,6 @@ export printScores
 
 # print the scores pretty
 function printScores(params::DpaAttack, phase::Int, rankData::RankData, targets::Vector{Int}, printsubs=false,  m=5, io=STDOUT) 
-
   if !(phase in getPhases(rankData))
     return
   end

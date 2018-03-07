@@ -505,7 +505,7 @@ function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Ta
   end
 
   # let somebody do something with the scores for these traces
-  yieldto(super, (INTERMEDIATERANKS, (rankData, collect(1:length(targetOffsets)))))
+  yieldto(super, (INTERMEDIATERANKS, (rankData, targetOffsets)))
 end
 
 # does the attack & analysis per xxx traces, should be called from an scatask

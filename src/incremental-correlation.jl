@@ -62,7 +62,7 @@ function init(c::IncrementalCorrelation, targetOffsets::Vector{Int}, leakages::V
   c.targets = targets
   #FIXME: broken for attacks with different target output types
   #FIXME: broken for leakages that don't fit in an byte
-  c.hypocache = Vector{UInt8}(length(guesses(targets[1])) * length(leakages) * length(targets))
+  c.hypocache = Vector{UInt8}(length(guesses(targets[1])) * length(leakages) * length(targetOffsets))
   c.targetcache = createTargetCache(targets[1])
   c.guesses = guesses(targets[1])
 end
