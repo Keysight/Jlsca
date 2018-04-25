@@ -15,11 +15,14 @@ type InMemory{TS,TD} <: Trace
   postProcInstance
   tracesReturned
   colRange::Nullable{Range}
+  preColRange::Nullable{Range}
+  viewsdirty::Bool
+  views::Vector{Nullable{Range}}
 
   function InMemory(data::AbstractArray{TD,2}, samples::AbstractArray{TS,2}) where {TS,TD}
     nrTraces = size(samples)[1]
     @assert size(data)[1] == nrTraces
-    new{TS,TD}(samples, TS, data, nrTraces, [], [], Union,0,Nullable{Range}())
+    new{TS,TD}(samples, TS, data, nrTraces, [], [], Union,0,Nullable{Range}(),Nullable{Range}(), true,Vector{Nullable{Range}}(0))
   end
 end
 
@@ -37,6 +40,10 @@ end
 
 function readSamples(trs::InMemory, idx)
   return vec(trs.samples[idx,:])
+end
+
+function readSamples(trs::InMemory, idx, cols::Range)
+  return vec(trs.samples[idx,cols])
 end
 
 function writeSamples(trs::InMemory, idx::Int, samples::Vector)

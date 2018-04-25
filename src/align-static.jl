@@ -22,9 +22,13 @@ type CorrelationAlignFFT
   referenceOffset::Int
   maxShift::Int
   square_sum_x2::Float64
-  sums_y::Nullable{Vector{Float64}}
-  sums_y2::Nullable{Vector{Float64}}
   plans::Tuple{Ref{Base.DFT.Plan}, Ref{Base.DFT.Plan}}
+  initialized::Bool
+  sums_y::Vector{Float64}
+  sums_y2::Vector{Float64}
+  scores::Vector{Float64}
+  lengthsamples::Int
+  window::UnitRange
 
   function CorrelationAlignFFT(reference::Vector, referenceOffset::Int, maxShift::Int)
     referenceOffset >= 0 || throw(ErrorException("no negative referenceOffset"))
@@ -34,7 +38,7 @@ type CorrelationAlignFFT
     square_sum_x2 = sqrt(sum(reference0mean .^ 2))
     plans::Tuple{Ref{Base.DFT.Plan}, Ref{Base.DFT.Plan}} = (Ref{Base.DFT.Plan}(),Ref{Base.DFT.Plan}())
 
-    new(reversereference0mean, referenceOffset, maxShift, square_sum_x2, Nullable(), Nullable(), plans)
+    new(reversereference0mean, referenceOffset, maxShift, square_sum_x2, plans, false)
   end
 
 end
@@ -93,26 +97,49 @@ function correlationAlign(samples::Vector{Float32}, state::CorrelationAlignFFT)
   correlationAlign(map(Float64, samples), state)
 end
 
+function pearson(cv::Vector{Float64},sums_y::Vector{Float64},sums_y2::Vector{Float64},square_sum_x2::Float64,window::UnitRange,n::Int,scores::Vector{Float64})
+    # compute pearson's correlation
+  @inbounds for i in 1:(length(window)-n+1)
+    sum_x_y = cv[n+i-1]
+    sum_y2 = sums_y2[i+n] - sums_y2[i]
+    sum_y = sums_y[i+n] - sums_y[i]
+    argh = sum_y2 - (sum_y ^ 2)/n
+    r::Float64 = 0
+    if argh > 0
+      r = sum_x_y / (square_sum_x2 * sqrt(argh))
+    end
+
+    scores[i] = r
+  end
+end
+
 # http://scribblethink.org/Work/nvisionInterface/nip.html (thx Jasper van Woudenberg)
-function correlationAlign(samples::Vector{Float64}, state::CorrelationAlignFFT)
+function fastnormalizedcrosscorrelation(samples::Vector{Float64}, state::CorrelationAlignFFT)
   align::Int = 0
   maxCorr::Float64 = 0
 
-  reversereference0mean::Vector = state.reversereference0mean
+  reversereference0mean = state.reversereference0mean
   n = length(reversereference0mean)
-  referenceOffset::Int = state.referenceOffset
-  maxShift::Int = state.maxShift
-  square_sum_x2::Float64 = state.square_sum_x2
+  referenceOffset = state.referenceOffset
+  maxShift = state.maxShift
+  square_sum_x2 = state.square_sum_x2
   plans::Tuple{Ref{Base.DFT.Plan}, Ref{Base.DFT.Plan}} = state.plans
   window = max(1, referenceOffset - maxShift):(min(referenceOffset + maxShift + n, length(samples)))
 
-  if isnull(state.sums_y)
-    state.sums_y = Nullable(zeros(Float64, length(window)+1))
-    state.sums_y2 = Nullable(zeros(Float64, length(window)+1))
+  if !state.initialized
+    state.sums_y = zeros(Float64, length(window)+1)
+    state.sums_y2 = zeros(Float64, length(window)+1)
+    state.scores = zeros(Float64, length(window)+1)
+    state.lengthsamples = length(samples)
+    state.window = window
   end
 
-  sums_y = get(state.sums_y)
-  sums_y2 = get(state.sums_y2)
+  state.lengthsamples == length(samples) || error("Need $(state.lengthsamples) samples, not $(length(samples))")
+
+  # these are just caches, i.e. not persisted between calls of this function
+  sums_y = state.sums_y
+  sums_y2 = state.sums_y2
+  scores = state.scores
 
   # compute convolution (sums of squares between ref and samples)
   cv::Vector{Float64} = myconv(reversereference0mean, samples[window], plans)
@@ -127,23 +154,18 @@ function correlationAlign(samples::Vector{Float64}, state::CorrelationAlignFFT)
   end
 
   # compute pearson's correlation
-  @inbounds for i in 1:(length(window)-n+1)
-    sum_x_y = cv[n+i-1]
-    sum_y2 = sums_y2[i+n] - sums_y2[i]
-    sum_y = sums_y[i+n] - sums_y[i]
-    argh = sum_y2 - (sum_y ^ 2)/n
-    r::Float64 = 0
-    if argh > 0
-      r = sum_x_y / (square_sum_x2 * sqrt(argh))
-    end
+  pearson(cv,sums_y,sums_y2,square_sum_x2,window,n,scores)
 
-    if r > maxCorr
-      maxCorr = r
-      align = window[i]
-    end
-  end
+  nothing
+end
 
-  ret = (referenceOffset-align,maxCorr)
+function correlationAlign(samples::Vector{Float64}, state::CorrelationAlignFFT)
+  fastnormalizedcrosscorrelation(samples, state)
+
+  (val,idx) = findmax(state.scores) 
+
+  ret = (state.referenceOffset-state.window[idx],val)
+
   return ret
 end
 

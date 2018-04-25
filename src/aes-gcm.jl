@@ -3,6 +3,8 @@
 # Author: Cees-Bart Breunesse
 
 const R = UInt128(0xe1) << 120
+
+# XXX algorithm from XXX paper
 function block_mul(X::UInt128, Y::UInt128, leak::Function=(x,y)->y)
     Z = UInt128(0)
     V = UInt128(Y)
@@ -19,8 +21,76 @@ function block_mul(X::UInt128, Y::UInt128, leak::Function=(x,y)->y)
     return Z
 end
 
+# algorithm 1 from paper YYY
+function bitlevel_block_mul(X::UInt128, Y::UInt128, leak::Function=(x,y)->y)
+    V = UInt128(0)
+
+    for i in 127:-1:0
+        Vbit = V & 1
+        V = Vbit == 0 ? V >> 1 : xor(V >> 1, R)
+        Ybit = (Y >> (127-i)) & 1
+        if Ybit == 1
+            V = xor(V,X)
+        end
+    end
+
+    return V
+end
+
+# helper for doing g degree multiplied with m degree polynomials
+function g_degree_block_mul(g::Int, A::UInt128, B::UInt128, leak::Function=(x,y)->y)
+    P = UInt128(0)
+
+    for i in (g-1):-1:0
+        Pbit = P & 1
+        P = Pbit == 0 ? P >> 1 : xor(P >> 1, R)
+        Bbit = (B >> (g-1-i)) & 1
+        if Bbit == 1
+            P = xor(P,A)
+        end
+    end
+
+    return P    
+end
+
+# algorithm 2 from paper YYY
+function digit2_block_mul(A::UInt128, B::UInt128, leak::Function=(x,y)->y)
+    P = g_degree_block_mul(2,A,B & 3)
+
+    for i in 62:-1:0
+        Pbit = P & 1
+        P = Pbit == 0 ? P >> 1 : xor(P >> 1, R)
+        Pbit = P & 1
+        P = Pbit == 0 ? P >> 1 : xor(P >> 1, R)
+        P = xor(P, g_degree_block_mul(2,A,(B>>((63-i)*2)) & 3))
+    end
+
+    return P
+end
+
+# algorithm 3 from paper YYY
+function efficient_digit2_block_mul(A::UInt128, B::UInt128, leak::Function=(x,y)->y)
+    P = g_degree_block_mul(2,A,B & 3)
+    leak("P",P)
+    
+    for i in 62:-1:0
+        V1 = (P >> 2)
+        V2 = g_degree_block_mul(2,R,P&3)
+        V3 = g_degree_block_mul(2,A,(B>>((63-i)*2)) & 3)
+        # leak("V1",V1)
+        # leak("V2",V2)
+        # leak("V3",V3)
+        P = xor(V1, xor(V2, V3))
+        leak("P",P)
+    end
+
+    return P
+end
+
+
 function ghash(X::UInt128, Y::UInt128, H::UInt128, leak::Function=(x,y)->y) 
-    O = block_mul(xor(X,Y),H,leak)
+    # O = block_mul(xor(X,Y),H,leak)
+    O = efficient_digit2_block_mul(xor(X,Y),H,leak)
     leak("ghash out", O)
     return O
 end

@@ -15,9 +15,13 @@ type RandomTrace <: Trace
   postProcInstance
   tracesReturned
   colRange::Nullable{Range}
+  preColRange::Nullable{Range}
+  viewsdirty::Bool
+  views::Vector{Nullable{Range}}
+
 
   function RandomTrace(nrTraces::Int, dataSpace::Int, sampleType::Type, nrSamples::Int) 
-    new(dataSpace, sampleType, nrSamples,nrTraces, [], [], Union,0,Nullable{Range}())
+    new(dataSpace, sampleType, nrSamples,nrTraces, [], [], Union,0,Nullable{Range}(),Nullable{Range}(),true)
   end
 end
 

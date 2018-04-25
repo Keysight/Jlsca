@@ -110,7 +110,7 @@ show(io::IO, a::GlobalMaximization) = print(io, "global max")
 export NormalizedMaximization
 """
 To retrieve a vector of scores from a matrix of C = (sample columns,score for guesses)
-uses the normalization step as explained in Sect. 3.2 in [Behind the Scene of Side Channel Attacks](https://eprint.iacr.org/2013/794.pdf).
+first divide all the candidate scores for a given sample by the standard deviation of those scores, then take the global maximum over all samples.
 
 # Examples
 ```
@@ -174,10 +174,29 @@ params.leakageCombinator = Max()
 abstract type Combination end
 
 """
-The default `Combination` strategy which simply sums the scores of all leakages. 
+The default `Combination` strategy which, for a given key candidate, sums the scores of all leakages.
 """
 type Sum <: Combination end
 show(io::IO, a::Sum) = print(io, "+")
+
+"""
+Takes the maximum of the scores over all leakages, for a given key candidate.
+"""
+type Max <: Combination end
+show(io::IO, a::Max) = print(io, "max")
+
+"""
+Takes the maximum of the normalized scores over all leakages, for a given key candidate.
+"""
+type MaxNormalized <: Combination end
+show(io::IO,a::MaxNormalized) = print(io, "max normalized")
+
+"""
+Sums the normalized scores of all leakages, for a given key candidate.
+"""
+type SumNormalized <: Combination end
+show(io::IO,a::SumNormalized) = print(io, "sum normalized")
+
 
 export DpaAttack
 """
@@ -526,7 +545,6 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
     # FIXME: need to pick something sane here
     maxCols = get(params.maxCols, 200000)
     segmented = div(samplecols,maxCols) > 0
-    passadded = false
 
     (segmented && (!isnull(params.recoverCond) || !isnull(params.saveCond))) && throw(ErrorException("Increase params.maxCols, segmentation and saving or recovering conditional output is not supported"))
 
@@ -535,10 +553,6 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
       print("Attacking columns $(sr:srEnd) out of $samplecols columns\n")
       if segmented
         setColumnRange(trs, Nullable{Range}(sr:srEnd))
-        if nrSamplePasses(trs) == 0
-          passadded = true
-          addSamplePass(trs, x -> x)
-        end
       end
 
       firstTrace = rows[1]
@@ -546,26 +560,17 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
 
       offset = firstTrace
       stepSize = min(numberOfTraces, get(params.updateInterval, numberOfTraces))
-      targetOffsets = getTargetOffsets(params,phase)
 
       rankData = params.rankData
-
-      eof = false
 
       for offset in firstTrace:stepSize:(firstTrace-1+numberOfTraces)
         interval = offset:(offset+min(stepSize, firstTrace - 1 + numberOfTraces - offset + 1)-1)
 
-        if eof
-          break
-        end
         attack(params.analysis, params, phase, super, trs, firstTrace, interval, sr:srEnd, rankData)
       end
 
       if segmented
         setColumnRange(trs, Nullable{Range}())
-        if passadded
-          popSamplePass(trs)
-        end
       end
 
       # reset the state of trace post processor (conditional averager)

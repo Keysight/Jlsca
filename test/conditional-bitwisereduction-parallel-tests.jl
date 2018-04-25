@@ -21,7 +21,7 @@ function ParallelCondReduceTest(splitmode)
 
     @everywhere begin
       trs = InspectorTrace($fullfilename, true)
-      addSamplePass(trs, tobits)
+      addSamplePass(trs, BitPass())
       if $splitmode == 1
         setPostProcessor(trs, CondReduce(SplitByTracesSliced()))
       elseif $splitmode == 2
@@ -35,7 +35,7 @@ function ParallelCondReduceTest(splitmode)
     params.analysis.leakages = [Bit(0)]
 
     trs = InspectorTrace(fullfilename, true)
-    addSamplePass(trs, tobits)
+    addSamplePass(trs, BitPass())
     setPostProcessor(trs, CondReduce())
 
     rankData2 = sca(trs,params,1, len)
@@ -69,11 +69,11 @@ function ParallelCondReduceTestWithInterval(splitmode)
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0)]
     params.updateInterval = Nullable(updateInterval)
-    params.maxCols = 500
+    params.maxCols = 512
 
     @everywhere begin
       trs = InspectorTrace($fullfilename, true)
-      addSamplePass(trs, tobits)
+      addSamplePass(trs, BitPass())
       if $splitmode == 1
         setPostProcessor(trs, CondReduce(SplitByTracesSliced()))
       elseif $splitmode == 2
@@ -87,13 +87,13 @@ function ParallelCondReduceTestWithInterval(splitmode)
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0)]
     params.updateInterval = Nullable()
-    params.maxCols = 440
+    params.maxCols = 448
 
     for s in 1:numberOfScas
       len2 = min(len, updateInterval*s)
 
       trs = InspectorTrace(fullfilename,true)
-      addSamplePass(trs, tobits)
+      addSamplePass(trs, BitPass())
       setPostProcessor(trs, CondReduce())
 
       rankData2[s] = sca(trs,params,1, len2)

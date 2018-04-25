@@ -94,7 +94,7 @@ function testCondReduce()
     maxCols = 21
 
     trs = InMemory(rand(UInt8, rows,16), rand(UInt64, rows, cols))
-    addSamplePass(trs, tobits)
+    addSamplePass(trs, BitPass())
 
     setPostProcessor(trs, CondReduce())
 

@@ -25,7 +25,7 @@ function gofaster()
   @everywhere begin
       trs = InspectorTrace($filename,true)
 
-      addSamplePass(trs, tobits)
+      addSamplePass(trs, BitPass())
 
       setPostProcessor(trs, CondReduce(SplitByTracesBlock()))
   end
