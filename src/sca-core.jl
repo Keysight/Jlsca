@@ -3,7 +3,6 @@
 # Author: Cees-Bart Breunesse
 
 using ..Trs
-using ..Log
 
 import ..Trs.reset
 
