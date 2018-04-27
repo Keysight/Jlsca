@@ -75,7 +75,7 @@ function updateViews(trs::Trace)
 
   # @show lengths
 
-  v = Nullable(get(trs.colRange, 1:lengths[end]))
+  v = trs.colRange
   trs.views[nrPasses+1] = v
   for i in eachindex(trs.passes)
     p = trs.passes[nrPasses-i+1]
