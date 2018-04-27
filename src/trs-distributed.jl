@@ -46,6 +46,12 @@ function setColumnRange(trs::DistributedTrace, r::Nullable{Range})
   end
 end
 
+function setPreColumnRange(trs::DistributedTrace, r::Nullable{Range})
+  @sync for worker in workers()
+    @spawnat worker setPreColumnRange(Main.trs, r)
+  end
+end
+
 function addSamplePass(trs::DistributedTrace, f::Function, prprnd=false)
   @sync for worker in workers()
     @spawnat worker addSamplePass(Main.trs, f, prprnd)

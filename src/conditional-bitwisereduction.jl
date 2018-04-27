@@ -63,7 +63,7 @@ function getSamplesCached(c::CondReduce, idx::Int, val::Integer)
   end
 end
 
-# only works on samples of BitVector type, do addSamplePass(trs, tobits)
+# only works on samples of BitVector type, do addSamplePass(trs, BitPass())
 # to create this input efficiently!
 function add(c::CondReduce, trs::Trace, traceIdx::Int)
   c.trs = trs
@@ -161,7 +161,7 @@ function realget(c::CondReduce)
     maxVal = max(maxVal, findmax(keys(c.traceIdx[k]))[1])
   end
 
-  nrOfSamples = length(c.mask[1])
+  nrOfSamples = length(first(c.mask)[2])
   bc = BitCompress(nrOfSamples)
 
   if c.globalDCR
@@ -230,7 +230,6 @@ end
 # This pass will work on trs objects opened with trs = InspectorTrace("name.trs", true)
 function tobits(x::Vector{UInt64})
   bits = length(x)*64
-
   # this is a fast hack to create BitVectors
   a = BitVector()
   a.chunks = x
@@ -239,6 +238,8 @@ function tobits(x::Vector{UInt64})
 
   return a
 end
+
+export tobits
 
 # please don't use this, it's fucking slow.
 function tobits(x::Vector{UInt8})
@@ -249,4 +250,44 @@ function tobits(x::Vector{UInt8})
     end
   end
   return BitVector(ret)
+end
+
+export BitPass
+
+"""
+Sample pass that converts UInt8 or UInt64 samples into bits. Use this instead of the tobits function directly if you're using params.maxCols. The reason is that this pass allows the disk reads to be smart, and only reading the column requested.
+
+# Example
+
+The true flag will cause samples to be returned as UInt64. The UInt64 samples will be efficiently converted to bits by this pass. You can opt to not pass the efficient flag (the flag may cause some non-aligned bits to be discarded), but then the conversion (from UInt8 to bits) will be much slower. 
+```
+trs = InspectorTrace("mytrs.trs", true)
+addSamplePass(trs, BitPass())
+```
+"""
+type BitPass <: Pass
+  srctype::Type
+
+  BitPass() = new()
+end
+
+function pass(a::BitPass, x::AbstractArray{T,1}, idx::Int) where {T}
+  if !isdefined(a, :srctype)
+    a.srctype = T
+  end
+
+  a.srctype == T || throw(ErrorException("Fail"))
+
+  return tobits(x)
+end
+
+function pass(a::BitPass, x::AbstractArray{T,1}, idx::Int, cols::Range) where {T}
+  # ignoring cols since inview makes sure we only get what we asked for
+  pass(a,x,idx)
+end
+
+function inview(a::BitPass, r::Range, l::Int)
+  length(r) % sizeof(a.srctype) == 0 || throw(ErrorException("params.maxCols should be a multiple of $(sizeof(a.srctype)*8)")) 
+
+  return div(r[1]-1,sizeof(a.srctype)*8)+1:div(r[end],sizeof(a.srctype)*8)
 end

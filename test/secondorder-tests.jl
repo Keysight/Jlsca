@@ -24,6 +24,7 @@ function test3()
 	for i in 1:div(nl+cols-1,cols)
 		l = (i-1)*cols+1
 		u = min(i*cols,nl)
+		# print("col $i\n")
 		@test naive[l:u] == pass(c,samples,1,l:u)
 	end
 

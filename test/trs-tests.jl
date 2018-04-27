@@ -43,6 +43,46 @@ function testInspectorTrace()
   rm(traceFilename)
 end
 
+function testInspectorTraceRanges()
+  dataSpace = 9
+  sampleType = UInt8
+  numberOfSamplesPerTrace = 290
+  numberOfTitlebytes = 31
+  numberOfTraces = 110
+  traceFilename = createTmpFile("bob.trs")
+
+  allTitles = rand(UInt8, (numberOfTraces, numberOfTitlebytes))
+  allSamples = reshape([rand(sampleType) for i in 1:(numberOfSamplesPerTrace*numberOfTraces)], (numberOfTraces,  numberOfSamplesPerTrace))
+  allData = reshape([rand(UInt8) for i in 1:(dataSpace*numberOfTraces)], (numberOfTraces, dataSpace))
+
+  trs = InspectorTrace(traceFilename, dataSpace, sampleType, numberOfSamplesPerTrace, numberOfTitlebytes)
+
+  for i in randperm(numberOfTraces)
+    trs[i] = (allData[i,:], allSamples[i,:])
+    writeTitle(trs, i, allTitles[i,:])
+    @test trs[i] == (allData[i,:], allSamples[i,:])
+  end
+
+  close(trs)
+
+  trs2 = InspectorTrace(traceFilename)
+
+  @test length(trs2) == numberOfTraces
+  @test numberOfTitlebytes == trs2.titleSpace
+
+  for i in randperm(numberOfTraces  )
+    for r in 1:30:numberOfSamplesPerTrace
+      e = min(numberOfSamplesPerTrace,r+30-1)
+      @test Trs.readSamples(trs2, i, r:e) == allSamples[i,r:e]
+    end
+  end
+
+  close(trs2)
+
+  rm(traceFilename)
+end
+
+
 function testSplitBinary()
   dataSpace = 7
   sampleType = Float64
@@ -77,38 +117,7 @@ function testSplitBinary()
   rm(dataFilename)
 end
 
-function testInspectorMM()
-  dataSpace = 7
-  sampleType = UInt8
-  numberOfSamplesPerTrace = 29
-  numberOfTraces = 11
-  traceFilename = createTmpFile("bob.trs")
-
-  allSamples = reshape([rand(sampleType) for i in 1:(numberOfSamplesPerTrace*numberOfTraces)], (numberOfTraces,  numberOfSamplesPerTrace))
-  allData = reshape([rand(UInt8) for i in 1:(dataSpace*numberOfTraces)], (numberOfTraces, dataSpace))
-
-  trs = InspectorTrace(traceFilename, dataSpace, sampleType, numberOfSamplesPerTrace)
-
-  for i in 1:numberOfTraces
-    trs[i] = (allData[i,:], allSamples[i,:])
-    @test trs[i] == (allData[i,:], allSamples[i,:])
-  end
-
-  close(trs)
-
-  trs2 = InspectorTraceMM(traceFilename)
-
-  @test length(trs2) == numberOfTraces
-
-  for i in 1:numberOfTraces
-    @test trs2[i] == (allData[i,:], allSamples[i,:])
-  end
-
-  close(trs2)
-
-  rm(traceFilename)end
-
 
 testInspectorTrace()
+testInspectorTraceRanges()
 testSplitBinary()
-testInspectorMM()

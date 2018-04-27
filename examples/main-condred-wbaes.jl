@@ -56,7 +56,7 @@ function gofaster()
       trs = InspectorTrace($filename, $toBitsEfficient)
 
       # this converts to packed BitVectors (efficiently, if toBitsEfficient is set)
-      addSamplePass(trs, tobits)
+      addSamplePass(trs, BitPass())
 
       setPostProcessor(trs, CondReduce(SplitByTracesBlock()))
   end

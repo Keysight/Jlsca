@@ -21,13 +21,13 @@ abstract type Pass end
 export pass
 
 pass(a::Pass, x::AbstractArray{T,1}, idx::Int, cols::Range) where {T} = pass(a,x,idx)[cols] 
+inview(a::Pass, outview::Range, inlength::Int) = Nullable{Range}()
 
 type SimpleFunctionPass <: Pass 
   fn::Function
 end
 
 pass(a::SimpleFunctionPass, x::AbstractArray{T,1}, idx::Int) where {T} = a.fn(x) 
-
 
 # overloading these to implement an iterator
 start(trs::Trace) = 1
@@ -49,16 +49,77 @@ function getData(trs::Trace, idx)
   return data
 end
 
+function updateViews(trs::Trace)
+  if !trs.viewsdirty
+    return 
+  end
+
+  nrPasses = length(trs.passes)
+  lengths = zeros(Int,nrPasses+1)
+  trs.views = Vector{Nullable{Range}}(nrPasses+1)
+
+  idx = 1
+  if !isnull(trs.preColRange)
+    samples = readSamples(trs, idx, get(trs.preColRange))
+  else
+    samples = readSamples(trs, idx)
+  end
+
+  lengths[1] = length(samples)
+
+  for i in eachindex(trs.passes)
+    p = trs.passes[i]
+    samples = pass(p, samples, idx)
+    lengths[i+1] = length(samples)
+  end
+
+  # @show lengths
+
+  v = trs.colRange
+  trs.views[nrPasses+1] = v
+  for i in eachindex(trs.passes)
+    p = trs.passes[nrPasses-i+1]
+    if !isnull(v)
+      v = inview(p,get(v),lengths[nrPasses+1-i+1])
+    end
+    trs.views[i] = v
+  end
+
+  if !isnull(trs.preColRange)
+    if !isnull(trs.views[1])
+      trs.views[1] = Nullable(get(trs.preColRange)[get(trs.views[1])])
+    end
+  end
+  
+  # @show trs.views
+
+  if !isnull(trs.colRange) && !isnull(trs.views[1]) 
+    print_with_color(:magenta, "Efficient trace sample reads!! Yay!\n")
+  end
+
+  trs.viewsdirty = false
+end
+
 function getSamples(trs::Trace, idx)
-  samples = readSamples(trs, idx)
-  lastpass = length(trs.passes)
+  local samples
+
+  updateViews(trs)
+
+  v = trs.views[1]
+  if !isnull(v)
+    samples = readSamples(trs, idx, get(v))
+  else
+    samples = readSamples(trs, idx)
+  end
 
   # run all the passes over the trace
-  for p in eachindex(trs.passes)
-    if (p == lastpass) && !isnull(trs.colRange)
-      samples = pass(trs.passes[p], samples, idx, get(trs.colRange))
+  for i in eachindex(trs.passes)
+    p = trs.passes[i]
+    v = trs.views[i+1]
+    if !isnull(v)
+      samples = pass(p, samples, idx, get(v))
     else
-      samples = pass(trs.passes[p], samples, idx)
+      samples = pass(p, samples, idx)
     end
     if length(samples) == 0
       break
@@ -96,6 +157,8 @@ addSamplePass(trs::Trace, f::Function, prprnd=false) = addSamplePass(trs, Simple
 
 # add a sample pass (just a Function over a Vector{FLoat64}) to the list of passes for this trace set
 function addSamplePass(trs::Trace, p::Pass, prprnd=false)
+  trs.viewsdirty = true
+
   if prprnd == true
     trs.passes = vcat(p, trs.passes)
   else
@@ -110,12 +173,30 @@ nrSamplePasses(trs::Trace) = length(trs.passes)
 
 export setColumnRange
 
+"""
+  Column range *after* all the sample passses returned on read. This is called internally in `sca` to allow efficient column-wise DPA. If you're looking to efficiently limit the #samples read from disk see `setPreColumnRange`.
+"""
 function setColumnRange(trs::Trace, r::Nullable{Range})
+  trs.viewsdirty = true
   trs.colRange = r
 end
 
+export setPreColumnRange
+
+"""
+  Column range *before* all the sample passes. For example, if you have a large trace set with traces with many samples, and you only want to run the passes on the first million samples. 
+"""
+function setPreColumnRange(trs::Trace, r::Nullable{Range})
+  trs.viewsdirty = true
+  trs.preColRange = r
+end
+
+
+
 # removes a sample pass
 function popSamplePass(trs::Trace, fromStart=false)
+  trs.viewsdirty = true
+
   if fromStart
     trs.passes = trs.passes[2:end]
   else

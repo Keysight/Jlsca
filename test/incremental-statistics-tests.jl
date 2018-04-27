@@ -103,7 +103,7 @@ function test1n()
   for r in 1:size(x)[1]
     xmean = x[r,:] .- meanVarX.mean
     ymean = y[r,:] .- meanVarY.mean
-    add!(covXY, x[r,:], y[r,:], xmean, false, ymean, true)
+    add!(covXY, x[r,:], y[r,:], false, true)
     add!(meanVarX, x[r,:])
   end
 
@@ -131,7 +131,7 @@ function test1ntiled()
   for r in 1:size(x)[1]
     xmean = x[r,:] .- meanVarX.mean
     ymean = y[r,:] .- meanVarY.mean
-    add!(covXY, x[r,:], y[r,:], xmean, false, ymean, true)
+    add!(covXY, x[r,:], y[r,:], false, true)
     add!(meanVarX, x[r,:])
   end
 

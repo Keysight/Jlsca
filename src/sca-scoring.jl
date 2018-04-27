@@ -97,7 +97,7 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, targets:
             loffsets = getOffsets(rankData, phase, target, leakage)
             lrank = lscores[i]
             lsample = loffsets[i]
-            @printf(io, " %0.2f @ %d\n", lrank, sample)
+            @printf(io, " %0.2f @ %d\n", lrank, lsample)
           end
         end
       end
@@ -200,14 +200,19 @@ end
 function update!(g::NormalizedMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrConsumedRows::Int, nrConsumedCols::Int,  nrRows::Int, nrCols::Int, colOffset::Int)
   (samples,guesses) = size(C)
   r = lazyinit(a,phase,target,guesses,leakage,nrConsumedRows,nrConsumedCols,nrRows,nrCols)
+ 
+  (rows,cols) = size(C)
+  for row in 1:rows
+    s = std(C[row,:])
+    C[row,:] ./= s
+  end
 
-  for s in 1:samples
-    cols = C[s,:]
-    val = (maximum(cols) - mean(cols)) / std(cols)
-    idx = findmax(cols)[2]
+  (corrvals, corrvaloffsets) = findmax(abs.(C), 1)
+
+  for (idx,val) in enumerate(corrvals)
     if val > a.scores[phase][target][leakage][idx,r]
       a.scores[phase][target][leakage][idx,r] = val
-      a.offsets[phase][target][leakage][idx,r] = s + colOffset-1
+      a.offsets[phase][target][leakage][idx,r] = ind2sub(size(C), corrvaloffsets[idx])[1] + colOffset-1
     end
   end
 end
@@ -219,6 +224,30 @@ function setCombined!(a::Sum, sc::RankData, phase::Int, target::Int, nrConsumedR
 
     for leakage in keys(sc.scores[phase][target])
       sc.combinedScores[phase][target][:,r] += sc.scores[phase][target][leakage][:,r]
+    end
+  end
+end
+
+function setCombined!(a::Max, sc::RankData, phase::Int, target::Int, nrTraces::Int)
+  if sc.nrLeakages > 1
+    r = length(sc.nrConsumedRows[phase])
+    sc.combinedScores[phase][target][:,r] .= 0
+
+    for leakage in keys(sc.scores[phase][target])
+      sc.combinedScores[phase][target][:,r] = max.(sc.combinedScores[phase][target][:,r], sc.scores[phase][target][leakage][:,r])
+    end
+  end
+end
+
+function setCombined!(a::SumNormalized, sc::RankData, phase::Int, target::Int, nrTraces::Int)
+  if sc.nrLeakages > 1
+    r = length(sc.nrConsumedRows[phase])
+    sc.combinedScores[phase][target][:,r] .= 0
+
+    for leakage in keys(sc.scores[phase][target])
+      normalized = sc.scores[phase][target][leakage][:,r]
+      normalized -= mean(normalized)
+      sc.combinedScores[phase][target][:,r] += normalized
     end
   end
 end

@@ -2,7 +2,7 @@
 #
 # Author: Ruben Muijrers, Juliafied by Cees-Bart Breunesse
 
-export BitCompress,bitcompress,tobits,toMask
+export BitCompress,bitcompress,toMask
 
 type BitCompress
   tmp::Vector{Int}

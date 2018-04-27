@@ -105,7 +105,7 @@ function add(c::PostProcessor, trs::Trace, globalRange::Range, update::Function)
     end
     # uncomment for hot loop profiling
     # Profile.stop_timer()
-    # Profile.print(maxdepth=16,combine=true)
+    # Profile.print(maxdepth=20,combine=true)
     # exit()
   catch e
     if !isa(e, EOFError)
