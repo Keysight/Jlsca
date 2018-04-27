@@ -1,7 +1,6 @@
 __precompile__()
 
 module Jlsca
-include("log.jl")
 include("aes.jl")
 include("des.jl")
 include("sha.jl")
