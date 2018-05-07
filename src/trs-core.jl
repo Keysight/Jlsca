@@ -39,8 +39,8 @@ function getData(trs::Trace, idx)
   data = readData(trs, idx)
 
   # run all the passes over the data
-  for fn in trs.dataPasses
-    data = fn(data)
+  for p in trs.dataPasses
+    data = pass(p,data,idx)
     if length(data) == 0
       break
     end
@@ -205,8 +205,10 @@ function popSamplePass(trs::Trace, fromStart=false)
   return nothing
 end
 
+addDataPass(trs::Trace, f::Function, prprnd=false) = addDataPass(trs, SimpleFunctionPass(f), prprnd)
+
 # add a data pass (just a Function over a Vector{x} where x is the type of the trace set)
-function addDataPass(trs::Trace, f::Function, prprnd=false)
+function addDataPass(trs::Trace, f::Pass, prprnd=false)
   if prprnd == true
     trs.dataPasses = vcat(f, trs.dataPasses)
   else
