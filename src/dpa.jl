@@ -30,7 +30,7 @@ function printParameters(a::CPA)
   @printf("leakages:     %s\n", a.leakages)
 end
 
-function predict(data::AbstractArray{In,1}, t::Target{In,Out,Guess}, kcVals::Vector{UInt8}, leakages::Vector{Leakage}) where {In,Out,Guess}
+function predict(data::AbstractArray{In,1}, t::Target{In,Out,Guess}, kcVals::Vector{Guess}, leakages::Vector{Leakage}) where {In,Out,Guess}
   (dr,) = size(data)
   nrKcVals = length(kcVals)
   nrLeakages = length(leakages)

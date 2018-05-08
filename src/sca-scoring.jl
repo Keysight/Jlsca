@@ -439,7 +439,7 @@ export getPhaseKey
 
 function getPhaseKey(params::DpaAttack, attack::Attack, phase::Int, sc::RankData)
   #FIXME: broken for attacks with different target output types
-  targettype = getTargetType(sc,phase,1)
+  targettype = getTargetType(sc,phase,first(sc.combinedScores[phase])[1])
   return map(x -> targettype(sortperm(getScores(sc,phase,x), rev=true)[1] - 1), getTargets(sc, phase))
 end
 
