@@ -33,7 +33,7 @@ end
 export SNR
 
 """
-Computes the SNR using the data in a trace set as signal. 
+Computes the SNR using the data values in a trace set as distinghuishers. 
 
 # Example
 
