@@ -22,7 +22,7 @@ type InMemory{TS,TD} <: Trace
   function InMemory(data::AbstractArray{TD,2}, samples::AbstractArray{TS,2}) where {TS,TD}
     nrTraces = size(samples)[1]
     @assert size(data)[1] == nrTraces
-    new{TS,TD}(samples, TS, data, nrTraces, [], [], Union,0,Nullable{Range}(),Nullable{Range}(), true,Vector{Nullable{Range}}(0))
+    new{TS,TD}(samples', TS, data', nrTraces, [], [], Union,0,Nullable{Range}(),Nullable{Range}(), true,Vector{Nullable{Range}}(0))
   end
 end
 
@@ -31,21 +31,21 @@ pipe(trs::InMemory) = false
 length(trs::InMemory) = trs.numberOfTraces
 
 function readData(trs::InMemory, idx)
-  return vec(trs.data[idx,:])
+  return vec(trs.data[:,idx])
 end
 
 function writeData(trs::InMemory, idx, data::Vector{UInt8})
-  trs.data[idx,:] = data
+  trs.data[:,idx] = data
 end
 
 function readSamples(trs::InMemory, idx)
-  return vec(trs.samples[idx,:])
+  return vec(trs.samples[:,idx])
 end
 
 function readSamples(trs::InMemory, idx, cols::Range)
-  return vec(trs.samples[idx,cols])
+  return vec(trs.samples[cols,idx])
 end
 
 function writeSamples(trs::InMemory, idx::Int, samples::Vector)
-  trs.samples[idx,:] = data
+  trs.samples[:,idx] = data
 end

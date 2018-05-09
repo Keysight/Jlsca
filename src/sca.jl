@@ -10,6 +10,7 @@ include("sca-leakages.jl")
 include("sca-core.jl")
 include("sca-scoring.jl")
 include("sca-plotting.jl")
+include("sca-snr.jl")
 
 include("dpa.jl")
 include("lra.jl")
