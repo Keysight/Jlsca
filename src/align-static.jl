@@ -180,6 +180,9 @@ type AlignPass <: Pass
   end
 end
 
+outtype(a::AlignPass, intype::AbstractVector) = intype
+outlength(a::AlignPass, inlen::Int, intype::AbstractVector) = inlen
+
 function pass(a::AlignPass, x::Vector, idx::Int)
   if !a.hasval[idx]
     a.shifts[idx] = correlationAlign(convert(Vector{Float64}, x), a.c)

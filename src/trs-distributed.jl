@@ -38,7 +38,9 @@ end
 length(trs::DistributedTrace) = @fetch length(Main.trs)
 pipe(trs::DistributedTrace) = false
 
-nrSamplePasses(trs::DistributedTrace) = @fetch length(Main.trs.passes)
+nrsamples(trs::DistributedTrace, post::Bool) = @fetch nrsamples(Main.trs,post)
+nrsamples(trs::DistributedTrace) = @fetch nrsamples(Main.trs)
+sampletype(trs::DistributedTrace) = @fetch sampletype(Main.trs)
 
 function setColumnRange(trs::DistributedTrace, r::Nullable{Range})
   @sync for worker in workers()
@@ -84,14 +86,14 @@ end
 
 function getCounter(trs2::DistributedTrace)
   if isa(trs2, DistributedTrace)
-    worksplit = @fetch Main.trs.postProcInstance.worksplit
+    worksplit = @fetch get(meta(Main.trs).postProcInstance).worksplit
   else
-    worksplit = trs2.postProcInstance.worksplit
+    worksplit = get(meta(trs2).postProcInstance).worksplit
   end
 
   total = 0
   @sync for worker in workers()
-    total += @fetchfrom worker Main.trs.tracesReturned
+    total += @fetchfrom worker meta(Main.trs).tracesReturned
   end
 
   return total

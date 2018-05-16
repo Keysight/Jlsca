@@ -6,11 +6,25 @@ using Base.Test
 
 using Jlsca.Trs
 
+function naivesecondorder(s::SampleCombination, x::Vector)
+    global y
+    xl = length(x)
+    y = zeros(Float64, div(xl * (xl-1),2))
+    c = 1
+    for i in 1:xl
+        for j in i+1:xl
+            y[c] = Trs.combine(s,x[i], x[j])
+            c += 1
+        end
+    end     
+    return y
+end
+
 function test1()
 	samples = rand(Float64, 100)
 	c = SecondOrderPass(AbsDiff())
 
-	@test Trs.naivesecondorder(AbsDiff(),samples) == pass(c,samples,1)
+	@test naivesecondorder(AbsDiff(),samples) == pass(c,samples,1)
 end
 
 function test3()
@@ -18,7 +32,7 @@ function test3()
 	c = SecondOrderPass(AbsDiff())
 	cols = 10
 
-	naive = Trs.naivesecondorder(AbsDiff(),samples)
+	naive = naivesecondorder(AbsDiff(),samples)
 	nl = length(naive)
 
 	for i in 1:div(nl+cols-1,cols)
@@ -34,7 +48,7 @@ function perf1()
 	samples = rand(Float64, 10000)
 	c = SecondOrderPass(AbsDiff())
 
-	@time a = Trs.naivesecondorder(AbsDiff(),samples)
+	@time a = naivesecondorder(AbsDiff(),samples)
 	@time b = pass(c,samples,1) 
 	@test a == b
 end

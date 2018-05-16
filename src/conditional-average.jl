@@ -121,7 +121,7 @@ function get(c::CondAvg)
       if worker == c.worksplit.worker
         continue
       else
-        other = @fetchfrom worker Main.trs.postProcInstance
+        other = @fetchfrom worker get(meta(Main.trs).postProcInstance)
         merge(c, other)
       end
     end

@@ -33,7 +33,7 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, targets:
     end
     nrRows = getNrRows(rankData, phase, target)
     nrCols = getNrCols(rankData, phase, target)
-    print(io, "Results @ $nrRows rows, $nrCols cols ($nrConsumedRows rows, $nrConsumedCols cols, consumed)\n")
+    print(io, "Results @ $nrRows rows, $nrCols cols ($nrConsumedRows rows consumed)\n")
     scores = getScores(rankData, phase, target)
 
     # sort peaks
@@ -161,9 +161,7 @@ function lazyinit(a::RankData, phase::Int, target::Int, guesses::Int, leakage::I
   end
 
   if leakage == 1
-    if target == 1
-      a.nrConsumedCols[phase][r] += nrConsumedCols
-    end
+    a.nrConsumedCols[phase][r] += nrConsumedCols
     a.nrCols[phase][target][r] += nrCols
     a.nrRows[phase][target][r] = nrRows
   end

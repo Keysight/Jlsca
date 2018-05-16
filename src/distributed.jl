@@ -82,8 +82,8 @@ function add(c::PostProcessor, trs::Trace, globalRange::Range, update::Function)
     traceEnd = globalRange[end]
   end
   rangestr = @sprintf("trace range %s", traceStart:traceStep:traceEnd)
-
-  @printf("Running processor \"%s\" on %s, %d data passes, %d sample passes\n", c, rangestr, length(trs.dataPasses), length(trs.passes))
+  m = meta(trs)
+  @printf("Running processor \"%s\" on %s, %d data passes, %d sample passes\n", c, rangestr, length(m.dataPasses), length(m.passes))
   total = 0
   bla = 0
   try
@@ -115,5 +115,5 @@ function add(c::PostProcessor, trs::Trace, globalRange::Range, update::Function)
     end
   end
 
-  trs.tracesReturned = getGlobCounter(c)
+  m.tracesReturned = getGlobCounter(c)
 end

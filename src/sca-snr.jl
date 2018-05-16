@@ -45,9 +45,6 @@ plot(snr)
 ```
 """
 function SNR(trs::Trace, r::Range)
-    (somedata,somesamples,idx) = getFirstValid(trs)
-    targetType = eltype(somedata)
-    
     mvs = Dict()
     
     @showprogress 1 "Computing SNR ..."  for t in r
