@@ -11,34 +11,25 @@ verbose = true
 
 # Inspector trace set implementation
 type InspectorTrace <: Trace
-  titleSpace
+  titleSpace::Int
   numberOfTraces::Nullable{Int}
-  dataSpace
-  sampleSpace
-  sampleType
-  numberOfSamplesPerTrace
-  traceBlockPosition
-  fileDescriptor
-  passes
-  dataPasses
-  postProcInstance
-  bgtask
-  tracesReturned
-  filename
-  filePosition
+  dataSpace::Int
+  sampleSpace::Int
+  sampleType::Type
+  numberOfSamplesPerTrace::Int
+  traceBlockPosition::Int
+  fileDescriptor::IOStream
+  filename::String
+  filePosition::Int
   writeable::Bool
   lengthPosition::Int
   bitshack::Bool
-  colRange::Nullable{Range}
-  preColRange::Nullable{Range}
-  viewsdirty::Bool
-  views::Vector{Nullable{Range}}
-
+  meta::MetaData
 
   # to open an existing file
   function InspectorTrace(filename::String, bitshack::Bool = false)
     (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, fileDescriptor) = readInspectorTrsHeader(filename, bitshack)
-    new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, Union, 0, filename, traceBlockPosition, false, lengthPosition, bitshack, Nullable(), Nullable(), true)
+    new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, false, lengthPosition, bitshack, MetaData())
   end
 
   # to create a new one
@@ -50,7 +41,7 @@ type InspectorTrace <: Trace
     !isfile(filename) || throw(ErrorException(@sprintf("file %s exists!", filename)))
 
     (titleSpace, traceBlockPosition, lengthPosition, fileDescriptor) = writeInspectorTrsHeader(filename, dataSpace, sampleType, numberOfSamplesPerTrace, titleSpace)
-    new(titleSpace, Nullable(0), dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, [], [], Union, Union, 0, filename, traceBlockPosition, true, lengthPosition, false, Nullable(), Nullable(), true)
+    new(titleSpace, Nullable(0), dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, true, lengthPosition, false,MetaData())
   end
 end
 
@@ -81,11 +72,15 @@ const CodingFloat = 0x14
 
 pipe(trs::InspectorTrace) = isa(trs.fileDescriptor, Base.PipeEndpoint)
 
+
 # hack
 import Base.skip
 skip(fd::Base.PipeEndpoint, x::Integer) = read(fd, x)
 
 length(trs::InspectorTrace) = isnull(trs.numberOfTraces) ? typemax(Int) : get(trs.numberOfTraces)
+nrsamples(trs::InspectorTrace) = trs.bitshack ? div(trs.numberOfSamplesPerTrace*sizeof(trs.sampleType)*8,64) : trs.numberOfSamplesPerTrace
+sampletype(trs::InspectorTrace) = trs.bitshack ? Vector{UInt64}() : Vector{trs.sampleType}()
+meta(trs::InspectorTrace) = trs.meta
 
 # read the header of a Riscure Inspector trace set (TRS)
 function readInspectorTrsHeader(filename, bitshack::Bool)

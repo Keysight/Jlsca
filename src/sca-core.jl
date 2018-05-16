@@ -434,6 +434,8 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
     return
   end
 
+  consumedCols = length(cols)
+  
   for o in 1:length(targetOffsets)
     if hasPostProcessor(trs)
       kbsamples = samples[o]
@@ -457,9 +459,8 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
       @printf("Nothing to do, no samples!\n")
       continue
     end
-
+    
     for sr in 1:maxCols:samplecols
-
       srEnd = min(sr+maxCols-1, samplecols)
       v = @view kbsamples[:,sr:srEnd]
 
@@ -476,7 +477,8 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
         oo = (l-1)*nrKbvals
         vv = @view C[:,oo+1:oo+nrKbvals]
         yieldto(super, (INTERMEDIATESCORES, (phase, o, l, vv)))
-        update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[o], l, nrTraces, length(cols), nrrows, samplecols,cols[1]+sr-1)
+        update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[o], l, nrTraces, consumedCols, nrrows, length(sr:srEnd),cols[1]+sr-1)
+        consumedCols = 0
       end
     end
 
@@ -495,10 +497,10 @@ function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Ta
 
   if isa(trs, DistributedTrace)
     @sync for w in workers()
-      @spawnat w init(Main.trs.postProcInstance, targetOffsets, leakages, targets)
+      @spawnat w init(get(meta(Main.trs).postProcInstance), targetOffsets, leakages, targets)
     end
   else
-    init(trs.postProcInstance, targetOffsets, leakages, targets)
+    init(get(meta(trs).postProcInstance), targetOffsets, leakages, targets)
   end
 
   (C,eof) = readTraces(trs, rows)
@@ -510,6 +512,7 @@ function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Ta
   @printf("%s on range %s produced (%d, %d) correlation matrix\n", a, cols, samplecols, hypocols)
 
   nrLeakages = length(a.leakages)
+  consumedCols = length(cols)
 
   for kb in 1:length(targetOffsets)
     nrKbvals = length(guesses(getTarget(params, phase, targetOffsets[kb])))
@@ -517,7 +520,8 @@ function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Ta
       oo = (l-1)*nrKbvals + (kb-1)*nrLeakages*nrKbvals
       vv = @view C[:,oo+1:oo+nrKbvals]
       yieldto(super, (INTERMEDIATESCORES, (phase, kb, l, vv)))
-      update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[kb], l, nrTraces, length(cols), nrTraces, length(cols), cols[1])
+      update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[kb], l, nrTraces, consumedCols, nrTraces, length(cols), cols[1])
+      consumedCols = 0
     end
     setCombined!(params.leakageCombinator, rankData, phase, targetOffsets[kb], nrTraces)
   end
@@ -534,23 +538,20 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
         throw(ErrorException("WARNING: update interval only supported for runs with a post processor"))
     end
 
-    if isa(trs, DistributedTrace)
-      (data,samples,idx) = @fetch getFirstValid(Main.trs)
-    else
-      (data,samples,idx) = getFirstValid(trs)
-    end
-    samplecols = length(samples)
+    samplecols = nrsamples(trs, true)
 
     # FIXME: need to pick something sane here
     maxCols = get(params.maxCols, 200000)
-    segmented = div(samplecols,maxCols) > 0
+    nrsegments = div(samplecols+maxCols-1,maxCols)
 
-    (segmented && (!isnull(params.recoverCond) || !isnull(params.saveCond))) && throw(ErrorException("Increase params.maxCols, segmentation and saving or recovering conditional output is not supported"))
+    ((nrsegments > 1) && (!isnull(params.recoverCond) || !isnull(params.saveCond))) && throw(ErrorException("Increase params.maxCols, segmentation and saving or recovering conditional output is not supported"))
 
+    i = 1
     for sr in 1:maxCols:samplecols
       srEnd = min(sr+maxCols-1, samplecols)
-      print("Attacking columns $(sr:srEnd) out of $samplecols columns\n")
-      if segmented
+      print("Attacking columns $(sr:srEnd) out of $samplecols columns (run $i out of $nrsegments)\n")
+      i += 1
+      if nrsegments > 1
         setColumnRange(trs, Nullable{Range}(sr:srEnd))
       end
 
@@ -568,7 +569,7 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
         attack(params.analysis, params, phase, super, trs, firstTrace, interval, sr:srEnd, rankData)
       end
 
-      if segmented
+      if nrsegments > 1
         setColumnRange(trs, Nullable{Range}())
       end
 

@@ -12,19 +12,8 @@ type SplitBinary <: Trace
   numberOfSamplesPerTrace::Int
   samplesFileDescriptor
   dataFileDescriptor
-  passes
-  dataPasses
-  postProcInstance
-  bgtask
-  tracesReturned
-  samplesPosition
-  dataPosition
-  colRange::Nullable{Range}
-  preColRange::Nullable{Range}
-  viewsdirty::Bool
-  views::Vector{Nullable{Range}}
-
-
+  meta::MetaData
+  
   function SplitBinary(dataFn, samplesFn, bits::Bool = false)
     (sampleSpace, sampleType, numberOfTracesSamples) = parseFilename(samplesFn)
     (dataSpace, dataType, numberOfTracesData) = parseFilename(dataFn)
@@ -86,13 +75,16 @@ type SplitBinary <: Trace
       sampleType = UInt64
     end
 
-    new(nrtraces, dataSpace, sampleType, numberOfSamplesPerTrace, samplesFileDescriptor, dataFileDescriptor, [], [], Union, Union, 0, 0, 0,Nullable{Range}(),Nullable{Range}(),true)
+    new(nrtraces, dataSpace, sampleType, numberOfSamplesPerTrace, samplesFileDescriptor, dataFileDescriptor,MetaData())
   end
 end
 
 pipe(trs::SplitBinary) = false
 
 length(trs::SplitBinary) = trs.numberOfTraces
+nrsamples(trs::SplitBinary) = trs.numberOfSamplesPerTrace
+sampletype(trs::SplitBinary) = Vector{trs.sampleType}()
+meta(trs::SplitBinary) = trs.meta
 
 function readData(trs::SplitBinary, idx)
   if position(trs.dataFileDescriptor) != (idx-1) * trs.dataSpace

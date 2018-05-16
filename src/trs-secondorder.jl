@@ -60,6 +60,9 @@ type SecondOrderPass <: Pass
     SecondOrderPass(cmb::SampleCombination) = new(cmb)
 end
 
+outtype(a::SecondOrderPass, ::AbstractVector) = Vector{Float64}()
+outlength(a::SecondOrderPass, xl::Int, ::AbstractVector) = div(xl * (xl -1), 2)
+
 function offset2samples(o,xl)
     c = 1
     for i in 1:xl
@@ -135,18 +138,3 @@ function pass(a::SecondOrderPass, x::AbstractArray{T,1}, idx::Int, cols::Range) 
     # @assert c == yl + 1
     return y
 end        
-
-
-function naivesecondorder(s::SampleCombination, x::Vector)
-    global y
-    xl = length(x)
-    y = zeros(Float64, div(xl * (xl-1),2))
-    c = 1
-    for i in 1:xl
-        for j in i+1:xl
-            y[c] = combine(s,x[i], x[j])
-            c += 1
-        end
-    end     
-    return y
-end

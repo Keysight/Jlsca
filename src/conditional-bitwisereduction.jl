@@ -135,7 +135,7 @@ end
 function get(c::CondReduce)
   @assert myid() == 1
   if !isa(c.worksplit, NoSplit)  
-    return @fetchfrom workers()[1] realget(Main.trs.postProcInstance)
+    return @fetchfrom workers()[1] realget(get(meta(Main.trs).postProcInstance))
   else
     return realget(c)
   end
@@ -147,7 +147,7 @@ function realget(c::CondReduce)
       if worker == c.worksplit.worker
         continue
       else
-        other = @fetchfrom worker Main.trs.postProcInstance
+        other = @fetchfrom worker get(meta(Main.trs).postProcInstance)
         merge(c, other)
       end
     end
@@ -265,19 +265,12 @@ trs = InspectorTrace("mytrs.trs", true)
 addSamplePass(trs, BitPass())
 ```
 """
-type BitPass <: Pass
-  srctype::Type
+type BitPass <: Pass end
 
-  BitPass() = new()
-end
+outtype(a::BitPass, intype::AbstractVector) = BitVector(0)
+outlength(a::BitPass, inlen::Int, intype::AbstractArray{T,1}) where {T} = sizeof(T) * 8 * inlen
 
 function pass(a::BitPass, x::AbstractArray{T,1}, idx::Int) where {T}
-  if !isdefined(a, :srctype)
-    a.srctype = T
-  end
-
-  a.srctype == T || throw(ErrorException("Fail"))
-
   return tobits(x)
 end
 
@@ -286,8 +279,7 @@ function pass(a::BitPass, x::AbstractArray{T,1}, idx::Int, cols::Range) where {T
   pass(a,x,idx)
 end
 
-function inview(a::BitPass, r::Range, l::Int)
-  length(r) % sizeof(a.srctype) == 0 || throw(ErrorException("params.maxCols should be a multiple of $(sizeof(a.srctype)*8)")) 
-
-  return div(r[1]-1,sizeof(a.srctype)*8)+1:div(r[end],sizeof(a.srctype)*8)
+function inview(a::BitPass, r::Range, l::Int, t::AbstractVector{T}) where {T}
+  length(r) % sizeof(T) == 0 || throw(ErrorException("params.maxCols should be a multiple of $(sizeof(T)*8)")) 
+  return div(r[1]-1,sizeof(T)*8)+1:div(r[end],sizeof(T)*8)
 end
