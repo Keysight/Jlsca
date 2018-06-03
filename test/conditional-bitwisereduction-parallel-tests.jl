@@ -69,7 +69,7 @@ function ParallelCondReduceTestWithInterval(splitmode)
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0)]
     params.updateInterval = Nullable(updateInterval)
-    params.maxCols = 512
+    params.maxCols = 1024*4
 
     @everywhere begin
       trs = InspectorTrace($fullfilename, true)
@@ -87,7 +87,7 @@ function ParallelCondReduceTestWithInterval(splitmode)
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0)]
     params.updateInterval = Nullable()
-    params.maxCols = 448
+    params.maxCols = 1024*8
 
     for s in 1:numberOfScas
       len2 = min(len, updateInterval*s)
