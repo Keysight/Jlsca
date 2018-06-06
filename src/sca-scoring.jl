@@ -8,7 +8,7 @@ import Base.truncate
 export printScores
 
 # print the scores pretty
-function printScores(params::DpaAttack, phase::Int, rankData::RankData, targets::Vector{Int}, printsubs=false,  m=5, io=STDOUT) 
+function printScores(params::DpaAttack, phase::Int, rankData::RankData, targets::Vector{Int}, printsubs=false,  m=5, io=stdout) 
   if !(phase in getPhases(rankData))
     return
   end
@@ -19,7 +19,7 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, targets:
   local winners = nothing
   phaseDataOffset = offset(params,phase)
   phaseDataLength = numberOfTargets(params, phase)
-  correctKeyMaterial = !isnull(params.knownKey) ? params.correctKeyMaterial[phaseDataOffset+1:phaseDataOffset+phaseDataLength] : Vector{UInt8}(0)
+  correctKeyMaterial = !ismissing(params.knownKey) ? params.correctKeyMaterial[phaseDataOffset+1:phaseDataOffset+phaseDataLength] : Vector{UInt8}(undef,0)
   nrConsumedRows = getNrConsumedRows(rankData, phase)
   nrConsumedCols = getNrConsumedCols(rankData, phase)
 
@@ -70,16 +70,16 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, targets:
         pretty = "candidate"
       end
 
-      pad = repeat(" ", nrDecimals - ndigits(rank,10))
+      pad = repeat(" ", nrDecimals - ndigits(rank,base=10))
       print(io, "rank: ", pad, rank)
       print(io, ", ")
       if length(correctKeyMaterial) > 0 && correctKeyMaterial[target] == cand
         color = correctKbOffset == 1 ? :green : :red
-        print_with_color(color, io, pretty, bold=true)
+        printstyled(io, pretty, bold=true, color=color)
       else
         print(io, pretty)
       end
-      print(io, ": 0x", hex(cand,nrNibbles))
+      print(io, ": 0x", string(cand,base=16,pad=nrNibbles))
       print(io, ", ")
       if nrLeakageFunctions == 1
         sample = getOffsets(rankData, phase, target)[i]
@@ -128,7 +128,7 @@ end
 
 function lazyinit(a::RankData, phase::Int, target::Int, guesses::Int, leakage::Int, nrConsumedRows::Int, nrConsumedCols::Int, nrRows::Int, nrCols::Int)
   if !(phase in keys(a.nrConsumedRows))
-    a.nrConsumedRows[phase] = IntSet()
+    a.nrConsumedRows[phase] = BitSet()
     a.nrConsumedCols[phase] = zeros(Int, a.intervals)
     a.nrRows[phase] = Dict{Int, Vector{Int}}()
     a.nrCols[phase] = Dict{Int, Vector{Int}}()
@@ -138,7 +138,7 @@ function lazyinit(a::RankData, phase::Int, target::Int, guesses::Int, leakage::I
   end
 
   push!(a.nrConsumedRows[phase], nrConsumedRows)
-  r = find(x -> x == nrConsumedRows, a.nrConsumedRows[phase])[1]
+  r = findfirst(x -> x == nrConsumedRows, collect(a.nrConsumedRows[phase]))
   
   if !(target in keys(a.scores[phase]))
     a.scores[phase][target] = Dict{Int,Matrix{Float64}}()
@@ -172,12 +172,17 @@ end
 function update!(g::AbsoluteGlobalMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrConsumedRows::Int, nrConsumedCols::Int,  nrRows::Int, nrCols::Int, colOffset::Int)
   (samples,guesses) = size(C)
   r = lazyinit(a,phase,target,guesses,leakage,nrConsumedRows,nrConsumedCols,nrRows,nrCols)
-  (corrvals, corrvaloffsets) = findmax(abs.(C), 1)
+  (corrvals, corrvaloffsets) = findmax(abs.(C), dims=1)
 
-  for (idx,val) in enumerate(corrvals)
-    if val > a.scores[phase][target][leakage][idx,r]
-      a.scores[phase][target][leakage][idx,r] = val
-      a.offsets[phase][target][leakage][idx,r] = ind2sub(size(C), corrvaloffsets[idx])[1] + colOffset-1
+  ci = CartesianIndices(size(C))
+  scores = a.scores[phase][target][leakage]
+  offsets = a.offsets[phase][target][leakage]
+
+  for idx in eachindex(corrvals)
+    val = corrvals[idx]
+    if val > scores[idx,r]
+      scores[idx,r] = val
+      offsets[idx,r] = ci[corrvaloffsets[idx]][1] + colOffset-1
     end
   end
 end
@@ -185,12 +190,15 @@ end
 function update!(g::GlobalMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrConsumedRows::Int, nrConsumedCols::Int,  nrRows::Int, nrCols::Int, colOffset::Int)
   (samples,guesses) = size(C)
   r = lazyinit(a,phase,target,guesses,leakage,nrConsumedRows,nrConsumedCols,nrRows,nrCols)
-  (corrvals, corrvaloffsets) = findmax(C, 1)
+  (corrvals, corrvaloffsets) = findmax(C, dims=1)
 
-  for (idx,val) in enumerate(corrvals)
+  ci = CartesianIndices(size(C))
+
+  for idx in eachindex(corrvals)
+    val = corrvals[idx]
     if val > a.scores[phase][target][leakage][idx,r]
       a.scores[phase][target][leakage][idx,r] = val
-      a.offsets[phase][target][leakage][idx,r] = ind2sub(size(C), corrvaloffsets[idx])[1] + colOffset-1
+      a.offsets[phase][target][leakage][idx,r] = ci[corrvaloffsets[idx]][1] + colOffset-1
     end
   end
 end
@@ -207,7 +215,8 @@ function update!(g::NormalizedMaximization, a::RankData, phase::Int, C::Abstract
 
   (corrvals, corrvaloffsets) = findmax(abs.(C), 1)
 
-  for (idx,val) in enumerate(corrvals)
+  for idx in eachindex(corrvals)
+    val = corrvals[idx]
     if val > a.scores[phase][target][leakage][idx,r]
       a.scores[phase][target][leakage][idx,r] = val
       a.offsets[phase][target][leakage][idx,r] = ind2sub(size(C), corrvaloffsets[idx])[1] + colOffset-1
@@ -444,7 +453,7 @@ end
 export getKey
 
 function getKey(params::DpaAttack, sc::RankData)
-  return recoverKey(params.attack, get(params.phaseInput))
+  return recoverKey(params.attack, params.phaseInput)
 end
 
 function truncate(fname)
@@ -459,7 +468,7 @@ function correctKeyRanks2CSV(params::DpaAttack)
   correctKeyMaterial = params.correctKeyMaterial
 
   for phase in phases
-    kkaFilename = @sprintf("%s.ranking.phase%02d.csv",get(params.outputkka),phase)
+    kkaFilename = @sprintf("%s.ranking.phase%02d.csv",params.outputkka,phase)
     truncate(kkaFilename)
     isempty = stat(kkaFilename).size == 0
 

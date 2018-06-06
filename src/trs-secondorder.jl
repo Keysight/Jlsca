@@ -9,19 +9,19 @@ export AbsDiff
 """
 Combines samples a and b as abs(a - b).
 """
-type AbsDiff <: SampleCombination end
+mutable struct AbsDiff <: SampleCombination end
 
 combine(c::AbsDiff, a::T, b::T) where {T} = abs(Float64(a) - b)
-allocate(c::AbsDiff, xl::Int) = Vector{Float64}(xl)
+allocate(c::AbsDiff, xl::Int) = Vector{Float64}(undef,xl)
 
 export Xor
 """
 Combines samples a and b as xor(a,b). Can only be used on traces with bits.
 """
-type Xor <: SampleCombination end
+mutable struct Xor <: SampleCombination end
 
 combine(c::Xor, a::Bool, b::Bool) = Bool(a ⊻ b)
-allocate(c::Xor, xl::Int) = BitVector(xl)
+allocate(c::Xor, xl::Int) = BitVector(undef,xl)
 
 export SecondOrderPass
 """
@@ -48,13 +48,13 @@ setPostProcessor(trs, CondAvg())
 sca(trs,params)
 ``` 
 """
-type SecondOrderPass <: Pass
+mutable struct SecondOrderPass <: Pass
     cmb::SampleCombination 
     li::Int
     ui::Int
     lj::Int
     uj::Int
-    cols::Range
+    cols::UnitRange
 
     SecondOrderPass() = new(AbsDiff())
     SecondOrderPass(cmb::SampleCombination) = new(cmb)
@@ -101,12 +101,12 @@ function loop3(cmb::SampleCombination,c::Int,i::Int,uj::Int,y::DenseVector,x::Ab
     return c
 end
 
-function pass(a::SecondOrderPass, x::AbstractArray{T,1}, idx::Int) where {T}
+function pass(a::SecondOrderPass, x::AbstractVector, idx::Int)
     xl = length(x)
     return pass(a,x,idx,1:div(xl * (xl-1),2))
 end
 
-function pass(a::SecondOrderPass, x::AbstractArray{T,1}, idx::Int, cols::Range) where {T}
+function pass(a::SecondOrderPass, x::AbstractVector, idx::Int, cols::UnitRange)
     xl = length(x)
     if !(isdefined(a,:cols) && cols == a.cols)
         (li,lj) = offset2samples(cols[1],xl)

@@ -7,7 +7,7 @@ export CondAvg
 
 import Base.get,Base.show
 
-type CondAvg <: Cond
+mutable struct CondAvg <: Cond
   averages::Dict{Int,Dict{Int,Vector{Float64}}}
   counters::Dict{Int,Dict{Int,Int}}
   globcounter::Int
@@ -41,7 +41,7 @@ function addAverage(c::CondAvg, samples::Vector, average::Vector, counter::Int)
   end
 end
 
-function add(c::CondAvg, trs::Trace, traceIdx::Int)
+function add(c::CondAvg, trs::Traces, traceIdx::Int)
   data = getData(trs, traceIdx)
   if length(data) == 0
     return
@@ -121,18 +121,16 @@ function get(c::CondAvg)
       if worker == c.worksplit.worker
         continue
       else
-        other = @fetchfrom worker get(meta(Main.trs).postProcInstance)
+        other = @fetchfrom worker meta(Main.trs).postProcInstance
         merge(c, other)
       end
     end
   end
 
-  datas = Array[]
-  averages = Matrix[]
 
   maxVal = 0
   for k in keys(c.counters)
-    maxVal = max(maxVal, findmax(keys(c.counters[k]))[1])
+    maxVal = max(maxVal, findmax(collect(keys(c.counters[k])))[1])
   end
 
   if maxVal <= 2^8
@@ -143,14 +141,20 @@ function get(c::CondAvg)
     throw(ErrorException("Unsupported and not recommended ;)"))
   end
 
-  for k in sort(collect(keys(c.counters)))
+  nrPairs = length(keys(c.counters))
+  datas = Vector{Vector{dataType}}(undef,nrPairs)
+  averages = Vector{Matrix{Float64}}(undef,nrPairs)
+  nrSamples = length(first(first(c.averages)[2])[2])
+
+  for k in 1:nrPairs
     dataSnap = sort(collect(dataType, keys(c.counters[k])))
-    sampleSnap = Matrix{Float64}(length(dataSnap), length(first(first(c.averages)[2])[2]))
+    # sampleSnap = Matrix{Float64}(undef,length(dataSnap), nrSamples)
+    sampleSnap = zeros(Float64,length(dataSnap), nrSamples)
     for i in 1:length(dataSnap)
       sampleSnap[i,:] = c.averages[k][dataSnap[i]]
     end
-    push!(datas, dataSnap)
-    push!(averages, sampleSnap)
+    datas[k] = dataSnap
+    averages[k] = sampleSnap
   end
 
   @printf("\nAveraged %d input traces into %d averages, %s data type, %s sample type\n", c.globcounter, length(keys(c.counters)), string(dataType), string(eltype(averages[1])))

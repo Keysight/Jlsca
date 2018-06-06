@@ -2,7 +2,7 @@
 #
 # Author: Cees-Bart Breunesse
 
-using Base.Test
+using Test
 
 using Jlsca.Sca
 using Jlsca.Trs
@@ -16,13 +16,13 @@ function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysi
             continue
         end
         fullfilename = joinpath(tracedir,filename)
-        @printf("file: %s\n", fullfilename)
+        print("file: $fullfilename\n")
 
         params = getParameters(fullfilename, direction)
         params.attack.xor = xor
         params.analysis = analysis
 
-        # create Trace instance
+        # create Traces instance
         if conditional
             trs = InspectorTrace(fullfilename)
 
@@ -33,7 +33,7 @@ function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysi
 
         key = getKey(params, sca(trs,params,1, 200))
 
-        @test(key == get(params.knownKey))
+        @test(key == params.knownKey)
 
         if onetest
           break

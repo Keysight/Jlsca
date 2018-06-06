@@ -10,7 +10,7 @@ export LRA
 
 Default basisModel function is `basisModelSingleBits`.
 """
-type LRA <: NonIncrementalAnalysis
+mutable struct LRA <: NonIncrementalAnalysis
   basisModel::Function
 
   function LRA()
@@ -33,15 +33,16 @@ end
 function lra(data::AbstractArray{In}, samples::AbstractArray, t::Target{In,Out,Guess}, basisFunction::Function, keyChunkValues::Vector{Guess}) where {In,Out,Guess}
     (rs, cs) = size(samples)
 
-    SStot = sum((samples .- mean(samples, 1)) .^ 2, 1)'
+    SStot = sum((samples .- mean(samples, dims=1)) .^ 2, dims=1)'
     SSreg = zeros(Float64, (cs,length(keyChunkValues)))
 
     for k in keyChunkValues
-        M = mapreduce(basisFunction, hcat, target.(t, data, k))'
+        # M = mapreduce(basisFunction, hcat, target.(t, data, k))'
+        M = mapreduce(d -> basisFunction(target(t, d, k)), hcat, data)'
 
         E = (M * inv(M' * M) * M' * samples - samples) .^ 2
 
-        SSreg[:,k+1] = mapslices(sum, E, 1)
+        SSreg[:,k+1] = mapslices(sum, E, dims=1)
     end
 
     R2 = 1 .- SSreg ./ SStot

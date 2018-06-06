@@ -4,7 +4,8 @@
 
 using Jlsca.Trs
 
-using Base.Test
+using Test
+using Printf
 
 # test back and forth
 # TODO: add test with different data types!
@@ -20,7 +21,7 @@ function testTrs2splitbin(cleanup::Bool = true)
     # re-create the compressed trs
     splitbin2trs("data_UInt8_17t.bin", 32, "samples_UInt8_17t.bin", 1024, UInt8, 17) 
         
-    @test readstring(`cmp ../testtraces/trs2splitbin_bitpacked.trs output_UInt8_17t.trs`) == ""
+    @test read(pipeline(stdout, `cmp ../testtraces/trs2splitbin_bitpacked.trs output_UInt8_17t.trs`)) == b""
 
     ### 2. With bit compression
     
@@ -33,12 +34,12 @@ function testTrs2splitbin(cleanup::Bool = true)
     # take the uncompressed trs and create uncompressed splitbin
     trs2splitbin("output_UInt8_17t_bitsasbytes.trs", 1, 32, false)
     
-    @test readstring(`cmp samples_UInt8_17t.bin samples_UInt8_17t_original.bin`) == ""
+    @test read(pipeline(stdout,`cmp samples_UInt8_17t.bin samples_UInt8_17t_original.bin`)) == b""
 
     ### 3. Check versus original Daredevil split binary and trs
 
     trs2splitbin("../testtraces/trs2splitbin_bitsasbytes.trs", 1, 32, false)
-    @test readstring(`cmp samples_UInt8_13t.bin ../testtraces/trs2splitbin_bitsasbytes.trace`) == ""
+    @test read(pipeline(stdout,`cmp samples_UInt8_13t.bin ../testtraces/trs2splitbin_bitsasbytes.trace`)) == b""
 
     if cleanup
         run(`rm data_UInt8_17t.bin data_UInt8_17t_original.bin`)

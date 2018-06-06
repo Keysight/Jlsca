@@ -2,7 +2,7 @@
 #
 # Author: Cees-Bart Breunesse
 
-using Base.Test
+using Test
 
 using Jlsca.Trs
 

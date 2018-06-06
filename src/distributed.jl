@@ -6,11 +6,11 @@ export WorkSplit,SplitByTraces,SplitByTracesSliced,SplitByTracesBlock,NoSplit,ge
 
 abstract type WorkSplit end
 
-type NoSplit <: WorkSplit end
+mutable struct NoSplit <: WorkSplit end
 
 function splitRange(numberOfAverages::Int, numberOfCandidates::Int, workers::Int)
   range = 0:((numberOfAverages)*numberOfCandidates-1)
-  workerranges = Range[]
+  workerranges = UnitRange[]
   workers = min(length(range), workers)
   stepsize = div(range[end] - range[1] + 1, workers)
 
@@ -29,7 +29,7 @@ end
 
 abstract type SplitByTraces <: WorkSplit end
 
-type SplitByTracesSliced <: SplitByTraces
+mutable struct SplitByTracesSliced <: SplitByTraces
   worker::Int
 
   function SplitByTracesSliced()
@@ -37,7 +37,7 @@ type SplitByTracesSliced <: SplitByTraces
   end
 end
 
-function getWorkerRange(w::SplitByTracesSliced, globalRange::Range)
+function getWorkerRange(w::SplitByTracesSliced, globalRange::UnitRange)
   if nprocs() > 1
     return (globalRange[1] + w.worker - 2, nworkers(), globalRange[end])
   else
@@ -46,7 +46,7 @@ function getWorkerRange(w::SplitByTracesSliced, globalRange::Range)
 end
 
 
-type SplitByTracesBlock <: SplitByTraces
+mutable struct SplitByTracesBlock <: SplitByTraces
   worker::Int
 
   function SplitByTracesBlock()
@@ -54,7 +54,7 @@ type SplitByTracesBlock <: SplitByTraces
   end
 end
 
-function getWorkerRange(w::SplitByTracesBlock, globalRange::Range)
+function getWorkerRange(w::SplitByTracesBlock, globalRange::UnitRange)
   len = length(globalRange)
   n = nworkers()
   blocksize  = div(len,n)
@@ -73,7 +73,7 @@ function getWorkerRange(w::SplitByTracesBlock, globalRange::Range)
   end
 end
 
-function add(c::PostProcessor, trs::Trace, globalRange::Range, update::Function)
+function add(c::PostProcessor, trs::Traces, globalRange::UnitRange, update::Function)
   if !isa(c.worksplit, NoSplit)
     (traceStart,traceStep,traceEnd) = getWorkerRange(c.worksplit, globalRange)
   else

@@ -6,6 +6,8 @@ export Cipher,InvCipher,KeyExpansion,KeyExpansionBackwards,Sbox,E,IP,getK,invP,f
 export toBytes,toSixbits,toBits,toNibbles,toUInt64
 export TDESencrypt,TDESdecrypt
 
+using Printf
+
 # 64 to 64 bits
 const IPbits = [58,50,42,34,26,18,10,2,60,52,44,36,28,20,12,4,62,54,46,38,30,22,14,6,64,56,48,40,32,24,16,8,57,49,41,33,25,17,9,1,59,51,43,35,27,19,11,3,61,53,45,37,29,21,13,5,63,55,47,39,31,23,15,7]
 
@@ -106,7 +108,7 @@ end
 function toBits(d::Int64, bits=64)
 	(bits >= 0 && bits <= 64) || throw(DimensionMismatch("wrong length"))
 
-	ret = BitVector(bits)
+	ret = BitVector(undef,bits)
 	for idx in bits:-1:1
 		ret[idx] = ((d & 1) == 1 ? true : false)
 		d >>= 1
@@ -162,7 +164,7 @@ end
 function KeyExpansion(k::Vector{UInt8})
 	(length(k) == 8) || throw(DimensionMismatch(@sprintf("wrong key size %d", length(k))))
 
-	cd = BitVector(56*17)
+	cd = BitVector(undef,56*17)
 	cd[1:56] = PC1(toBits(k))
 
 	for k in 1:16
@@ -187,7 +189,7 @@ function KeyExpansionBackwards(rk1::BitVector, rk1Round::Int, rk2::BitVector, rk
 
 	(startround != nextround) || throw(DimensionMismatch("wrong exception type but i don't know any other"))
 
-	cd = BitVector(56*(startround+1))
+	cd = BitVector(undef,56*(startround+1))
 	mask = bits2mask(invPC2bits)
 
 	if rk1Round == startround
@@ -274,7 +276,7 @@ function f(R::BitVector, K::BitVector, round=0, leak::Function=(x,y)->y)
 	
 	(length(R) == 32 && length(K) == 48) || throw(DimensionMismatch("Wrong length"))
 
-	ret = BitVector(32)
+	ret = BitVector(undef,32)
 
 	tmp = E(R) .⊻ K
 	tmp = leak(@sprintf("r%d.keyadd", round), tmp)

@@ -9,7 +9,7 @@
 
 export IncrementalMeanVariance,IncrementalCovariance,IncrementalCovarianceTiled,add!,getVariance,getStdDev,getCov,getCorr
 
-type IncrementalMeanVariance
+mutable struct IncrementalMeanVariance
   mean::Vector{Float64}
   var::Vector{Float64}
   n::Int
@@ -49,7 +49,7 @@ function getStdDev(state::IncrementalMeanVariance)
   return sqrt.(getVariance(state))
 end
 
-type IncrementalCovariance
+mutable struct IncrementalCovariance
   meanVarX::IncrementalMeanVariance
   meanVarY::IncrementalMeanVariance
   cov::Matrix{Float64}
@@ -131,8 +131,8 @@ function add!(state::IncrementalCovariance, dataX::AbstractVector, minX::Int, ma
   # @assert((length(dataX),length(dataY)) == size(state.cov))
 
   state.n += 1
-  const n = state.n
-  const ndiv::Float64 = (n-1)/n
+  n = state.n
+  ndiv::Float64 = (n-1)/n
 
   updateCov!(state.cov, dataXn, minX, maxX, dataYn, minY, maxY, ndiv)
 
@@ -147,7 +147,7 @@ function add!(state::IncrementalCovariance, dataX::AbstractVector, minX::Int, ma
 end
 
 function add!(this::IncrementalCovariance, other::IncrementalCovariance, updateMeanX::Bool=true, updateMeanY::Bool=true)
-  const (covX,covY) = size(this.cov)
+  (covX,covY) = size(this.cov)
 
   add!(this, other, 1, 1, updateMeanX, updateMeanY)
 end
@@ -157,7 +157,7 @@ function add!(this::IncrementalCovariance, other::IncrementalCovariance, minX::I
   deltaY = this.meanVarY.mean .- other.meanVarY.mean
   n = this.n + other.n
 
-  const (covX,covY) = size(this.cov)
+  (covX,covY) = size(this.cov)
 
   @inbounds for y in 1:covY
     for x in 1:covX
@@ -187,7 +187,7 @@ function mystrategy(nrX,nrY)
   return (tilesX,tilesY,cache)
 end
 
-type IncrementalCovarianceTiled
+mutable struct IncrementalCovarianceTiled
   numberOfX::Int
   numberOfY::Int
   tilesizeX::Int
@@ -223,7 +223,7 @@ type IncrementalCovarianceTiled
     numberOfY = length(meanVarY.mean)
     nrTilesX = div(numberOfX+tilesizeX-1, tilesizeX)
     nrTilesY = div(numberOfY+tilesizeY-1, tilesizeY)
-    covXY = Matrix{IncrementalCovariance}(nrTilesX, nrTilesY)
+    covXY = Matrix{IncrementalCovariance}(undef,nrTilesX, nrTilesY)
 
     # @printf("#threads %d, numberOfX %d, numberOfY %d, nrTilesX %d, nrTilesY %d\n", Threads.nthreads(), numberOfX, numberOfY, nrTilesX, nrTilesY)
 
@@ -239,11 +239,11 @@ type IncrementalCovarianceTiled
       end
     end
 
-    cachesXn = Vector{Vector{Float64}}(caches)
-    cachesYn = Vector{Vector{Float64}}(caches)
+    cachesXn = Vector{Vector{Float64}}(undef,caches)
+    cachesYn = Vector{Vector{Float64}}(undef,caches)
     for i in 1:caches
-      cachesXn[i] = Vector{Float64}(numberOfX)
-      cachesYn[i] = Vector{Float64}(numberOfY)
+      cachesXn[i] = Vector{Float64}(undef,numberOfX)
+      cachesYn[i] = Vector{Float64}(undef,numberOfY)
     end
 
     new(numberOfX, numberOfY, tilesizeX, tilesizeY, nrTilesX, nrTilesY, meanVarX, meanVarY, covXY, cachesXn, cachesYn, 0, caches)
@@ -252,11 +252,11 @@ end
 
 function dothreadwork(stateref::Ref{IncrementalCovarianceTiled}, y::Int)
   state = stateref[]
-  const nrTilesX = state.nrTilesX
-  const tilesizeX = state.tilesizeX
-  const tilesizeY = state.tilesizeY
-  const numberOfX = state.numberOfX
-  const numberOfY = state.numberOfY
+  nrTilesX = state.nrTilesX
+  tilesizeX = state.tilesizeX
+  tilesizeY = state.tilesizeY
+  numberOfX = state.numberOfX
+  numberOfY = state.numberOfY
 
   minY = (y-1)*tilesizeY+1
   maxY = min(minY+tilesizeY-1, numberOfY)
@@ -271,8 +271,8 @@ function dothreadwork(stateref::Ref{IncrementalCovarianceTiled}, y::Int)
       # add!(state.covXY[x,y], dataXn, minX, maxX, dataYn, minY, maxY, false,)
 
       state.covXY[x,y].n += 1
-      const n = state.covXY[x,y].n
-      const ndiv::Float64 = (n-1)/n
+      n = state.covXY[x,y].n
+      ndiv::Float64 = (n-1)/n
 
       updateCov!(state.covXY[x,y].cov, dataXn, minX, maxX, dataYn, minY, maxY, ndiv)
     end
@@ -305,7 +305,7 @@ function add!(state::IncrementalCovarianceTiled, dataX::AbstractVector, dataY::A
   @assert((length(dataX),length(dataY)) == (state.numberOfX,state.numberOfY))
 
   state.cacheCount += 1
-  const cacheCount = state.cacheCount
+  cacheCount = state.cacheCount
   storecache(state.cacheXn[cacheCount], dataX, state.meanVarX.mean)
   storecache(state.cacheYn[cacheCount], dataY, state.meanVarY.mean)
 
@@ -331,11 +331,11 @@ function add!(this::IncrementalCovarianceTiled, other::IncrementalCovarianceTile
   flushcache!(this)
   flushcache!(other)
 
-  const (nrTilesX,nrTilesY) = size(this.covXY)
-  const tilesizeX = this.tilesizeX
-  const tilesizeY = this.tilesizeY
-  const numberOfX = this.numberOfX
-  const numberOfY = this.numberOfY
+  (nrTilesX,nrTilesY) = size(this.covXY)
+  tilesizeX = this.tilesizeX
+  tilesizeY = this.tilesizeY
+  numberOfX = this.numberOfX
+  numberOfY = this.numberOfY
 
   for y in 1:nrTilesY
     minY = (y-1)*tilesizeY+1
@@ -408,7 +408,7 @@ end
 function getCorr(state::IncrementalCovarianceTiled)
   flushcache!(state)
 
-  corr = Matrix{Float64}(state.numberOfX, state.numberOfY)
+  corr = Matrix{Float64}(undef,state.numberOfX, state.numberOfY)
 
   xstddev = getStdDev(state.meanVarX)
   ystddev = getStdDev(state.meanVarY)

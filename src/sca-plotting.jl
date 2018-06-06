@@ -16,13 +16,15 @@ Plot the score evolution for phase 1, target 2
 using Plots
 
 params.knownKey = hex2bytes("00112233445566778899aabbccddeeff")
+params.updateInterval = 1000
 rankdata = sca(trs,params)
 
 plot(PlotScoresEvolution(),rankdata,params,1,2)
 ```
-If you don't know the key and params.knownKey is not set (or set to Nullable()), this plot will show you the evolution of the 5 highest ranked key candidates.
+If you don't know the key and params.knownKey is not set (or set to missing), this plot will show you the evolution of the 5 highest ranked key candidates.
 ```
-params.knownKey = Nullable()
+params.knownKey = missing
+params.updateInterval = 1000
 plot(PlotScoresEvolution(),rankdata,params,1,2)
 ```    
 
@@ -38,7 +40,7 @@ struct PlotScoresEvolution end
     end
     cands = size(scores)[1]
     
-    if !isnull(params.knownKey) 
+    if !ismissing(params.knownKey) 
         kb = getCorrectKey(params,phase,target)
         color := reshape([x == kb + 1 ? :red : :grey for x in 1:cands],(1,cands))
         label := reshape([x == kb + 1 ? "correct" : x == kb + 2 ? "incorrect" : "" for x in 1:cands],(1,cands))
@@ -69,6 +71,7 @@ Plots the evolution of the rank of the correct key bytes for all phases and targ
 using Plots
 
 params.knownKey = hex2bytes("00112233445566778899aabbccddeeff")
+params.updateInterval = 1000
 rankdata = sca(trs,params)
 
 plot(PlotRanksEvolution(),rankdata,params)
@@ -77,7 +80,7 @@ plot(PlotRanksEvolution(),rankdata,params)
 struct PlotRanksEvolution end
 
 @recipe function f(::PlotRanksEvolution, rankdata::RankData, params)
-    if isnull(params.knownKey) 
+    if ismissing(params.knownKey) 
         error("need params.knownKey (or if you don't know the key, look at PlotScoresEvolution)")
     end
     

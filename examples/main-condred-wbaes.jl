@@ -1,15 +1,17 @@
-
+using Jlsca.Sca
+using Jlsca.Trs
+using Jlsca.Align
 @everywhere using Jlsca.Sca
 @everywhere using Jlsca.Trs
 @everywhere using Jlsca.Align
-@everywhere using Jlsca.Aes
+
 
 import Jlsca.Sca.leak
 
 # Leakage models defined by Jakub Klemsa in his MSc thesis (see
 # docs/Jakub_Klemsa---Diploma_Thesis.pdf) to attack Dual AES # implementations
 # (see docs/dual aes.pdf)
-type Klemsa <: Leakage 
+mutable struct Klemsa <: Leakage 
   y::UInt8
 end
 leak(a::Klemsa, x::UInt8) = gf2dot(x,a.y)
@@ -26,7 +28,7 @@ end
 
 function gofaster()
   if length(ARGS) < 1
-    @printf("no input trace\n")
+    print("no input trace\n")
     return
   end
 

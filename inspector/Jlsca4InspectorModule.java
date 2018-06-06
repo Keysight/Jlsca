@@ -955,9 +955,9 @@ public class Jlsca4InspectorModule extends Module implements ModuleInChain {
 
       if(knownkey != null) {
           if(Platform.isWindows()) {
-        	  s += String.format("params.knownKey = Nullable(hex2bytes(\\\"%s\\\")); ", knownkey);
+        	  s += String.format("params.knownKey = hex2bytes(\\\"%s\\\")); ", knownkey;
           } else {
-        	  s += String.format("params.knownKey = Nullable(hex2bytes(\"%s\")); ", knownkey);
+        	  s += String.format("params.knownKey = hex2bytes(\"%s\")); ", knownkey;
           }
       }
 
@@ -1006,9 +1006,9 @@ public class Jlsca4InspectorModule extends Module implements ModuleInChain {
 
       if(phaseInput != null) {
           if(Platform.isWindows()) {
-        	  s += String.format("params.phaseInput = Nullable(hex2bytes(\\\"%s\\\")); ", phaseInput);
+        	  s += String.format("params.phaseInput = hex2bytes(\\\"%s\\\")); ", phaseInput;
           } else {
-        	  s += String.format("params.phaseInput = Nullable(hex2bytes(\"%s\")); ", phaseInput);
+        	  s += String.format("params.phaseInput = hex2bytes(\"%s\")); ", phaseInput;
           }
       }
 
@@ -1020,10 +1020,10 @@ public class Jlsca4InspectorModule extends Module implements ModuleInChain {
       }
 
       if(Platform.isWindows()) {
-    	  s += String.format("params.outputkka = Nullable(\\\"%s\\\"); ", module.kksCsvFilename.replace("\\", "/"));
+    	  s += String.format("params.outputkka = \\\"%s\\\"); ", module.kksCsvFilename.replace("\\", "/");
       }
       else {
-    	  s += String.format("params.outputkka = Nullable(\"%s\"); ", module.kksCsvFilename);
+    	  s += String.format("params.outputkka = \"%s\"); ", module.kksCsvFilename;
       }
 
       return s;

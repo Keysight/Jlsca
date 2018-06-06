@@ -80,7 +80,7 @@ function Qmul(x::UInt8)
     return gf2_mul(Q, x)
 end
 
-function gf8_square(data::Array{UInt8}, squares::Int)
+function gf8_square(data::AbstractArray{UInt8}, squares::Int)
     map(x -> gf8_square(x, squares), data)
 end
 
@@ -174,10 +174,10 @@ function gf2_mul(x::BitMatrix, y::BitMatrix)
 
     xcols == yrows || throw(DimensionMismatch(@sprintf("size(x) == %s, size(y) == %s", size(x), size(y))))
 
-    o = BitMatrix(xrows, ycols)
+    o = BitMatrix(undef, xrows, ycols)
 
     for ind in 1:length(o)
-        i,j = ind2sub(o,ind)
+        i,j = Tuple(CartesianIndices(size(o))[ind])
         o[i,j] = gf2_dot(vec(x[i,:]), vec(y[:,j]))
     end
 
@@ -254,7 +254,7 @@ function Rcon(i::UInt32)
     return UInt32(x) << 24
 end
 
-function KeyExpansionBackwards(key::Vector{UInt8}, Nr, Nk, offset=Nb*(Nr+1)-Nk)
+function KeyExpansionBackwards(key::AbstractVector{UInt8}, Nr, Nk, offset=Nb*(Nr+1)-Nk)
     w = zeros(UInt32, Nb*(Nr+1))
     temp::UInt32 = 0
 
@@ -280,7 +280,7 @@ function KeyExpansionBackwards(key::Vector{UInt8}, Nr, Nk, offset=Nb*(Nr+1)-Nk)
     return bytes(w...)
 end
 
-function KeyExpansion(key::Vector{UInt8}, Nr, Nk)
+function KeyExpansion(key::AbstractVector{UInt8}, Nr, Nk)
     w = zeros(UInt32, Nb*(Nr+1))
     temp::UInt32 = 0
 
@@ -306,7 +306,7 @@ function KeyExpansion(key::Vector{UInt8}, Nr, Nk)
     return bytes(w...)
 end
 
-function EqInvKeyExpansion(key::Vector{UInt8}, Nr, Nk)
+function EqInvKeyExpansion(key::AbstractVector{UInt8}, Nr, Nk)
     w = KeyExpansion(key, Nr, Nk)
 
     for round in 1:(Nr-1)
@@ -316,19 +316,19 @@ function EqInvKeyExpansion(key::Vector{UInt8}, Nr, Nk)
     return w
 end
 
-function SubBytes(state::Array)
+function SubBytes(state::AbstractArray)
     return map(x -> sbox[x+1], state)
 end
 
-function InvSubBytes(state::Array)
+function InvSubBytes(state::AbstractArray)
     return map(x -> invsbox[x+1], state)
 end
 
-function AddRoundKey(state::Matrix, k::Matrix)
+function AddRoundKey(state::AbstractMatrix, k::AbstractMatrix)
     return state .⊻ k
 end
 
-function MixColumn(s::Vector{UInt8})
+function MixColumn(s::AbstractVector{UInt8})
     s_p = zeros(UInt8, 4)
     s_p[1] = gf8_mul(s[1], gf8_square(0x2, squares)) ⊻ gf8_mul(s[2], gf8_square(0x3, squares)) ⊻ s[3] ⊻ s[4]
     s_p[2] = s[1] ⊻ gf8_mul(s[2], gf8_square(0x2, squares)) ⊻ gf8_mul(s[3], gf8_square(0x3, squares)) ⊻ s[4]
@@ -337,7 +337,7 @@ function MixColumn(s::Vector{UInt8})
     return s_p
 end
 
-function InvMixColumn(s::Vector{UInt8})
+function InvMixColumn(s::AbstractVector{UInt8})
     s_p = zeros(UInt8, 4)
     s_p[1] = gf8_mul(s[1], gf8_square(0xe, squares)) ⊻ gf8_mul(s[2], gf8_square(0xb, squares)) ⊻ gf8_mul(s[3], gf8_square(0xd, squares)) ⊻ gf8_mul(s[4], gf8_square(0x9, squares))
     s_p[2] = gf8_mul(s[1], gf8_square(0x9, squares)) ⊻ gf8_mul(s[2], gf8_square(0xe, squares)) ⊻ gf8_mul(s[3], gf8_square(0xb, squares)) ⊻ gf8_mul(s[4], gf8_square(0xd, squares))
@@ -346,15 +346,15 @@ function InvMixColumn(s::Vector{UInt8})
     return s_p
 end
 
-function MixColumns(state::Matrix)
-    return mapslices(MixColumn, state, 1)
+function MixColumns(state::AbstractMatrix)
+    return mapslices(MixColumn, state, dims=1)
 end
 
-function InvMixColumns(state::Matrix)
-    return mapslices(InvMixColumn, state, 1)
+function InvMixColumns(state::AbstractMatrix)
+    return mapslices(InvMixColumn, state, dims=1)
 end
 
-function ShiftRows(state::Matrix)
+function ShiftRows(state::AbstractMatrix)
     state_p = similar(state)
     state_p[1,:] = state[1,:]
     state_p[2,1:3] = state[2,2:4]
@@ -366,7 +366,7 @@ function ShiftRows(state::Matrix)
     return state_p
 end
 
-function InvShiftRows(state::Matrix)
+function InvShiftRows(state::AbstractMatrix)
     state_p = similar(state)
     state_p[1,:] = state[1,:]
     state_p[2,2:4] = state[2,1:3]
@@ -378,13 +378,13 @@ function InvShiftRows(state::Matrix)
     return state_p
 end
 
-function Cipher(i::Vector{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y)
+function Cipher(i::AbstractVector{UInt8}, w::AbstractVector{UInt8}, leak::Function=(x,y)->y)
     im = reshape(i, (4,Nb))
     ret = Cipher(im, w, leak)
     return vec(ret)
 end
 
-function Cipher(i::Matrix{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y)
+function Cipher(i::AbstractMatrix{UInt8}, w::AbstractVector{UInt8}, leak::Function=(x,y)->y)
     Nr = div(div(length(w),wz),Nb) - 1
 
     state = i
@@ -437,13 +437,13 @@ function Cipher(i::Matrix{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y)
     return state
 end
 
-function InvCipher(i::Vector{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y)
+function InvCipher(i::AbstractVector{UInt8}, w::AbstractVector{UInt8}, leak::Function=(x,y)->y)
     im = reshape(i, (4,Nb))
     ret = InvCipher(im, w, leak)
     return vec(ret)
 end
 
-function InvCipher(i::Matrix{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y)
+function InvCipher(i::AbstractMatrix{UInt8}, w::AbstractVector{UInt8}, leak::Function=(x,y)->y)
     Nr = div(div(length(w),wz),Nb) - 1
 
     state = i
@@ -494,13 +494,13 @@ function InvCipher(i::Matrix{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y)
     return state
 end
 
-function EqInvCipher(i::Vector{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y)
+function EqInvCipher(i::AbstractVector{UInt8}, w::AbstractVector{UInt8}, leak::Function=(x,y)->y)
     im = reshape(i, (4,Nb))
     ret = EqInvCipher(im, w, leak)
     return vec(ret)
 end
 
-function EqInvCipher(i::Matrix{UInt8}, w::Vector{UInt8}, leak::Function=(x,y)->y)
+function EqInvCipher(i::AbstractMatrix{UInt8}, w::AbstractVector{UInt8}, leak::Function=(x,y)->y)
     Nr = div(div(length(w),wz),Nb) - 1
 
     state = i

@@ -17,7 +17,7 @@ function getParameters(filename::AbstractString, direction::Direction)
       params = DpaAttack(attack, analysis)
       params.analysis.leakages = [Bit(i) for i in 0:31]
     end
-    attack.keyLength::AesKeyLength = div(parse(m.captures[1]),8)
+    attack.keyLength::AesKeyLength = AesKeyLength(div(Meta.parse(m.captures[1]),8))
     modeStr = m.captures[3]
     if modeStr == "ciph"
       attack.mode = CIPHER

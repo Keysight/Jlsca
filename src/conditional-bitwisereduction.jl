@@ -19,7 +19,7 @@
 
 export CondReduce
 
-type CondReduce <: Cond
+mutable struct CondReduce <: Cond
   mask::Dict{Int,BitVector}
   traceIdx::Dict{Int,Dict{Int,Int}}
   globcounter::Int
@@ -28,7 +28,7 @@ type CondReduce <: Cond
   usesamplescache::Bool
   samplescache::Dict{Int,Dict{Int,BitVector}}
   globalDCR::Bool
-  trs::Trace
+  trs::Traces
   
   function CondReduce(globalDCR=false)
     CondReduce(NoSplit(), globalDCR)
@@ -65,27 +65,25 @@ end
 
 # only works on samples of BitVector type, do addSamplePass(trs, BitPass())
 # to create this input efficiently!
-function add(c::CondReduce, trs::Trace, traceIdx::Int)
+function add(c::CondReduce, trs::Traces, traceIdx::Int)
   c.trs = trs
-  data::AbstractVector = getData(trs, traceIdx)
-  samples = Nullable{Vector{trs.sampleType}}()
+  data = getData(trs, traceIdx)
 
   if length(data) == 0
+    return
+  end
+
+  samples = getSamples(trs, traceIdx)
+
+  if length(samples) == 0
     return
   end
 
   for idx in eachindex(data)
     val = data[idx]
 
-    if isnull(samples)
-     samples = Nullable(getSamples(trs, traceIdx))
-     if length(get(samples)) == 0
-       return
-     end
-    end
-
     if !haskey(c.mask, idx)
-      c.mask[idx] = trues(length(get(samples)))
+      c.mask[idx] = trues(length(samples))
       c.traceIdx[idx] = Dict{Int,Int}()
       if c.usesamplescache
         c.samplescache[idx] = Dict{Int,BitVector}()
@@ -95,13 +93,13 @@ function add(c::CondReduce, trs::Trace, traceIdx::Int)
     if !haskey(c.traceIdx[idx], val)
       c.traceIdx[idx][val] = traceIdx
       if c.usesamplescache
-        c.samplescache[idx][val] = get(samples)
+        c.samplescache[idx][val] = samples
       end
       continue
     end
 
     reftrace = getSamplesCached(c, idx, val)
-    c.mask[idx][:] .&= .!(reftrace .⊻ get(samples))
+    c.mask[idx][:] .&= .!(reftrace .⊻ samples)
   end
 
   c.globcounter += 1
@@ -135,7 +133,7 @@ end
 function get(c::CondReduce)
   @assert myid() == 1
   if !isa(c.worksplit, NoSplit)  
-    return @fetchfrom workers()[1] realget(get(meta(Main.trs).postProcInstance))
+    return @fetchfrom workers()[1] realget(meta(Main.trs).postProcInstance)
   else
     return realget(c)
   end
@@ -147,7 +145,7 @@ function realget(c::CondReduce)
       if worker == c.worksplit.worker
         continue
       else
-        other = @fetchfrom worker get(meta(Main.trs).postProcInstance)
+        other = @fetchfrom worker meta(Main.trs).postProcInstance
         merge(c, other)
       end
     end
@@ -158,14 +156,14 @@ function realget(c::CondReduce)
 
   maxVal = 0
   for k in keys(c.traceIdx)
-    maxVal = max(maxVal, findmax(keys(c.traceIdx[k]))[1])
+    maxVal = max(maxVal, findmax(collect(keys(c.traceIdx[k])))[1])
   end
 
   nrOfSamples = length(first(c.mask)[2])
   bc = BitCompress(nrOfSamples)
 
   if c.globalDCR
-    traceIdxes = IntSet()
+    traceIdxes = BitSet()
     for idx in collect(keys(c.traceIdx))
       valdict = c.traceIdx[idx]
       for val in collect(keys(valdict))
@@ -204,8 +202,8 @@ function realget(c::CondReduce)
       dcrmask = toMask(bc)
       (keptnondups, keptnondupsandinvcols) = stats(bc)
     end
-    idxes = find(c.mask[k] .& dcrmask)
-    sampleSnap = BitArray{2}(length(dataSnap), length(idxes))
+    idxes = findall(c.mask[k] .& dcrmask)
+    sampleSnap = BitArray{2}(undef,length(dataSnap), length(idxes))
     @printf("Reduction for %d: %d left after global dup col removal, %d left after removing the inv dup cols, %d left after sample reduction\n", k, keptnondups, keptnondupsandinvcols, length(idxes))
   
     for j in 1:length(dataSnap)
@@ -265,21 +263,21 @@ trs = InspectorTrace("mytrs.trs", true)
 addSamplePass(trs, BitPass())
 ```
 """
-type BitPass <: Pass end
+mutable struct BitPass <: Pass end
 
-outtype(a::BitPass, intype::AbstractVector) = BitVector(0)
+outtype(a::BitPass, intype::AbstractVector) = BitVector(undef,0)
 outlength(a::BitPass, inlen::Int, intype::AbstractArray{T,1}) where {T} = sizeof(T) * 8 * inlen
 
-function pass(a::BitPass, x::AbstractArray{T,1}, idx::Int) where {T}
+function pass(a::BitPass, x::AbstractVector, idx::Int)
   return tobits(x)
 end
 
-function pass(a::BitPass, x::AbstractArray{T,1}, idx::Int, cols::Range) where {T}
+function pass(a::BitPass, x::AbstractVector, idx::Int, cols::UnitRange)
   # ignoring cols since inview makes sure we only get what we asked for
   pass(a,x,idx)
 end
 
-function inview(a::BitPass, r::Range, l::Int, t::AbstractVector{T}) where {T}
+function inview(a::BitPass, r::UnitRange, l::Int, t::AbstractVector{T}) where {T}
   length(r) % sizeof(T) == 0 || throw(ErrorException("params.maxCols should be a multiple of $(sizeof(T)*8)")) 
   return div(r[1]-1,sizeof(T)*8)+1:div(r[end],sizeof(T)*8)
 end

@@ -3,11 +3,11 @@
 
 # Implements SNR as described in https://www.springer.com/us/book/9780387308579
 
-using ProgressMeter
+using ProgressMeter:@showprogress
 using ..Trs
 
 
-function addme(mvs::Dict, data::Vector{N}, samples::Vector) where {N}
+function addme(mvs::Dict, data::AbstractVector{N}, samples::AbstractVector) where {N}
     if length(data) == 0 || length(samples) == 0
         return
     end
@@ -44,7 +44,7 @@ snr = s ./ r
 plot(snr)
 ```
 """
-function SNR(trs::Trace, r::Range)
+function SNR(trs::Traces, r::UnitRange)
     mvs = Dict()
     
     @showprogress 1 "Computing SNR ..."  for t in r
@@ -70,8 +70,8 @@ function SNR(trs::Trace, r::Range)
         end
     end
     
-    signalvariance = Matrix{Float64}(nrSamples,nrTargets)
-    noisevariance = Matrix{Float64}(nrSamples,nrTargets)
+    signalvariance = Matrix{Float64}(undef,nrSamples,nrTargets)
+    noisevariance = Matrix{Float64}(undef,nrSamples,nrTargets)
     
     for c in 1:nrTargets
         signalvariance[:,c] = getVariance(signals[c]) 
@@ -81,17 +81,17 @@ function SNR(trs::Trace, r::Range)
     return signalvariance,noisevariance
 end
 
-function SNR(trs::Trace, r::Range, attack::Attack, key::Vector{UInt8}, leakages::Vector{Leakage})
+function SNR(trs::Traces, r::UnitRange, attack::Attack, key::AbstractVector{UInt8}, leakages::Vector{Leakage})
     phases = 1:numberOfPhases(attack)
 
     return mapreduce(phase -> SNR(trs,r,attack,key,leakages,phase), (x,y) -> (hcat(x[1],y[1]),hcat(x[2],y[2])), phases)
 end
 
-function SNR(trs::Trace, r::Range, attack::Attack, key::Vector{UInt8}, leakages::Vector{Leakage}, phase::Int)
+function SNR(trs::Traces, r::UnitRange, attack::Attack, key::AbstractVector{UInt8}, leakages::Vector{Leakage}, phase::Int)
     return SNR(trs,r,attack,key,leakages,phase,collect(1:numberOfTargets(attack,phase)))
 end
 
-function SNR(trs::Trace, r::Range, attack::Attack, key::Vector{UInt8}, leakages::Vector{Leakage}, phase::Int, targetOffsets::Vector{Int})
+function SNR(trs::Traces, r::UnitRange, attack::Attack, key::AbstractVector{UInt8}, leakages::Vector{Leakage}, phase::Int, targetOffsets::Vector{Int})
     phaseDataOffset = offset(attack,phase)
     phaseDataLength = numberOfTargets(attack, phase)
     allkeymaterial = Sca.correctKeyMaterial(attack, key)
@@ -99,8 +99,8 @@ function SNR(trs::Trace, r::Range, attack::Attack, key::Vector{UInt8}, leakages:
     targets = getTargets(attack, phase, allkeymaterial)[targetOffsets]
     datapass = getDataPass(attack, phase, allkeymaterial)
 
-    if !isnull(datapass)
-        addDataPass(trs, get(datapass))
+    if !ismissing(datapass)
+        addDataPass(trs, datapass)
     end
 
     addDataPass(trs, x -> x[targetOffsets])
@@ -117,7 +117,7 @@ function SNR(trs::Trace, r::Range, attack::Attack, key::Vector{UInt8}, leakages:
 
     popDataPass(trs)
 
-    if !isnull(datapass)
+    if !ismissing(datapass)
         popDataPass(trs)
     end
     

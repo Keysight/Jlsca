@@ -97,7 +97,7 @@ end
 
 export GcmState
 
-type GcmState 
+mutable struct GcmState 
     abits::Int
     cbits::Int
     J0::UInt128
@@ -183,7 +183,7 @@ function doCipher(a::GcmState, p::Vector{UInt8})
             tmp[1:tail] = p[end-tail+1:end]
             J += 1
             c = a.cipher(reinterpret(UInt8, [hton(J)]), a.w)
-            c[tail+1:end] = 0
+            c[tail+1:end] .= 0
             c .⊻= tmp
             X = hton(reinterpret(UInt128, c)[1])
             a.S = ghash(X, a.S, a.H)

@@ -2,27 +2,15 @@
 #
 # Author: Cees-Bart Breunesse
 
-export CorrelationAlignNaive,CorrelationAlignFFT,correlationAlign,AlignPass
 
-import ..Trs.Pass
-import ..Trs.pass
-
-type CorrelationAlignNaive
-  reference::Vector
-  referenceOffset::Int
-  maxShift::Int
-
-  function CorrelationAlignNaive(reference, referenceOffset, maxShift)
-    new(reference, referenceOffset, maxShift)
-  end
-end
-
-type CorrelationAlignFFT
+export CorrelationAlignFFT
+mutable struct CorrelationAlignFFT
   reversereference0mean::Vector{Float64}
   referenceOffset::Int
   maxShift::Int
   square_sum_x2::Float64
-  plans::Tuple{Ref{Base.DFT.Plan}, Ref{Base.DFT.Plan}}
+  plan1::Union{Missing,Ref}
+  plan2::Union{Missing,Ref}
   initialized::Bool
   sums_y::Vector{Float64}
   sums_y2::Vector{Float64}
@@ -33,41 +21,16 @@ type CorrelationAlignFFT
   function CorrelationAlignFFT(reference::Vector, referenceOffset::Int, maxShift::Int)
     referenceOffset >= 0 || throw(ErrorException("no negative referenceOffset"))
     maxShift >= 0 || throw(ErrorException("no negative maxShift"))
-    reference0mean = reference - mean(reference)
+    reference0mean = reference .- mean(reference)
     reversereference0mean = reverse(reference0mean)
     square_sum_x2 = sqrt(sum(reference0mean .^ 2))
-    plans::Tuple{Ref{Base.DFT.Plan}, Ref{Base.DFT.Plan}} = (Ref{Base.DFT.Plan}(),Ref{Base.DFT.Plan}())
 
-    new(reversereference0mean, referenceOffset, maxShift, square_sum_x2, plans, false)
+    new(reversereference0mean, referenceOffset, maxShift, square_sum_x2, missing, missing, false)
   end
 
 end
 
-# naive O(n^2) implementation
-function correlationAlign(samples::Vector, state::CorrelationAlignNaive)
-  align::Int = 0
-  maxCorr::Float64 = 0
-
-  reference::Vector = state.reference
-  referenceOffset::Int = state.referenceOffset
-  maxShift::Int = state.maxShift
-
-  window = max(1, referenceOffset - maxShift):(min(referenceOffset + maxShift + length(reference), length(samples)) - length(reference) + 1)
-
-  @inbounds for o in window
-    e = o + length(reference) - 1
-    corr = cor(samples[o:e], reference)
-    if corr > maxCorr
-      maxCorr = corr
-      align = o
-    end
-  end
-
-  ret = (referenceOffset-align,maxCorr)
-  return ret
-end
-
-function myconv{T<:Base.LinAlg.BlasFloat}(u::StridedVector{T}, v::StridedVector{T}, plans::Tuple{Ref{Base.DFT.Plan}, Ref{Base.DFT.Plan}})
+function myconv(u::StridedVector{T}, v::StridedVector{T}, plan1, plan2) where {T}
     nu = length(u)
     nv = length(v)
     n = nu + nv - 1
@@ -75,27 +38,24 @@ function myconv{T<:Base.LinAlg.BlasFloat}(u::StridedVector{T}, v::StridedVector{
     upad = [u; zeros(T, np2 - nu)]
     vpad = [v; zeros(T, np2 - nv)]
     if T <: Real
-      if !isdefined(plans[1], :x)
-        plans[1].x = plan_rfft(upad)
+      if ismissing(plan1)
+        plan1 = Ref(plan_rfft(upad))
       end
 
-      upad_f = plans[1].x * upad
-      vpad_f = plans[1].x * vpad
+      upad_f = plan1[] * upad
+      vpad_f = plan1[] * vpad
       dotp = upad_f .* vpad_f
 
-      if !isdefined(plans[2], :x)
-        plans[2].x = plan_irfft(dotp, np2)
+      if ismissing(plan2)
+        plan2 = Ref(plan_irfft(dotp, np2))
       end
-      y = plans[2].x * dotp
+      y = plan2[] * dotp
     else
         throw(ErrorException("don't"))
     end
     return y[1:n]
 end
 
-function correlationAlign(samples::Vector{Float32}, state::CorrelationAlignFFT)
-  correlationAlign(map(Float64, samples), state)
-end
 
 function pearson(cv::Vector{Float64},sums_y::Vector{Float64},sums_y2::Vector{Float64},square_sum_x2::Float64,window::UnitRange,n::Int,scores::Vector{Float64})
     # compute pearson's correlation
@@ -123,7 +83,8 @@ function fastnormalizedcrosscorrelation(samples::Vector{Float64}, state::Correla
   referenceOffset = state.referenceOffset
   maxShift = state.maxShift
   square_sum_x2 = state.square_sum_x2
-  plans::Tuple{Ref{Base.DFT.Plan}, Ref{Base.DFT.Plan}} = state.plans
+  plan1 = state.plan1
+  plan2 = state.plan2
   window = max(1, referenceOffset - maxShift):(min(referenceOffset + maxShift + n, length(samples)))
 
   if !state.initialized
@@ -142,7 +103,7 @@ function fastnormalizedcrosscorrelation(samples::Vector{Float64}, state::Correla
   scores = state.scores
 
   # compute convolution (sums of squares between ref and samples)
-  cv::Vector{Float64} = myconv(reversereference0mean, samples[window], plans)
+  cv::Vector{Float64} = myconv(reversereference0mean, samples[window], plan1, plan2)
 
   # pre-compute the sums and sums of squares of samples
   idx = 2
@@ -159,6 +120,12 @@ function fastnormalizedcrosscorrelation(samples::Vector{Float64}, state::Correla
   nothing
 end
 
+export correlationAlign
+
+function correlationAlign(samples::Vector{Float32}, state::CorrelationAlignFFT)
+  correlationAlign(map(Float64, samples), state)
+end
+
 function correlationAlign(samples::Vector{Float64}, state::CorrelationAlignFFT)
   fastnormalizedcrosscorrelation(samples, state)
 
@@ -169,7 +136,12 @@ function correlationAlign(samples::Vector{Float64}, state::CorrelationAlignFFT)
   return ret
 end
 
-type AlignPass <: Pass 
+export AlignPass
+
+import ..Trs.Pass
+import ..Trs.pass
+
+mutable struct AlignPass <: Pass 
   c::CorrelationAlignFFT
   shifts::Vector{Tuple{Int,Float64}}
   hasval::BitVector
@@ -192,6 +164,6 @@ function pass(a::AlignPass, x::Vector, idx::Int)
   if corrval > a.lowerBound
     return circshift(x, shift)
   else
-    return Vector{eltype(x)}(0)
+    return Vector{eltype(x)}(undef,0)
   end
 end

@@ -1,36 +1,10 @@
 export DistributedTrace
 
-import Base.sync_begin, Base.sync_end, Base.async_run_thunk
-export @everyworker,@worker
-
-macro everyworker(ex)
-    quote
-        sync_begin()
-        thunk = ()->(eval(Main,$(Expr(:quote,ex))); nothing)
-        for pid in workers()
-            async_run_thunk(()->remotecall_fetch(thunk, pid))
-            yield() # ensure that the remotecall_fetch has been started
-        end
-        sync_end()
-    end
-end
-
-macro worker(pid,ex)
-    quote
-        sync_begin()
-        thunk = ()->(eval(Main,$(Expr(:quote,ex))); nothing)
-        async_run_thunk(()->remotecall_fetch(thunk, pid))
-        yield() # ensure that the remotecall_fetch has been started
-        sync_end()
-    end
-end
-
-type DistributedTrace <: Trace
+mutable struct DistributedTrace <: Traces
   count::Int
-  colRange::Nullable{Range}
 
   function DistributedTrace()
-    return new(0,Nullable{Range}())
+    return new(0)
   end
 
 end
@@ -42,13 +16,13 @@ nrsamples(trs::DistributedTrace, post::Bool) = @fetch nrsamples(Main.trs,post)
 nrsamples(trs::DistributedTrace) = @fetch nrsamples(Main.trs)
 sampletype(trs::DistributedTrace) = @fetch sampletype(Main.trs)
 
-function setColumnRange(trs::DistributedTrace, r::Nullable{Range})
+function setColumnRange(trs::DistributedTrace, r::Union{Missing,UnitRange})
   @sync for worker in workers()
     @spawnat worker setColumnRange(Main.trs, r)
   end
 end
 
-function setPreColumnRange(trs::DistributedTrace, r::Nullable{Range})
+function setPreColumnRange(trs::DistributedTrace, r::Union{Missing,UnitRange})
   @sync for worker in workers()
     @spawnat worker setPreColumnRange(Main.trs, r)
   end
@@ -86,9 +60,9 @@ end
 
 function getCounter(trs2::DistributedTrace)
   if isa(trs2, DistributedTrace)
-    worksplit = @fetch get(meta(Main.trs).postProcInstance).worksplit
+    worksplit = @fetch meta(Main.trs).postProcInstance.worksplit
   else
-    worksplit = get(meta(trs2).postProcInstance).worksplit
+    worksplit = meta(trs2).postProcInstance.worksplit
   end
 
   total = 0

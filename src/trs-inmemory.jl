@@ -5,7 +5,7 @@
 export InMemory
 
 # simple wrapper around in-memory matrices
-type InMemory{TS,TD} <: Trace
+mutable struct InMemory{TS,TD} <: Traces
   samples::AbstractArray{TS,2}
   sampleType::Type
   data::AbstractArray{TD,2}
@@ -38,7 +38,7 @@ function readSamples(trs::InMemory, idx)
   return vec(trs.samples[:,idx])
 end
 
-function readSamples(trs::InMemory, idx, cols::Range)
+function readSamples(trs::InMemory, idx, cols::UnitRange)
   return vec(trs.samples[cols,idx])
 end
 
