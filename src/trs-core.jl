@@ -161,7 +161,7 @@ function updateViews(trs::Trace)
   end
 
   if !isnull(m.preColRange)
-    if !isnull(m.views[1])
+    if !isnull(views[1])
       views[1] = Nullable(get(m.preColRange)[get(views[1])])
     else
       views[1] = m.preColRange
