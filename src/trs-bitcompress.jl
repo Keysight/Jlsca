@@ -4,14 +4,14 @@
 
 export BitCompress,bitcompress,toMask
 
-type BitCompress
+mutable struct BitCompress
   tmp::Vector{Int}
   duplicates::Vector{Int}
   inverses::Vector{Int}
   first::Bool
 
   function BitCompress(nrOfSamples::Int)
-    return new(Vector{Int}(nrOfSamples), Vector{Int}(nrOfSamples), Vector{Int}(nrOfSamples), true)
+    return new(Vector{Int}(undef,nrOfSamples), Vector{Int}(undef,nrOfSamples), Vector{Int}(undef,nrOfSamples), true)
   end
 end
 
@@ -23,7 +23,7 @@ function reset!(c::BitCompress)
 end
 
 function toMask(state::BitCompress)
-  mask = BitVector(length(state.duplicates))
+  mask = BitVector(undef,length(state.duplicates))
   for (i,val) in enumerate(state.duplicates)
     mask[i] = (val == i) && (state.inverses[val] == i)
   end

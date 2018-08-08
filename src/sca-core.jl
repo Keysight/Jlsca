@@ -64,7 +64,7 @@ Implemented targets in Jlsca: `MCOut`,`InvMCOut`,`SboxOut`,`InvSboxOut`,`DesSbox
 
 # Example
 ```
-type MyTarget <: Target{UInt8,UInt8,UInt8} end
+mutable struct MyTarget <: Target{UInt8,UInt8,UInt8} end
 target(a::MyTarget, input::UInt8, kb::UInt8) = xor(input,kb)
 ```
 """
@@ -89,7 +89,7 @@ params = DpaAttack(AesSboxAttack(),CPA())
 params.maximization = AbsoluteGlobalMaximization()
 ```
 """
-type AbsoluteGlobalMaximization <: Maximization end
+mutable struct AbsoluteGlobalMaximization <: Maximization end
 show(io::IO, a::AbsoluteGlobalMaximization) = print(io, "abs global max")
 
 export GlobalMaximization
@@ -103,7 +103,7 @@ params = DpaAttack(AesSboxAttack(),CPA())
 params.maximization = GlobalMaximization()
 ```
 """
-type GlobalMaximization <: Maximization end
+mutable struct GlobalMaximization <: Maximization end
 show(io::IO, a::GlobalMaximization) = print(io, "global max")
 
 export NormalizedMaximization
@@ -117,7 +117,7 @@ params = DpaAttack(AesSboxAttack(),CPA())
 params.maximization = NormalizedMaximization()
 ```
 """
-type NormalizedMaximization <: Maximization end
+mutable struct NormalizedMaximization <: Maximization end
 show(io::IO, a::NormalizedMaximization) = print(io, "normalized max")
 
 export maximization
@@ -149,7 +149,7 @@ The default and only combination function is `Sum`.
 
 # Example
 ```
-type Max <: Combination end
+mutable struct Max <: Combination end
 # import in order to override for new type
 import Base.show
 show(io::IO,a::Max) = print(io, "max")
@@ -175,25 +175,25 @@ abstract type Combination end
 """
 The default `Combination` strategy which, for a given key candidate, sums the scores of all leakages.
 """
-type Sum <: Combination end
+mutable struct Sum <: Combination end
 show(io::IO, a::Sum) = print(io, "+")
 
 """
 Takes the maximum of the scores over all leakages, for a given key candidate.
 """
-type Max <: Combination end
+mutable struct Max <: Combination end
 show(io::IO, a::Max) = print(io, "max")
 
 """
 Takes the maximum of the normalized scores over all leakages, for a given key candidate.
 """
-type MaxNormalized <: Combination end
+mutable struct MaxNormalized <: Combination end
 show(io::IO,a::MaxNormalized) = print(io, "max normalized")
 
 """
 Sums the normalized scores of all leakages, for a given key candidate.
 """
-type SumNormalized <: Combination end
+mutable struct SumNormalized <: Combination end
 show(io::IO,a::SumNormalized) = print(io, "sum normalized")
 
 
@@ -234,34 +234,34 @@ params.maxCols = 200000
 params.saveCond = "myprefix"
 ```
 """
-type DpaAttack
+mutable struct DpaAttack
   attack::Attack
   analysis::Analysis
   dataOffset::Int
-  knownKey::Nullable{Vector{UInt8}}
-  updateInterval::Nullable{Int}
-  phases::Nullable{Vector{Int}}
-  phaseInput::Nullable{Vector}
-  outputkka::Nullable{AbstractString}
-  targetOffsets::Nullable{Vector{Int}}
-  scoresCallBack::Nullable{Function}
-  evolutionCb::Nullable{Function}
+  knownKey::Union{Missing,Vector{UInt8}}
+  updateInterval::Union{Missing,Int}
+  phases::Union{Missing,Vector{Int}}
+  phaseInput::Union{Missing,Vector}
+  outputkka::Union{Missing,AbstractString}
+  targetOffsets::Union{Missing,Vector{Int}}
+  scoresCallBack::Union{Missing,Function}
+  evolutionCb::Union{Missing,Function}
   leakageCombinator::Combination
-  maximization::Nullable{Maximization}
-  maxCols::Nullable{Int}
-  maxColsPost::Nullable{Int}
-  saveCond::Nullable{String}
-  recoverCond::Nullable{String}
+  maximization::Union{Missing,Maximization}
+  maxCols::Union{Missing,Int}
+  maxColsPost::Union{Missing,Int}
+  saveCond::Union{Missing,String}
+  recoverCond::Union{Missing,String}
   # caching stuff below, not configurable, overwritten for each sca run
   targets::Vector{Vector{Target}}
-  phasefn::Vector{Nullable{Function}}
+  phasefn::Vector{Union{Missing,Function}}
   phaseData::Vector
   correctKeyMaterial::Vector
   intervals::Int
   rankData
 
   function DpaAttack(attack::Attack, analysis::Analysis)
-    new(attack,analysis,1,Nullable(),Nullable(),Nullable(),Nullable(),Nullable(),Nullable(), Nullable(), Nullable(), Sum(), Nullable(),Nullable(), Nullable(),Nullable(),Nullable())
+    new(attack,analysis,1,missing,missing,missing,missing,missing,missing, missing, missing, Sum(), missing,missing, missing,missing,missing)
   end
 end
 
@@ -292,7 +292,7 @@ Data in this instance should be accessed by functions. See:
 * `getScores`
 * `getOffsets`
 """
-type RankData
+mutable struct RankData
   nrConsumedRows
   nrConsumedCols
   nrRows
@@ -304,7 +304,7 @@ type RankData
   nrLeakages
 
   function RankData(params::DpaAttack)
-    nrConsumedRows = Dict{Int, IntSet}()
+    nrConsumedRows = Dict{Int, BitSet}()
     nrConsumedCols = Dict{Int, Vector{Int}}()
     nrRows = Dict{Int, Dict{Int, Vector{Int}}}()
     nrCols = Dict{Int, Dict{Int, Vector{Int}}}()
@@ -321,25 +321,25 @@ function printParameters(a::DpaAttack)
   printParameters(a.attack)
   print("analysis:     $(a.analysis)\n")
   printParameters(a.analysis)
-  print("maximization: $(get(a.maximization, maximization(a.analysis)))\n")
+  print("maximization: $(coalesce(a.maximization, maximization(a.analysis)))\n")
   if numberOfLeakages(a.analysis) > 1
     print("combination:  $(a.leakageCombinator)\n")
   end
   print("data at:      $(a.dataOffset)\n")
-  if !isnull(a.phases)
-    print("phases:       $(get(a.phases))\n")
+  if !ismissing(a.phases)
+    print("phases:       $(a.phases)\n")
   end
-  if !isnull(a.targetOffsets)
-    print("targets:      $(get(a.targetOffsets))\n")
+  if !ismissing(a.targetOffsets)
+    print("targets:      $(a.targetOffsets)\n")
   end
-  if !isnull(a.knownKey)
-    print("known key:    $(bytes2hex(get(a.knownKey)))\n")
+  if !ismissing(a.knownKey)
+    print("known key:    $(bytes2hex(a.knownKey))\n")
   end
-  if !isnull(a.maxCols)
-    print("max cols into post processor: $(get(a.maxCols))\n")
+  if !ismissing(a.maxCols)
+    print("max cols into post processor: $(a.maxCols)\n")
   end
-  if !isnull(a.maxColsPost)
-    print("max cols into non-inc analysis: $(get(a.maxColsPost))\n")
+  if !ismissing(a.maxColsPost)
+    print("max cols into non-inc analysis: $(a.maxColsPost)\n")
   end
 end
 
@@ -347,81 +347,81 @@ printParameters(a::Attack) = return
 guesses(a::Target{In,Out,Guess}) where {In,Out,Guess} = collect(Guess, typemin(Guess):typemax(Guess))
 numberOfPhases(a::Attack) = 1
 numberOfTargets(a::Attack, phase::Int) = 1
-getTargets(a::Attack{U}, phase::Int, phaseInput::Vector{U}) where {U} = []
-recoverKey(a::Attack{U}, recoverKeyMaterial::Vector{U}) where {U} = recoverKeyMaterial
-getDataPass(a::Attack{U}, phase::Int, phaseInput::Vector{U}) where {U} = Nullable()
+getTargets(a::Attack{U}, phase::Int, phaseInput::AbstractVector{U}) where {U} = []
+recoverKey(a::Attack{U}, recoverKeyMaterial::AbstractVector{U}) where {U} = recoverKeyMaterial
+getDataPass(a::Attack{U}, phase::Int, phaseInput::AbstractVector{U}) where {U} = missing
 totalNumberOfTargets(a::Attack) = sum(x -> numberOfTargets(a,x), 1:numberOfPhases(a))
-isKeyCorrect(a::Attack, key1::Vector{UInt8}, key2::Vector{UInt8}) = key1 == key2
+isKeyCorrect(a::Attack, key1::AbstractVector{UInt8}, key2::AbstractVector{UInt8}) = key1 == key2
 
 unittype(a::Attack{T}) where {T} = T
 
 export numberOfLeakages
 
-function saveToDisk(params::DpaAttack,phase::Int,target::Int,rows::Range,kbsamples::AbstractArray,kbdata::AbstractArray)
-  if !isnull(params.saveCond)
-    sampleType = eltype(kbsamples)
-    (nrTraces,nrSamples) = size(kbsamples)
-    fname = get(params.saveCond) * "_p$(phase)_t$(target)_$(rows)_"
-    fnamedata = fname * "data_UInt8_$(nrTraces)t.bin"
-    fnamesamples = fname * "samples_$(sampleType)_$(nrTraces)t.bin"
-    trs = SplitBinary(fnamedata, 1, fnamesamples, nrSamples, sampleType, nrTraces, true)    
-    for row in 1:nrTraces
-      data = [kbdata[row]]
-      samples = kbsamples[row,:]
-      trs[row] = (data,samples)
-    end
-    close(trs)
-  end
+function saveToDisk(params::DpaAttack,phase::Int,target::Int,rows::UnitRange,kbsamples::AbstractArray,kbdata::AbstractArray)
+  # if !ismissing(params.saveCond)
+  #   sampleType = eltype(kbsamples)
+  #   (nrTraces,nrSamples) = size(kbsamples)
+  #   fname = params.saveCond) * "_p$(phase)_t$(target)_$(rows_")
+  #   fnamedata = fname * "data_UInt8_$(nrTraces)t.bin"
+  #   fnamesamples = fname * "samples_$(sampleType)_$(nrTraces)t.bin"
+  #   trs = SplitBinary(fnamedata, 1, fnamesamples, nrSamples, sampleType, nrTraces, true)    
+  #   for row in 1:nrTraces
+  #     data = [kbdata[row]]
+  #     samples = kbsamples[row,:]
+  #     trs[row] = (data,samples)
+  #   end
+  #   close(trs)
+  # end
 end
 
-function recoverFromDisk(params::DpaAttack,phase::Int,targetOffsets::Vector{Int},rows::Range)
-    datas = Array[]
-    averages = Matrix[]
+function recoverFromDisk(params::DpaAttack,phase::Int,targetOffsets::Vector{Int},rows::UnitRange)
+    # datas = Array[]
+    # averages = Matrix[]
 
-    for target in targetOffsets
+    # for target in targetOffsets
 
-      dataregex = Regex(get(params.recoverCond) * "_p$(phase)_t$(target)_$(rows)_data_(Int64|UInt64|Int32|UInt32|Float64|Float32|Int16|UInt16|Int8|UInt8)?(_[0-9]+s)?(_[0-9]+t)?\.bin")
-      samplesregex = Regex(get(params.recoverCond) * "_p$(phase)_t$(target)_$(rows)_samples_(Int64|UInt64|Int32|UInt32|Float64|Float32|Int16|UInt16|Int8|UInt8)?(_[0-9]+s)?(_[0-9]+t)?\.bin")
-      datafname = nothing
-      samplesfname = nothing
-      for fname in readdir()
-        m = match(dataregex, fname)
-        if m != nothing
-          datafname = fname
-          continue
-        end
-        m = match(samplesregex, fname)
-        if m != nothing
-          samplesfname = fname
-          continue
-        end
-        if datafname != nothing && samplesfname != nothing
-          break
-        end
-      end
+    #   dataregex = Regex(params.recoverCond) * "_p$(phase)_t$(target)_$(rows_data_(Int64|UInt64|Int32|UInt32|Float64|Float32|Int16|UInt16|Int8|UInt8)?(_[0-9]+s)?(_[0-9]+t)?\\.bin")
+    #   samplesregex = Regex(params.recoverCond) * "_p$(phase)_t$(target)_$(rows_samples_(Int64|UInt64|Int32|UInt32|Float64|Float32|Int16|UInt16|Int8|UInt8)?(_[0-9]+s)?(_[0-9]+t)?\\.bin")
+    #   datafname = nothing
+    #   samplesfname = nothing
+    #   for fname in readdir()
+    #     m = match(dataregex, fname)
+    #     if m != nothing
+    #       datafname = fname
+    #       continue
+    #     end
+    #     m = match(samplesregex, fname)
+    #     if m != nothing
+    #       samplesfname = fname
+    #       continue
+    #     end
+    #     if datafname != nothing && samplesfname != nothing
+    #       break
+    #     end
+    #   end
 
-      (datafname != nothing && samplesfname != nothing) || throw(ErrorException("Cannot find saved conditional output for phase $phase, target $target, rows $rows with prefix $(get(params.recoverCond))"))
+    #   (datafname != nothing && samplesfname != nothing) || throw(ErrorException("Cannot find saved conditional output for phase $phase, target $target, rows $rows with prefix $(get(params.recoverCond))"))
 
-      print("Using conditional output from $datafname and $samplesfname\n")
+    #   print("Using conditional output from $datafname and $samplesfname\n")
 
-      trs = SplitBinary(datafname, samplesfname)
-      ((data,samples), eof) = readTraces(trs, 1:length(trs))
-      push!(datas, vec(data))
-      push!(averages,samples)
-      close(trs)
-    end
+    #   trs = SplitBinary(datafname, samplesfname)
+    #   ((data,samples), eof) = readTraces(trs, 1:length(trs))
+    #   push!(datas, vec(data))
+    #   push!(averages,samples)
+    #   close(trs)
+    # end
 
-    return (datas,averages)
+    # return (datas,averages)
 end
 
-function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Trace, firstTrace::Int, rows::Range, cols::Range, rankData::RankData)
+function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Traces, firstTrace::Int, rows::UnitRange, cols::UnitRange, rankData::RankData)
 
   local kbsamples
   local kbdata
 
   targetOffsets = getTargetOffsets(params, phase)
 
-  if isnull(params.recoverCond) 
+  if ismissing(params.recoverCond) 
     ((data, samples), eof) = readTraces(trs, rows)
     nrTraces = getCounter(trs)
   else
@@ -449,7 +449,7 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
     (nrrows,samplecols) = size(kbsamples)
 
      # FIXME: need to pick something sane here
-    maxCols = get(params.maxColsPost, get(params.maxCols, 200000))
+    maxCols = coalesce(params.maxColsPost, params.maxCols, 200000)
 
     target = getTarget(params, phase, targetOffsets[o])
     kbvals = guesses(target)
@@ -470,14 +470,14 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
       C = computeScores(a, kbdata, v, target, kbvals)
 
       # nop the nans
-      C[isnan.(C)] = 0
+      C[isnan.(C)] .= 0
 
       # get the scores for all leakage functions
       for l in 1:numberOfLeakages(a)
         oo = (l-1)*nrKbvals
         vv = @view C[:,oo+1:oo+nrKbvals]
         yieldto(super, (INTERMEDIATESCORES, (phase, o, l, vv)))
-        update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[o], l, nrTraces, consumedCols, nrrows, length(sr:srEnd),cols[1]+sr-1)
+        update!(coalesce(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[o], l, nrTraces, consumedCols, nrrows, length(sr:srEnd),cols[1]+sr-1)
         consumedCols = 0
       end
     end
@@ -489,7 +489,7 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
   end
 end
 
-function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Trace, firstTrace::Int, rows::Range, cols::Range, rankData::RankData)
+function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Traces, firstTrace::Int, rows::UnitRange, cols::UnitRange, rankData::RankData)
   targetOffsets = getTargetOffsets(params, phase)
   leakages = params.analysis.leakages
   targets = getTargets(params, phase)
@@ -497,13 +497,16 @@ function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Ta
 
   if isa(trs, DistributedTrace)
     @sync for w in workers()
-      @spawnat w init(get(meta(Main.trs).postProcInstance), targetOffsets, leakages, targets)
+      @spawnat w init(meta(Main.trs).postProcInstance, targetOffsets, leakages, targets)
     end
   else
-    init(get(meta(trs).postProcInstance), targetOffsets, leakages, targets)
+    init(meta(trs).postProcInstance, targetOffsets, leakages, targets)
   end
 
   (C,eof) = readTraces(trs, rows)
+
+  # nop the nans
+  C[isnan.(C)] .= 0
 
   nrTraces = getCounter(trs)
 
@@ -520,7 +523,7 @@ function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Ta
       oo = (l-1)*nrKbvals + (kb-1)*nrLeakages*nrKbvals
       vv = @view C[:,oo+1:oo+nrKbvals]
       yieldto(super, (INTERMEDIATESCORES, (phase, kb, l, vv)))
-      update!(get(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[kb], l, nrTraces, consumedCols, nrTraces, length(cols), cols[1])
+      update!(coalesce(params.maximization, maximization(a)), rankData, phase, vv, targetOffsets[kb], l, nrTraces, consumedCols, nrTraces, length(cols), cols[1])
       consumedCols = 0
     end
     setCombined!(params.leakageCombinator, rankData, phase, targetOffsets[kb], nrTraces)
@@ -531,20 +534,20 @@ function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Ta
 end
 
 # does the attack & analysis per xxx traces, should be called from an scatask
-function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::Range)
+function analysis(super::Task, params::DpaAttack, phase::Int, trs::Traces, rows::UnitRange)
     local rankData
 
-    if !isnull(params.updateInterval) && !hasPostProcessor(trs)
+    if !ismissing(params.updateInterval) && !hasPostProcessor(trs)
         throw(ErrorException("WARNING: update interval only supported for runs with a post processor"))
     end
 
     samplecols = nrsamples(trs, true)
 
     # FIXME: need to pick something sane here
-    maxCols = get(params.maxCols, 200000)
+    maxCols = coalesce(params.maxCols, 200000)
     nrsegments = div(samplecols+maxCols-1,maxCols)
 
-    ((nrsegments > 1) && (!isnull(params.recoverCond) || !isnull(params.saveCond))) && throw(ErrorException("Increase params.maxCols, segmentation and saving or recovering conditional output is not supported"))
+    ((nrsegments > 1) && (!ismissing(params.recoverCond) || !ismissing(params.saveCond))) && throw(ErrorException("Increase params.maxCols, segmentation and saving or recovering conditional output is not supported"))
 
     i = 1
     for sr in 1:maxCols:samplecols
@@ -552,14 +555,14 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
       print("Attacking columns $(sr:srEnd) out of $samplecols columns (run $i out of $nrsegments)\n")
       i += 1
       if nrsegments > 1
-        setColumnRange(trs, Nullable{Range}(sr:srEnd))
+        setColumnRange(trs, sr:srEnd)
       end
 
       firstTrace = rows[1]
       numberOfTraces = length(rows)
 
       offset = firstTrace
-      stepSize = min(numberOfTraces, get(params.updateInterval, numberOfTraces))
+      stepSize = min(numberOfTraces, coalesce(params.updateInterval, numberOfTraces))
 
       rankData = params.rankData
 
@@ -570,7 +573,7 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
       end
 
       if nrsegments > 1
-        setColumnRange(trs, Nullable{Range}())
+        setColumnRange(trs, missing)
       end
 
       # reset the state of trace post processor (conditional averager)
@@ -580,7 +583,7 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Trace, rows::
     return rankData
 end
 
-function scatask(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, numberOfTraces::Int, phase::Int)
+function scatask(super::Task, trs::Traces, params::DpaAttack, firstTrace::Int, numberOfTraces::Int, phase::Int)
 
   roundfn = getDataPass(params, phase)
 
@@ -588,14 +591,14 @@ function scatask(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, nu
     addDataPass(trs, x -> x[params.dataOffset:end])
   end
 
-  if !isnull(roundfn)
-    addDataPass(trs, get(roundfn))
+  if !ismissing(roundfn)
+    addDataPass(trs, roundfn)
   end
 
   fullattack = isFullAttack(params, phase)
 
   if !fullattack
-    addDataPass(trs, x -> x[get(params.targetOffsets)])
+    addDataPass(trs, x -> x[params.targetOffsets])
   end
 
   # do the attack
@@ -605,7 +608,7 @@ function scatask(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, nu
     popDataPass(trs)
   end
 
-  if !isnull(roundfn)
+  if !ismissing(roundfn)
     popDataPass(trs)
   end
 
@@ -627,11 +630,11 @@ function scatask(super::Task, trs::Trace, params::DpaAttack, firstTrace::Int, nu
 end
 
 function getTargetOffsets(a::DpaAttack, phase::Int)
-  return get(a.targetOffsets, collect(1:numberOfTargets(a, phase)))
+  return coalesce(a.targetOffsets, collect(1:numberOfTargets(a, phase)))
 end
 
 function isFullAttack(a::DpaAttack, phase::Int)
-  return isnull(a.targetOffsets) || (numberOfTargets(a, phase) == length(get(a.targetOffsets)))
+  return ismissing(a.targetOffsets) || (numberOfTargets(a, phase) == length(a.targetOffsets))
 end
 
 numberOfPhases(a::DpaAttack) = numberOfPhases(a.attack)
@@ -658,8 +661,8 @@ offset(a::Attack, phase::Int, target::Int) = (phase > 1 ? sum(x -> numberOfTarge
 offset(a::Attack, phase::Int) = offset(a,phase,1)
 
 function lazyinit(params::DpaAttack) 
-  if !isnull(params.knownKey) && !isdefined(params, :correctKeyMaterial)
-    knownrkmaterial = correctKeyMaterial(params.attack, get(params.knownKey))
+  if !ismissing(params.knownKey) && !isdefined(params, :correctKeyMaterial)
+    knownrkmaterial = correctKeyMaterial(params.attack, params.knownKey)
     params.correctKeyMaterial = knownrkmaterial
   end
 end
@@ -681,7 +684,7 @@ print("kb: 0x\$(hex(getCorrectKey(params,1,1)))")
 
 """
 function getCorrectKey(params::DpaAttack, phase::Int, target::Int)
-  !isnull(params.knownKey) || throw(ErrorException("Cannot call this without params.knownKey set"))
+  !ismissing(params.knownKey) || throw(ErrorException("Cannot call this without params.knownKey set"))
   lazyinit(params)
   o = offset(params, phase, target)
   kb = params.correctKeyMaterial[o+1]
@@ -715,7 +718,7 @@ print("\$(getKey(params,rankData))")
 
 ```
 """
-function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::Int=length(trs)-firstTrace+1)
+function sca(trs::Traces, params::DpaAttack, firstTrace::Int=1, numberOfTraces::Int=length(trs)-firstTrace+1)
   @printf("\nJlsca running in Julia version: %s, %d processes/%d workers/%d threads per worker\n\n", VERSION, nprocs(), nworkers(), Threads.nthreads())
 
   issubset(firstTrace:firstTrace+numberOfTraces-1,1:length(trs)) || throw(ErrorException("Too many traces $(firstTrace):$(firstTrace+numberOfTraces-1) selected for trace set of length $(length(trs))"))
@@ -724,25 +727,25 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
 
   local key = nothing
   local status = nothing
-  local phaseInput = Vector{unittype(params.attack)}(0)
-  local phaseOutput = Vector{unittype(params.attack)}(0)
+  local phaseInput = Vector{unittype(params.attack)}(undef,0)
+  local phaseOutput = Vector{unittype(params.attack)}(undef,0)
 
   lazyinit(params)
   
-  if !isnull(params.knownKey)
+  if !ismissing(params.knownKey)
     knownrkmaterial = params.correctKeyMaterial
   end
 
   finished = false
   phase = 1
 
-  params.targets = Vector{Vector{Target}}(0)
-  params.phasefn = Vector{Nullable{Function}}(0)
-  params.intervals = !isnull(params.updateInterval) ? (div(numberOfTraces, get(params.updateInterval)) + ((numberOfTraces % get(params.updateInterval)) > 0 ? 1 : 0)) : 1
+  params.targets = Vector{Vector{Target}}(undef,0)
+  params.phasefn = Vector{Union{Missing,Function}}(undef,0)
+  params.intervals = !ismissing(params.updateInterval) ? (div(numberOfTraces, params.updateInterval) + ((numberOfTraces % params.updateInterval) > 0 ? 1 : 0)) : 1
   params.rankData = RankData(params)
 
   while !finished
-    if phase > min(maximum(get(params.phases, [numberOfPhases(params.attack)])), numberOfPhases(params.attack))
+    if phase > min(maximum(coalesce(params.phases, [numberOfPhases(params.attack)])), numberOfPhases(params.attack))
       finished = true
       continue
     end
@@ -751,7 +754,7 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
     phaseDataLength = numberOfTargets(params, phase)
 
     if phase > 1
-      if !isnull(params.knownKey)
+      if !ismissing(params.knownKey)
         phaseInput = knownrkmaterial[1:phaseDataOffset]
       else
         phaseInput = phaseOutput
@@ -766,11 +769,11 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
     phasefn = getDataPass(params.attack, phase, phaseInput)
     params.phasefn = [params.phasefn; phasefn]
 
-    if !isnull(params.phases) && !(phase in get(params.phases, []))
-      if !isnull(params.knownKey)
+    if !ismissing(params.phases) && !(phase in coalesce(params.phases, []))
+      if !ismissing(params.knownKey)
         phaseOutput = vcat(phaseOutput,knownrkmaterial[phaseDataOffset+1:phaseDataOffset+phaseDataLength])
-      elseif !isnull(params.phaseInput)
-        phaseOutput = vcat(phaseOutput,get(params.phaseInput)[phaseDataOffset+1:phaseDataOffset+phaseDataLength])
+      elseif !ismissing(params.phaseInput)
+        phaseOutput = vcat(phaseOutput,params.phaseInput[phaseDataOffset+1:phaseDataOffset+phaseDataLength])
       else
         throw(ErrorException("need phaseInput or knownKey to attack phase $phase"))
       end
@@ -795,8 +798,8 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
         yieldto(ct, (BREAK,0))
       catch e
         bt = catch_backtrace()
-        showerror(STDERR, e, bt)
-        print(STDERR, "\n")
+        showerror(stderr, e, bt)
+        print(stderr, "\n")
         Base.throwto(ct, ErrorException("task dead, look at stack trace above"))
       end
     end
@@ -809,8 +812,8 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
         key = recoverKey(params.attack, phaseOutput)
         if key != nothing
           @printf("recovered key: %s\n", bytes2hex(key))
-          if !isnull(params.knownKey)
-            print("knownkey match: $(isKeyCorrect(params.attack,get(params.knownKey),key))\n")
+          if !ismissing(params.knownKey)
+            print("knownkey match: $(isKeyCorrect(params.attack,params.knownKey,key))\n")
           end
         end
       elseif status == INTERMEDIATERANKS
@@ -819,8 +822,8 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
       elseif status == PHASERESULT
         phaseOutput = vcat(phaseOutput, statusData)
       elseif status == INTERMEDIATESCORES
-        if !isnull(params.scoresCallBack)
-          get(params.scoresCallBack)(statusData...)
+        if !ismissing(params.scoresCallBack)
+          params.scoresCallBack(statusData...)
         end
       elseif status == BREAK
         break
@@ -834,13 +837,13 @@ function sca(trs::Trace, params::DpaAttack, firstTrace::Int=1, numberOfTraces::I
 
   params.phaseInput = phaseOutput
 
-  if !isnull(params.outputkka) && !isnull(params.knownKey)
-    @printf("KKA output in file(s) with prefix %s\n", get(params.outputkka))
+  if !ismissing(params.outputkka) && !ismissing(params.knownKey)
+    @printf("KKA output in file(s) with prefix %s\n", params.outputkka)
     correctKeyRanks2CSV(params)
   end
 
-  if !isnull(params.evolutionCb) 
-    get(params.evolutionCb)(params.rankData)
+  if !ismissing(params.evolutionCb) 
+    params.evolutionCb(params.rankData)
   end
 
   return params.rankData 

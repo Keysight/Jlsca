@@ -4,6 +4,10 @@
 
 module Sca
 
+using Printf
+using Distributed
+using Statistics
+
 import Base.getindex,Base.length,Base.show
 
 include("sca-leakages.jl")

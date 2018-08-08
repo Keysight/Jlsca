@@ -2,9 +2,8 @@
 #
 # Author: Cees-Bart Breunesse
 
-using Base.Test
-
-using ProgressMeter
+using Statistics
+using Test
 using Jlsca.Sca
 
 # normal usage
@@ -171,7 +170,7 @@ function test2()
   range1 = 1:50
   range2 = 51:200
   range3 = 201:500
-  @printf("range1 %s, range2 %s, range3 %s\n", range1, range2, range3)
+  print("range1 $range1, range2 $range2, range3 $range3\n")
 
   for r in range1
     add!(covXY1, x[r,:], y[r,:])
@@ -229,7 +228,7 @@ function test2tiled()
   range1 = 1:50
   range2 = 51:200
   range3 = 201:500
-  @printf("range1 %s, range2 %s, range3 %s\n", range1, range2, range3)
+  print("range1 $range1, range2 $range2, range3 $range3\n")
 
   for r in range1
     add!(covXY1, x[r,:], y[r,:])

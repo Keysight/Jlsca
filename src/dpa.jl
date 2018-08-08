@@ -2,7 +2,7 @@
 #
 # Authors: Cees-Bart Breunesse, Ilya Kizhvatov
 
-type CPA <: NonIncrementalAnalysis
+mutable struct CPA <: NonIncrementalAnalysis
   leakages::Vector{Leakage}
 
   function CPA()
@@ -23,6 +23,7 @@ function computeScores(a::CPA, data::AbstractArray{In}, samples::AbstractArray, 
 
   HL::Matrix{UInt8} = predict(data, target, kbvals, a.leakages)
   C = cor(samples, HL)
+  
   return C
 end
 

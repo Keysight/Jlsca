@@ -4,15 +4,15 @@
 
 export InspectorTrace
 
-using Base.get
-import Base.close
+using Base:get
+import Base:close
 
 verbose = true
 
 # Inspector trace set implementation
-type InspectorTrace <: Trace
+mutable struct InspectorTrace <: Traces
   titleSpace::Int
-  numberOfTraces::Nullable{Int}
+  numberOfTraces::Union{Missing,Int}
   dataSpace::Int
   sampleSpace::Int
   sampleType::Type
@@ -41,7 +41,7 @@ type InspectorTrace <: Trace
     !isfile(filename) || throw(ErrorException(@sprintf("file %s exists!", filename)))
 
     (titleSpace, traceBlockPosition, lengthPosition, fileDescriptor) = writeInspectorTrsHeader(filename, dataSpace, sampleType, numberOfSamplesPerTrace, titleSpace)
-    new(titleSpace, Nullable(0), dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, true, lengthPosition, false,MetaData())
+    new(titleSpace, 0, dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, true, lengthPosition, false,MetaData())
   end
 end
 
@@ -77,7 +77,7 @@ pipe(trs::InspectorTrace) = isa(trs.fileDescriptor, Base.PipeEndpoint)
 import Base.skip
 skip(fd::Base.PipeEndpoint, x::Integer) = read(fd, x)
 
-length(trs::InspectorTrace) = isnull(trs.numberOfTraces) ? typemax(Int) : get(trs.numberOfTraces)
+length(trs::InspectorTrace) = ismissing(trs.numberOfTraces) ? typemax(Int) : trs.numberOfTraces
 nrsamples(trs::InspectorTrace) = trs.bitshack ? div(trs.numberOfSamplesPerTrace*sizeof(trs.sampleType)*8,64) : trs.numberOfSamplesPerTrace
 sampletype(trs::InspectorTrace) = trs.bitshack ? Vector{UInt64}() : Vector{trs.sampleType}()
 meta(trs::InspectorTrace) = trs.meta
@@ -87,7 +87,7 @@ function readInspectorTrsHeader(filename, bitshack::Bool)
     if filename != "-"
       f = open(filename, "r")
     else
-      f = STDIN
+      f = stdin
     end
 
     seekable = !isa(f, Base.PipeEndpoint)
@@ -95,7 +95,7 @@ function readInspectorTrsHeader(filename, bitshack::Bool)
     try
       done = false
       titleSpace = 0
-      numberOfTraces = Nullable()
+      numberOfTraces = 
       dataSpace = 0
       sampleSpace = 0
       sampleType = UInt8
@@ -136,7 +136,7 @@ function readInspectorTrsHeader(filename, bitshack::Bool)
           else
             lengthPosition = -1
           end
-          numberOfTraces = Nullable(ltoh(read(f, UInt32)))
+          numberOfTraces = ltoh(read(f, UInt32))
         elseif tag == DataSpace && length == DataSpaceLength
           dataSpace = ltoh(read(f, UInt16))
         elseif tag == NumberOfSamplesPerTrace && length == NumberOfSamplesPerTraceLength
@@ -177,7 +177,7 @@ function readInspectorTrsHeader(filename, bitshack::Bool)
         # sampleSpace = 8
       end
 
-      @printf("Opened %s, #traces %s, #samples %d (%s), #data %d%s\n", filename, isnull(numberOfTraces) ? "unknown" : @sprintf("%d", get(numberOfTraces)), numberOfSamplesPerTrace, sampleType, dataSpace, titleSpace > 0 ? ", #title $titleSpace" : "")
+      @printf("Opened %s, #traces %s, #samples %d (%s), #data %d%s\n", filename, ismissing(numberOfTraces) ? "unknown" : @sprintf("%d", numberOfTraces), numberOfSamplesPerTrace, sampleType, dataSpace, titleSpace > 0 ? ", #title $titleSpace" : "")
 
       return (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, f)
   catch e
@@ -302,10 +302,11 @@ function readSamples(trs::InspectorTrace, idx::Int, r::UnitRange)
 
   
   if trs.bitshack
-    samples = Vector{UInt64}(length(r))
+    samples = Vector{UInt64}(undef,length(r))
     read!(trs.fileDescriptor, samples)
   else
-    samples = read(trs.fileDescriptor, trs.sampleType, length(r))
+    samples = Vector{trs.sampleType}(undef,length(r))
+    read!(trs.fileDescriptor, samples)
   end
 
   if trs.sampleType != UInt8
@@ -338,7 +339,7 @@ function writeSamples(trs::InspectorTrace, idx, samples::Vector)
   end
 
   write(trs.fileDescriptor, samples)
-  trs.numberOfTraces = Nullable(max(idx, get(trs.numberOfTraces)))
+  trs.numberOfTraces = max(idx, trs.numberOfTraces)
 
   return samples
 end

@@ -1,15 +1,51 @@
 using Jlsca.Align
-using Base.Test
+using Test
+using Statistics
+
+mutable struct CorrelationAlignNaive
+  reference::Vector
+  referenceOffset::Int
+  maxShift::Int
+
+  function CorrelationAlignNaive(reference, referenceOffset, maxShift)
+    new(reference, referenceOffset, maxShift)
+  end
+end
+
+import Jlsca.Align:correlationAlign
+# naive O(n^2) implementation
+function correlationAlign(samples::Vector, state::CorrelationAlignNaive)
+  align::Int = 0
+  maxCorr::Float64 = 0
+
+  reference::Vector = state.reference
+  referenceOffset::Int = state.referenceOffset
+  maxShift::Int = state.maxShift
+
+  window = max(1, referenceOffset - maxShift):(min(referenceOffset + maxShift + length(reference), length(samples)) - length(reference) + 1)
+
+  @inbounds for o in window
+    e = o + length(reference) - 1
+    corr = cor(samples[o:e], reference)
+    if corr > maxCorr
+      maxCorr = corr
+      align = o
+    end
+  end
+
+  ret = (referenceOffset-align,maxCorr)
+  return ret
+end
 
 function test1()
     cols = 50
     rows = 100
     data = rand(Float64, cols)
-    dataM = Array{Float64}(rows,cols)
+    dataM = Array{Float64}(undef,rows,cols)
     window = 10:20
     reference = data[window]
     maxShift = 10
-    shifts = Vector{Int}(rows)
+    shifts = Vector{Int}(undef,rows)
 
     fftwalignstate = CorrelationAlignFFT(reference, window[1], maxShift)
     naivealignstate = CorrelationAlignNaive(reference, window[1], maxShift)
@@ -40,7 +76,7 @@ function speedtest1()
     window = 10:20
     reference = data[window]
     maxShift = 5000
-    shifts = Vector{Int}(rows)
+    shifts = Vector{Int}(undef,rows)
 
     fftwalignstate = CorrelationAlignFFT(reference, window[1], maxShift)
 

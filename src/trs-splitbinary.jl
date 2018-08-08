@@ -5,7 +5,7 @@
 export SplitBinary
 
 # split binary has the data and samples in 2 different files, similar to how Daredevil reads its data and samples. Since there is not metadata in these files, the meta data is encoded in and read from the file names.
-type SplitBinary <: Trace
+mutable struct SplitBinary <: Traces
   numberOfTraces::Int
   dataSpace::Int
   sampleType::Type
@@ -17,10 +17,10 @@ type SplitBinary <: Trace
   function SplitBinary(dataFn, samplesFn, bits::Bool = false)
     (sampleSpace, sampleType, numberOfTracesSamples) = parseFilename(samplesFn)
     (dataSpace, dataType, numberOfTracesData) = parseFilename(dataFn)
-    if isnull(sampleSpace) && isnull(numberOfTracesSamples) == nothing
+    if ismissing(sampleSpace) && ismissing(numberOfTracesSamples) == nothing
       throw(ErrorException(@sprintf("Need either number of samples or number of traces in file name %s", samplesFn)))
     end
-    if isnull(dataSpace) && isnull(numberOfTracesData)
+    if ismissing(dataSpace) && ismissing(numberOfTracesData)
       throw(ErrorException(@sprintf("Need either number of data samples or number of traces in file name %s", dataFn)))
     end
     samplesFileDescriptor = open(samplesFn, "r")
@@ -35,36 +35,36 @@ type SplitBinary <: Trace
       throw(ErrorException("Only UInt8 support for data"))
     end
 
-    if !isnull(sampleSpace) &&  !isnull(numberOfTracesSamples)
-      (bytesInSamplesFile >= get(sampleSpace) * sizeof(sampleType)) || throw(ErrorException("Sample file too small"))
+    if !ismissing(sampleSpace) &&  !ismissing(numberOfTracesSamples)
+      (bytesInSamplesFile >= sampleSpace * sizeof(sampleType)) || throw(ErrorException("Sample file too small"))
     end
 
-    if isnull(sampleSpace)
-      sampleSpace = Nullable(div(div(bytesInSamplesFile, get(numberOfTracesSamples)), sizeof(sampleType)))
+    if ismissing(sampleSpace)
+      sampleSpace = div(div(bytesInSamplesFile, numberOfTracesSamples), sizeof(sampleType))
     end
 
-    if isnull(numberOfTracesSamples)
-      numberOfTracesSamples = Nullable(div(bytesInSamplesFile, get(sampleSpace) * sizeof(sampleType)))
+    if ismissing(numberOfTracesSamples)
+      numberOfTracesSamples = div(bytesInSamplesFile, sampleSpace * sizeof(sampleType))
     end
 
-    if isnull(dataSpace)
-      dataSpace = Nullable(div(div(bytesInDataFile, get(numberOfTracesData)), sizeof(dataType)))
+    if ismissing(dataSpace)
+      dataSpace = div(div(bytesInDataFile, numberOfTracesData), sizeof(dataType))
     end
 
-    if isnull(numberOfTracesData)
-      numberOfTracesData = Nullable(div(div(bytesInDataFile, get(dataSpace)), sizeof(dataType)))
+    if ismissing(numberOfTracesData)
+      numberOfTracesData = div(div(bytesInDataFile, dataSpace), sizeof(dataType))
     end
 
-    if get(numberOfTracesSamples) != get(numberOfTracesData)
-      throw(ErrorException(@sprintf("Different #traces in samples %d versus data %d", get(numberOfTracesSamples), get(numberOfTracesData))))
+    if numberOfTracesSamples != numberOfTracesData
+      throw(ErrorException(@sprintf("Different #traces in samples %d versus data %d", numberOfTracesSamples, numberOfTracesData)))
     end
 
-    SplitBinary(dataFn, get(dataSpace), samplesFn::String, get(sampleSpace), sampleType, get(numberOfTracesSamples), false, bits)
+    SplitBinary(dataFn, dataSpace, samplesFn::String, sampleSpace, sampleType, numberOfTracesSamples, false, bits)
   end
 
   function SplitBinary(dataFname::String, dataSpace::Int, samplesFn::String, numberOfSamplesPerTrace, sampleType, nrtraces, write::Bool=false, bits::Bool=false)
     samplesFileDescriptor = open(samplesFn, write ? "w+" : "r")
-    dataFileDescriptor = open(dataFname, write ? "w+" :"r")
+    dataFileDescriptor = open(dataFname, write ? "w+" : "r")
 
 
     if bits
@@ -106,7 +106,7 @@ end
 
 readSamples(trs::SplitBinary, idx::Int) = readSamples(trs, idx, 1:trs.numberOfSamplesPerTrace)
 
-function readSamples(trs::SplitBinary, idx, r::Range)
+function readSamples(trs::SplitBinary, idx, r::UnitRange)
   issubset(r,1:trs.numberOfSamplesPerTrace) || error("requested range $r not in trs sample space $(1:trs.numberOfSamplesPerTrace)")
   bytesinsamples = trs.numberOfSamplesPerTrace * sizeof(trs.sampleType)
   pos = (idx-1) * bytesinsamples
@@ -116,7 +116,8 @@ function readSamples(trs::SplitBinary, idx, r::Range)
     seek(trs.samplesFileDescriptor, pos)
   end
 
-  samples = read(trs.samplesFileDescriptor, trs.sampleType, length(r))
+  samples = Vector{trs.sampleType}(undef,length(r))
+  read!(trs.samplesFileDescriptor, samples)
 
   if trs.sampleType != UInt8
     if ltoh(ENDIAN_BOM) != ENDIAN_BOM
@@ -154,17 +155,17 @@ function parseFilename(fname::String)
   if m != nothing
     myType_s,numberOfSamplesPerTrace_s,numberOfTraces_s = m.captures
     if numberOfSamplesPerTrace_s != nothing
-      numberOfSamples = Nullable(parse(numberOfSamplesPerTrace_s[2:end-1]))
+      numberOfSamples = Meta.parse(numberOfSamplesPerTrace_s[2:end-1])
     else
-      numberOfSamples = Nullable{Int}()
+      numberOfSamples = missing
     end
     if numberOfTraces_s != nothing
-      numberOfTraces = Nullable(parse(numberOfTraces_s[2:end-1]))
+      numberOfTraces = Meta.parse(numberOfTraces_s[2:end-1])
     else
-      numberOfTraces = Nullable{Int}()
+      numberOfTraces = missing
     end
     if myType_s != nothing
-      myType =  eval(parse(myType_s))
+      myType =  eval(Meta.parse(myType_s))
     else
       myType = UInt8
     end

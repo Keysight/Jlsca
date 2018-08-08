@@ -1,8 +1,9 @@
 
 using Jlsca.Trs
-using Base.Test
+using Test
+using Printf
 
-type MyNode
+mutable struct MyNode
   count::Int
   one::MyNode
   zero::MyNode
@@ -66,7 +67,7 @@ function getNode(root::MyNode, a::BitVector)
 end
 
 function createMatrix(r,c)
-  a = BitArray(r,c)
+  a = BitArray(undef,r,c)
   (r,c) = size(a)
   for i in 1:c
     a[:,i] = rand(Bool, r)
@@ -162,17 +163,4 @@ function pretty(a::BitMatrix)
 end
 
 a = createMatrix(15,2000)
-# a = reshape(BitVector([0,0,0,1,1,0,0,1,0,0,0,1,1,1,1,0,0,1,0,0,1,0,0,1,1,0,0,0,1,0,1,1,0,0,0,1,1,0,0,1,0,1,0,0,1,0,0,1,1,0,0,1,0,1,1,1,1,0,1,1,0,1,1,1,1,1,1,0,0,0,0,0,1,1,1,0,1,0,1,1]), (20,4))'
-# pretty(a)
 test(a)
-
-# trs = InspectorTrace("fuck.trs", 0, UInt8, size(a)[2])
-# for i in 1:size(a)[1]
-#   trs[i] = (Vector{UInt8}(0), map(UInt8, a[i,:]))
-# end
-# close(trs)
-
-# root = MyNode(0)
-# addColumn(root, BitVector([1,0,0,1]),1)
-
-# @printf("root %s\n", root)

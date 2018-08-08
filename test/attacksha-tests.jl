@@ -2,13 +2,10 @@
 #
 # Author: Cees-Bart Breunesse
 
-using Base.Test
-
-@everywhere begin
-  using Jlsca.Sca
-  using Jlsca.Sca.hw
-  using Jlsca.Trs
-end
+using Test
+using Jlsca.Sca
+using Jlsca.Sca:hw
+using Jlsca.Trs
 
 function testShaTraces(conditional::Bool,direction::Direction, analysis::Analysis)
     tracedir = "../shatraces"
@@ -19,12 +16,12 @@ function testShaTraces(conditional::Bool,direction::Direction, analysis::Analysi
             continue
         end
         fullfilename = joinpath(tracedir,filename)
-        @printf("file: %s\n", fullfilename)
+        print("file: $fullfilename\n")
 
         params = getParameters(fullfilename, direction)
         params.analysis = analysis
 
-        # create Trace instance
+        # create Traces instance
         if conditional
             trs = InspectorTrace(fullfilename)
             
@@ -41,7 +38,7 @@ function testShaTraces(conditional::Bool,direction::Direction, analysis::Analysi
 
         key = getKey(params, sca(trs,params,1, 100))
 
-        @test(key == get(params.knownKey))
+        @test(key == params.knownKey)
     end
 end
 

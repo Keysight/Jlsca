@@ -20,7 +20,7 @@ export AesAttack
 abstract type AesAttack <: Attack{UInt8} end
 
 # two types of attacks: sbox or mixcolumn
-type AesSboxAttack <: AesAttack
+mutable struct AesSboxAttack <: AesAttack
   mode::AesMode
   keyLength::AesKeyLength
   direction::Direction
@@ -33,7 +33,7 @@ type AesSboxAttack <: AesAttack
   end
 end
 
-type AesMCAttack <: AesAttack
+mutable struct AesMCAttack <: AesAttack
   mode::AesMode
   keyLength::AesKeyLength
   direction::Direction
@@ -47,7 +47,7 @@ type AesMCAttack <: AesAttack
 end
 
 # get the round key material the attack is recovering to add known key information in the scoring
-function correctKeyMaterial(params::AesAttack, knownKey::Vector{UInt8})
+function correctKeyMaterial(params::AesAttack, knownKey::AbstractVector{UInt8})
   mode = params.mode
   direction = params.direction
   keyLength = params.keyLength
@@ -99,7 +99,7 @@ function numberOfPhases(params::AesMCAttack)
 end
 
 # target functions
-type InvMcOut <: Target{UInt8,UInt32,UInt8}
+mutable struct InvMcOut <: Target{UInt8,UInt32,UInt8}
   invsbox::Vector{UInt8}
   constant::UInt8
   position::Int
@@ -119,7 +119,7 @@ end
 
 show(io::IO, a::InvMcOut) = print(io, "Inverse MC out")
 
-type McOut <: Target{UInt8,UInt32,UInt8}
+mutable struct McOut <: Target{UInt8,UInt32,UInt8}
   sbox::Vector{UInt8}
   constant::UInt8
   position::Int
@@ -139,7 +139,7 @@ end
 
 show(io::IO, a::McOut) = print(io, "MC out")
 
-type McOutXORIn <: Target{UInt8,UInt32,UInt8}
+mutable struct McOutXORIn <: Target{UInt8,UInt32,UInt8}
   sbox::Vector{UInt8}
   constant::UInt8
   position::Int
@@ -159,7 +159,7 @@ end
 
 show(io::IO, a::McOutXORIn) = print(io, "MC out, XOR'ed w/ input")
 
-type InvMcOutXORIn <: Target{UInt8,UInt32,UInt8}
+mutable struct InvMcOutXORIn <: Target{UInt8,UInt32,UInt8}
   sbox::Vector{UInt8}
   constant::UInt8
   position::Int
@@ -179,28 +179,28 @@ end
 
 show(io::IO, a::InvMcOutXORIn) = print(io, "Inverse MC out, XOR'ed w/ input")
 
-type SboxOut <: Target{UInt8,UInt8,UInt8}
+mutable struct SboxOut <: Target{UInt8,UInt8,UInt8}
   sbox::Vector{UInt8}
 end
 
 target(a::SboxOut, data::UInt8, keyByte::UInt8) = a.sbox[(data ⊻ keyByte) + 1]
 show(io::IO, a::SboxOut) = print(io, "Sbox out")
 
-type InvSboxOut <: Target{UInt8,UInt8,UInt8}
+mutable struct InvSboxOut <: Target{UInt8,UInt8,UInt8}
   invsbox::Vector{UInt8}
 end
 
 target(a::InvSboxOut, data::UInt8, keyByte::UInt8) = a.invsbox[(data ⊻ keyByte) + 1]
 show(io::IO, a::InvSboxOut) = print(io, "Inverse sbox out")
 
-type SboxOutXORIn <: Target{UInt8,UInt8,UInt8}
+mutable struct SboxOutXORIn <: Target{UInt8,UInt8,UInt8}
   sbox::Vector{UInt8}
 end
 
 target(a::SboxOutXORIn, data::UInt8, keyByte::UInt8) = data ⊻ keyByte ⊻ a.sbox[(data ⊻ keyByte) + 1]
 show(io::IO, a::SboxOutXORIn) = print(io, "Sbox out, xor'ed w/ input")
 
-type InvSboxOutXORIn <: Target{UInt8,UInt8,UInt8}
+mutable struct InvSboxOutXORIn <: Target{UInt8,UInt8,UInt8}
   invsbox::Vector{UInt8}
 end
 
@@ -225,7 +225,7 @@ function round(output::Matrix, roundkey::Matrix)
 end
 
 # run the key schedule backwards to recover a key
-function recoverKeyHelper(keymaterial::Vector{UInt8}, mode, direction)
+function recoverKeyHelper(keymaterial::AbstractVector{UInt8}, mode, direction)
   if (mode == CIPHER && direction == FORWARD) || (mode == INVCIPHER && direction == BACKWARD) || (mode == EQINVCIPHER && direction == BACKWARD)
       return keymaterial
     else
@@ -236,7 +236,7 @@ function recoverKeyHelper(keymaterial::Vector{UInt8}, mode, direction)
     end
 end
 
-function recoverKey(params::AesSboxAttack, phaseInputOrig::Vector{UInt8})
+function recoverKey(params::AesSboxAttack, phaseInputOrig::AbstractVector{UInt8})
   mode = params.mode
   direction = params.direction
   phaseInput = copy(phaseInputOrig)
@@ -265,11 +265,11 @@ function recoverKey(params::AesSboxAttack, phaseInputOrig::Vector{UInt8})
   return key
 end
 
-function recoverKey(params::AesMCAttack, phaseInput::Vector{UInt8}) 
+function recoverKey(params::AesMCAttack, phaseInput::AbstractVector{UInt8}) 
   mode = params.mode
   direction = params.direction
 
-  reordered = Vector{UInt8}(16)
+  reordered = Vector{UInt8}(undef,16)
   for i in 0:3
     reordered[i*4+1:i*4+4] = phaseInput[[o for o in i+1:4:16]]
   end
@@ -278,7 +278,7 @@ end
 
 numberOfTargets(params::AesMCAttack, phase::Int) = 4
 
-function getTargets(params::AesMCAttack, phase::Int, phaseInput::Vector{UInt8})
+function getTargets(params::AesMCAttack, phase::Int, phaseInput::AbstractVector{UInt8})
   if (params.direction == FORWARD && params.mode == CIPHER) || (params.direction == BACKWARD && params.mode != CIPHER)
     if params.xor
       targetfn = McOutXORIn(params.sbox, 0x0, 1)
@@ -298,7 +298,7 @@ end
 
 numberOfTargets(params::AesSboxAttack, phase::Int) = (params.keyLength == KL192 && phase == PHASE2) ? 8 : 16
 
-function getTargets(params::AesSboxAttack, phase::Int, phaseInput::Vector{UInt8})
+function getTargets(params::AesSboxAttack, phase::Int, phaseInput::AbstractVector{UInt8})
   if (params.direction == FORWARD && params.mode == CIPHER) || (params.direction == BACKWARD && params.mode != CIPHER)
     if params.xor
       targetfn = SboxOutXORIn(params.sbox)
@@ -328,19 +328,19 @@ end
 
 
 # filter function for mixcolumns attack so that we don't accept data that's not semi-constant
-function filterConstantInput(offsets, data::Vector{UInt8}, constant::UInt8)
+function filterConstantInput(offsets, data::AbstractVector{UInt8}, constant::UInt8)
   for i in 1:16
     if !(i in offsets)
       if data[i] != constant
         # return nothing (and thus reject the trace)
-        return Vector{UInt8}(0)
+        return Vector{UInt8}(undef,0)
       end
     end
   end
   return [data[x] for x in offsets]
 end
 
-function getDataPass(params::AesSboxAttack, phase::Int, phaseInput::Vector{UInt8})
+function getDataPass(params::AesSboxAttack, phase::Int, phaseInput::AbstractVector{UInt8})
   if phase == PHASE2 && params.keyLength != KL128
     if params.keyLength == KL192
       dataWidth = 8
@@ -354,15 +354,15 @@ function getDataPass(params::AesSboxAttack, phase::Int, phaseInput::Vector{UInt8
       else
         roundfn_ = x -> round(reshape(x[1:16], (4,4)), reshape(phaseInput, (4,4)))[1:dataWidth]
     end
-    roundfn = Nullable(roundfn_)
+    roundfn = roundfn_
   else
-    roundfn = Nullable(x -> x[1:16])
+    roundfn = x -> x[1:16]
   end
 
   return roundfn
 end
 
-function getDataPass(params::AesMCAttack, phase::Int, phaseInput::Vector{UInt8})
+function getDataPass(params::AesMCAttack, phase::Int, phaseInput::AbstractVector{UInt8})
   params.keyLength == KL128 || throw(ErrorException("AesMCAttack only supported for 128 bits keys"))
   params.direction == FORWARD || throw(ErrorException("AesMCAttack only supported in FORWARD direction"))
   
@@ -383,5 +383,5 @@ function getDataPass(params::AesMCAttack, phase::Int, phaseInput::Vector{UInt8})
   constant = 0x0
 
   # select only the traces we want
-  return Nullable(x -> filterConstantInput(offsets, x, constant))
+  return x -> filterConstantInput(offsets, x, constant)
 end

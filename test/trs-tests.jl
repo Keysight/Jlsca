@@ -1,6 +1,8 @@
 
-using Base.Test
+using Test
 using Jlsca.Trs
+using Random
+using Printf
 
 function createTmpFile(tail)
   return @sprintf("/tmp/tmp%s%s", String([UInt8(rand(0x30:0x5a)) for i in 1:10]), tail)
@@ -23,7 +25,8 @@ function testInspectorTrace()
   for i in randperm(numberOfTraces)
     trs[i] = (allData[i,:], allSamples[i,:])
     writeTitle(trs, i, allTitles[i,:])
-    @test trs[i] == (allData[i,:], allSamples[i,:])
+    t = trs[i]
+    @test (t.data,t.samples) == (allData[i,:], allSamples[i,:])
   end
 
   close(trs)
@@ -33,8 +36,9 @@ function testInspectorTrace()
   @test length(trs2) == numberOfTraces
   @test numberOfTitlebytes == trs2.titleSpace
 
-  for i in randperm(numberOfTraces  )
-    @test trs2[i] == (allData[i,:], allSamples[i,:])
+  for i in randperm(numberOfTraces)
+    t = trs2[i]
+    @test (t.data,t.samples) == (allData[i,:], allSamples[i,:])
     @test readTitle(trs2,i) == allTitles[i,:]
   end
 
@@ -60,7 +64,8 @@ function testInspectorTraceRanges()
   for i in randperm(numberOfTraces)
     trs[i] = (allData[i,:], allSamples[i,:])
     writeTitle(trs, i, allTitles[i,:])
-    @test trs[i] == (allData[i,:], allSamples[i,:])
+    t = trs[i]
+    @test (t.data,t.samples) == (allData[i,:], allSamples[i,:])
   end
 
   close(trs)
@@ -98,7 +103,8 @@ function testSplitBinary()
 
   for i in 1:numberOfTraces
     trs[i] = (allData[i,:], allSamples[i,:])
-    @test trs[i] == (allData[i,:], allSamples[i,:])
+    t = trs[i]
+    @test (t.data,t.samples) == (allData[i,:], allSamples[i,:])
   end
 
   close(trs)
@@ -108,7 +114,8 @@ function testSplitBinary()
   @test length(trs2) == numberOfTraces
 
   for i in 1:numberOfTraces
-    @test trs2[i] == (allData[i,:], allSamples[i,:])
+    t = trs2[i]
+    @test (t.data,t.samples) == (allData[i,:], allSamples[i,:])
   end
 
   close(trs2)

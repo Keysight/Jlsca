@@ -5,7 +5,7 @@
 export RandomTrace
 
 # simple wrapper around in-memory matrices
-type RandomTrace <: Trace
+mutable struct RandomTrace <: Traces
   dataSpace
   sampleType
   nrSamples

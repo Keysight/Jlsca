@@ -4,7 +4,7 @@
 
 using ProgressMeter
 
-import Base.length, Base.getindex, Base.setindex!
+import Base.length, Base.getindex, Base.setindex!, Base.iterate
 import Base.reset
 import Base.start, Base.done, Base.next, Base.endof
 
@@ -18,38 +18,59 @@ abstract type Pass end
 
 export MetaData
 
-type MetaData
+mutable struct MetaData
   tracesReturned::Int
   passes::Vector{Pass}
   dataPasses::Vector{Pass}
-  postProcInstance::Nullable{PostProcessor}
-  colRange::Nullable{Range}
-  preColRange::Nullable{Range}
+  postProcInstance::Union{Missing,PostProcessor}
+  colRange::Union{Missing,UnitRange}
+  preColRange::Union{Missing,UnitRange}
   viewsdirty::Bool
-  views::Vector{Nullable{Range}}
+  views::Vector{Union{Missing,UnitRange}}
   lengths::Vector{Int}
   types::Vector{AbstractVector}
 
   function MetaData()
-    new(0, Vector{Pass}(0), Vector{Pass}(0), Nullable(), Nullable(), Nullable(), true)
+    new(0, Vector{Pass}(undef,0), Vector{Pass}(undef,0), missing, missing, missing, true)
   end
 end
 
-export Trace
+export Traces
 
+"""
+Implementations of trace sets (InspectorTrace, SplitBinary) extend this type.
+"""
+abstract type Traces end
+
+"""
+Traces return instances of this type with getindex. The default is DefaultTrace
+"""
 abstract type Trace end
+
+"""
+A default trace has a data and a sample vector, and instances of DefaultTrace are accepted by setindex! and getindex for all Traces. Trace set implementations (i.e. types inheriting Traces) may specialize this, but then they need to implement getindex and setindex! to return and accept that specialized type, without breaking the order data,samples.
+"""
+struct DefaultTrace <: Trace
+  data::AbstractVector
+  samples::AbstractVector
+end
+
+getindex(t::DefaultTrace, i::Int) = (i == 1 ? t.data : i == 2 ? t.samples : throw(ArgumentError("only 1 (data) or 2 (samples) index supported")))
+
+iterate(t::DefaultTrace, i::Int=1) = (i == 1 ? (t.data,2) : i == 2 ? (t.samples,3) : nothing)
 
 export meta
 
-meta(trs::Trace) = error("implement me for $(typeof(trs))")
+meta(trs::Traces) = error("implement me for $(typeof(trs))")
+
 export pass
 
-pass(a::Pass, x::AbstractArray, idx::Int) = error("implement me for $(typeof(a))")
-pass(a::Pass, x::AbstractArray, idx::Int, cols::Range) = pass(a,x,idx)[cols] 
+pass(a::Pass, x::AbstractVector, idx::Int) = error("implement me for $(typeof(a))")
+pass(a::Pass, x::AbstractVector, idx::Int, cols::UnitRange) = pass(a,x,idx)[cols] 
 
 export inview
 
-inview(a::Pass, outview::Range, inlength::Int, intype::AbstractVector) = Nullable{Range}()
+inview(a::Pass, outview::UnitRange, inlength::Int, intype::AbstractVector) = Union{Missing,UnitRange}()
 
 export outlength
 
@@ -57,45 +78,31 @@ outlength(a::Pass, inlength::Int, intype::AbstractVector) = -1
 
 export outtype
 
-outtype(a::Pass, intype::AbstractVector) = Vector{Any}(0)
+outtype(a::Pass, intype::AbstractVector) = Vector{Any}(undef,0)
 
-type SimpleFunctionPass <: Pass 
+mutable struct SimpleFunctionPass <: Pass 
   fn::Function
 end
 
 pass(a::SimpleFunctionPass, x::AbstractVector, idx::Int) = a.fn(x) 
 
 # overloading these to implement an iterator
-start(trs::Trace) = 1
-done(trs::Trace, idx) = pipe(trs) ? false : (idx > length(trs))
-next(trs::Trace, idx) = (trs[idx], idx+1)
-endof(trs::Trace) = length(trs)
+start(trs::Traces) = 1
+done(trs::Traces, idx) = pipe(trs) ? false : (idx > length(trs))
+next(trs::Traces, idx) = (trs[idx], idx+1)
+endof(trs::Traces) = length(trs)
 
 export nrsamples
 
-nrsamples(trs::Trace, post::Bool) = (updateViews(trs);meta(trs).lengths[post ? end : 1])
-nrsamples(trs::Trace) = error("implement me for $(typeof(trs))")
+nrsamples(trs::Traces, post::Bool) = (updateViews(trs);meta(trs).lengths[post ? end : 1])
+nrsamples(trs::Traces) = error("implement me for $(typeof(trs))")
 
 export sampletype
 
-sampletype(trs::Trace, post::Bool) = (updateViews(trs);meta(trs).types[post ? end : 1])
-sampletype(trs::Trace) = error("implement me for $(typeof(trs))")
+sampletype(trs::Traces, post::Bool) = (updateViews(trs);meta(trs).types[post ? end : 1])
+sampletype(trs::Traces) = error("implement me for $(typeof(trs))")
 
-function getData(trs::Trace, idx)
-  data = readData(trs, idx)
-
-  # run all the passes over the data
-  for p in meta(trs).dataPasses
-    data = pass(p,data,idx)
-    if length(data) == 0
-      break
-    end
-  end
-
-  return data
-end
-
-function updateViews(trs::Trace)
+function updateViews(trs::Traces)
   m = meta(trs)
   if !m.viewsdirty
     return 
@@ -103,13 +110,13 @@ function updateViews(trs::Trace)
 
   nrPasses = length(m.passes)
   lengths = zeros(Int,nrPasses+1)
-  views = Vector{Nullable{Range}}(nrPasses+1)
-  types = Vector{AbstractVector}(nrPasses+1)
+  views = Vector{Union{Missing,UnitRange}}(undef,nrPasses+1)
+  types = Vector{AbstractVector}(undef,nrPasses+1)
 
   fast = true
 
-  if !isnull(m.preColRange)
-    lengths[1] = length(get(m.preColRange))
+  if !ismissing(m.preColRange)
+    lengths[1] = length(m.preColRange)
   else
     lengths[1] = nrsamples(trs)
   end
@@ -132,8 +139,8 @@ function updateViews(trs::Trace)
 
   if !fast 
     idx = 1
-    if !isnull(m.preColRange)
-      samples = readSamples(trs, idx, get(m.preColRange))
+    if !ismissing(m.preColRange)
+      samples = readSamples(trs, idx, m.preColRange)
     else
       samples = readSamples(trs, idx)
     end
@@ -154,15 +161,15 @@ function updateViews(trs::Trace)
   for i in eachindex(m.passes)
     o = nrPasses-i+1
     p = m.passes[o]
-    if !isnull(v)
-      v = inview(p,get(v),lengths[o],types[o])
+    if !ismissing(v)
+      v = inview(p,v,lengths[o],types[o])
     end
     views[i] = v
   end
 
-  if !isnull(m.preColRange)
-    if !isnull(views[1])
-      views[1] = Nullable(get(m.preColRange)[get(views[1])])
+  if !ismissing(m.preColRange)
+    if !ismissing(m.views[1])
+      views[1] = m.preColRange[views[1]]
     else
       views[1] = m.preColRange
     end
@@ -170,8 +177,8 @@ function updateViews(trs::Trace)
   
   # @show views
 
-  if !isnull(m.colRange) && !isnull(views[1]) 
-    print_with_color(:magenta, "Efficient trace sample reads!! Yay!\n")
+  if !ismissing(m.colRange) && !ismissing(views[1]) 
+    printstyled("Efficient trace sample reads!! Yay!\n", color=:magenta)
   end
 
   m.views = views
@@ -180,15 +187,35 @@ function updateViews(trs::Trace)
   m.viewsdirty = false
 end
 
-function getSamples(trs::Trace, idx)
+"""
+Reads the data for a given trace, after running it through all the data passes, if any.
+"""
+function getData(trs::Traces, idx)
+  data = readData(trs, idx)
+
+  # run all the passes over the data
+  for p in meta(trs).dataPasses
+    data = pass(p,data,idx)
+    if length(data) == 0
+      break
+    end
+  end
+
+  return data
+end
+
+"""
+Reads the samples for a given trace, after running it through all the samples passes, if any.
+"""
+function getSamples(trs::Traces, idx)
   local samples
   m = meta(trs)
 
   updateViews(trs)
 
   v = m.views[1]
-  if !isnull(v)
-    samples = readSamples(trs, idx, get(v))
+  if !ismissing(v)
+    samples = readSamples(trs, idx, v)
   else
     samples = readSamples(trs, idx)
   end
@@ -197,8 +224,8 @@ function getSamples(trs::Trace, idx)
   for i in eachindex(m.passes)
     p = m.passes[i]
     v = m.views[i+1]
-    if !isnull(v)
-      samples = pass(p, samples, idx, get(v))
+    if !ismissing(v)
+      samples = pass(p, samples, idx, v)
     else
       samples = pass(p, samples, idx)
     end
@@ -210,34 +237,26 @@ function getSamples(trs::Trace, idx)
   return samples
 end
 
-# gets a single trace from a list of traces, runs all the data and sample passes, adds it through the post processor, and returns the result
-function getindex(trs::Trace, idx)
+function getindex(trs::Traces, idx)
   data = getData(trs, idx)
-  local samples
-
-  if length(data) > 0
-    samples = getSamples(trs, idx)
-  end
-
-  if length(data) == 0 || length(samples) == 0
-    samples = sampletype(trs)
-    data = Vector{eltype(data)}(0)
-  end
-
-  return (data, samples)
+  samples = getSamples(trs, idx)
+  return DefaultTrace(data, samples)
 end
 
-function setindex!(trs::Trace, t::Tuple{Vector,Vector}, idx::Int)
-  (data, samples) = t
-  writeData(trs, idx, data)
-  writeSamples(trs, idx, samples)
+function setindex!(trs::Traces, t, idx::Int)
+  writeData(trs, idx, t[1])
+  writeSamples(trs, idx, t[2])
 end
 
-# add a sample pass (just a Function over a Vector{FLoat64}) to the list of passes for this trace set
-addSamplePass(trs::Trace, f::Function, prprnd=false) = addSamplePass(trs, SimpleFunctionPass(f), prprnd)
+"""
+Add a sample pass (as a function with one argument) to the list of passes for this trace set
+"""
+addSamplePass(trs::Traces, f::Function, prprnd=false) = addSamplePass(trs, SimpleFunctionPass(f), prprnd)
 
-# add a sample pass (just a Function over a Vector{FLoat64}) to the list of passes for this trace set
-function addSamplePass(trs::Trace, p::Pass, prprnd=false)
+"""
+Add a sample pass (as an instance of type Pass) to the list of passes for this trace set. Instances of Pass can keep a state; alignment would need this for examples.
+"""
+function addSamplePass(trs::Traces, p::Pass, prprnd=false)
   m = meta(trs)
   m.viewsdirty = true
 
@@ -254,7 +273,7 @@ export setColumnRange
 """
   Column range *after* all the sample passses returned on read. This is called internally in `sca` to allow efficient column-wise DPA. If you're looking to efficiently limit the #samples read from disk see `setPreColumnRange`.
 """
-function setColumnRange(trs::Trace, r::Nullable{Range})
+function setColumnRange(trs::Traces, r::Union{Missing,UnitRange})
   m = meta(trs)
   m.viewsdirty = true
   m.colRange = r
@@ -265,16 +284,16 @@ export setPreColumnRange
 """
   Column range *before* all the sample passes. For example, if you have a large trace set with traces with many samples, and you only want to run the passes on the first million samples. 
 """
-function setPreColumnRange(trs::Trace, r::Nullable{Range})
+function setPreColumnRange(trs::Traces, r::Union{Missing,UnitRange})
   m = meta(trs)
   m.viewsdirty = true
   m.preColRange = r
 end
 
-
-
-# removes a sample pass
-function popSamplePass(trs::Trace, fromStart=false)
+"""
+Removes a sample pass
+"""
+function popSamplePass(trs::Traces, fromStart=false)
   m = meta(trs)
   m.viewsdirty = true
 
@@ -286,10 +305,15 @@ function popSamplePass(trs::Trace, fromStart=false)
   return nothing
 end
 
-addDataPass(trs::Trace, f::Function, prprnd=false) = addDataPass(trs, SimpleFunctionPass(f), prprnd)
+"""
+Add a data pass (as a function with single argument)
+"""
+addDataPass(trs::Traces, f::Function, prprnd=false) = addDataPass(trs, SimpleFunctionPass(f), prprnd)
 
-# add a data pass (just a Function over a Vector{x} where x is the type of the trace set)
-function addDataPass(trs::Trace, f::Pass, prprnd=false)
+"""
+Add a data pass (as an instance of type Pass) to the list of passes for this trace set. Instances of Pass can keep or read from state. I've used this for labeling traces after a clustering, where the label are stored in the Pass.
+"""
+function addDataPass(trs::Traces, f::Pass, prprnd=false)
   m = meta(trs)
   if prprnd == true
     m.dataPasses = vcat(f, m.dataPasses)
@@ -299,8 +323,9 @@ function addDataPass(trs::Trace, f::Pass, prprnd=false)
   return nothing
 end
 
-# removes a data pass
-function popDataPass(trs::Trace, fromStart=false)
+ 
+"""Pops a data pass"""
+function popDataPass(trs::Traces, fromStart=false)
   m = meta(trs)
   if fromStart
     m.dataPasses = m.dataPasses[2:end]
@@ -310,30 +335,32 @@ function popDataPass(trs::Trace, fromStart=false)
   return nothing
 end
 
-# removes the data processor and sets the number of traces it fed into the post processor to 0.
-function reset(trs::Trace)
+"""Removes the data processor instance and sets the number of traces it fed into the post processor to 0."""
+function reset(trs::Traces)
   m = meta(trs)
-  if !isnull(m.postProcInstance)
-    reset(get(m.postProcInstance))
+  if !ismissing(m.postProcInstance)
+    reset(m.postProcInstance)
   end
   m.tracesReturned = 0
 end
 
-# returns the number of traces it fed into the post processor
-function getCounter(trs::Trace)
+"""Returns the number of traces that were read"""
+function getCounter(trs::Traces)
   return meta(trs).tracesReturned
 end
 
-function setPostProcessor(trs::Trace, p::PostProcessor)
-  meta(trs).postProcInstance = Nullable(p)
+"""Set a post processor"""
+function setPostProcessor(trs::Traces, p::PostProcessor)
+  meta(trs).postProcInstance = p
 end
 
-# returns true when a post processor is set to this trace set
-function hasPostProcessor(trs::Trace)
-  return !isnull(meta(trs).postProcInstance)
+"""Returns true when a post processor is set to this trace set"""
+function hasPostProcessor(trs::Traces)
+  return !ismissing(meta(trs).postProcInstance)
 end
 
-function readTraces(trs::Trace, range::Range)
+"""Read all traces, and return as (data,samples) tuple of matrices in case of no postprocessor, or whatever the postprocessor decides to return. For example, IncrementalCorrelation returns a correlation matrix, CondAvg returns a (data,samples) tuple where data is a vector of vectors, and samples is vector of matrices."""
+function readTraces(trs::Traces, range::UnitRange)
   if isa(trs, DistributedTrace) || hasPostProcessor(trs)
     return readAndPostProcessTraces(trs, range)
   else
@@ -342,7 +369,7 @@ function readTraces(trs::Trace, range::Range)
 end
 
 # read traces without conditional averaging (but with all the data and sample passes), creates huge matrices, use with care
-function readNoPostProcessTraces(trs::Trace, range::Range)
+function readNoPostProcessTraces(trs::Traces, range::UnitRange)
   numberOfTraces = length(trs)
   readCount = 0
   allSamples = nothing
@@ -371,9 +398,9 @@ function readNoPostProcessTraces(trs::Trace, range::Range)
           # bit vectors are 8 times better than Vectors of bools since bit vectors are packed
           allSamples = BitVector(sampleLength * traceLength)
         else
-          allSamples = Vector{eltype(samples)}(sampleLength * traceLength)
+          allSamples = Vector{eltype(samples)}(undef,sampleLength * traceLength)
         end
-        allData = Vector{eltype(data)}(dataLength * traceLength)
+        allData = Vector{eltype(data)}(undef,dataLength * traceLength)
     end
 
     allSamples[readCount*sampleLength+1:readCount*sampleLength+sampleLength] = samples
@@ -406,14 +433,13 @@ function updateProgress(x::Int)
   end
 end
 
-function readAndPostProcessTraces(trs2::Trace, range::Range)
-
+function readAndPostProcessTraces(trs2::Traces, range::UnitRange)
   traceLength = length(range)
 
   if isa(trs2, DistributedTrace)
-    worksplit = @fetch get(meta(Main.trs).postProcInstance).worksplit
+    worksplit = @fetch meta(Main.trs).postProcInstance.worksplit
   else
-    worksplit = get(meta(trs2).postProcInstance).worksplit
+    worksplit = meta(trs2).postProcInstance.worksplit
   end
 
   if !pipe(trs2)
@@ -429,13 +455,13 @@ function readAndPostProcessTraces(trs2::Trace, range::Range)
       for w in workers()
         @async begin
           @fetchfrom w begin
-            add(get(meta(Main.trs).postProcInstance), Main.trs, range, updateProgress)
+            add(meta(Main.trs).postProcInstance, Main.trs, range, updateProgress)
           end
         end
       end
     end
   else
-    add(get(meta(trs2).postProcInstance), trs2, range, updateProgress)
+    add(meta(trs2).postProcInstance, trs2, range, updateProgress)
   end
 
   if progress != nothing
@@ -443,10 +469,10 @@ function readAndPostProcessTraces(trs2::Trace, range::Range)
   end
 
   if isa(trs2, DistributedTrace)
-    worker1copy = @fetchfrom workers()[1] get(meta(Main.trs).postProcInstance)
+    worker1copy = @fetchfrom workers()[1] meta(Main.trs).postProcInstance
     ret = get(worker1copy)
   else
-    ret = get(get(meta(trs2).postProcInstance))
+    ret = get(meta(trs2).postProcInstance)
   end
 
   return (ret, true)

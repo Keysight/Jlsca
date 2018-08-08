@@ -4,9 +4,9 @@
 using Jlsca.Trs
 using Jlsca.Sca
 
-using Base.Test
+using Test
 
-function SNRnaive(trs::Trace, r::Range)
+function SNRnaive(trs::Traces, r::UnitRange)
     (somedata,somesamples) = trs[1]
     nrTargets = length(somedata)
     nrSamples = length(somesamples)
@@ -50,8 +50,8 @@ function SNRnaive(trs::Trace, r::Range)
         end
     end
     
-    signalvariance = Matrix{Float64}(nrSamples,nrTargets)
-    noisevariance = Matrix{Float64}(nrSamples,nrTargets)
+    signalvariance = Matrix{Float64}(undef,nrSamples,nrTargets)
+    noisevariance = Matrix{Float64}(undef,nrSamples,nrTargets)
     
     for c in 1:nrTargets
         signalvariance[:,c] = getVariance(signals[c]) 

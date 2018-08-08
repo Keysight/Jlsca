@@ -3,5 +3,8 @@
 # Author: Cees-Bart Breunesse
 
 module Des
+
+using Printf
+
 include("des-core.jl")
 end

@@ -1,4 +1,4 @@
-using Base.Test
+using Test
 
 using Jlsca.Sca
 using Jlsca.Sha
@@ -95,67 +95,67 @@ function leak!(buf, str, state)
  #    end
 end
 
-using ProgressMeter
+# using ProgressMeter
 
-# MOVE ME
-function shatraces()
-	samplesBuf = IOBuffer()
-	nrOfSamples = 0
-	nrOfTraces = 500
-	local trs
+# # MOVE ME
+# function shatraces()
+# 	samplesBuf = IOBuffer()
+# 	nrOfSamples = 0
+# 	nrOfTraces = 500
+# 	local trs
 
-    @showprogress for i in 1:nrOfTraces
-    	input = [rand(UInt8) for i in 1:16]
-        output = sha1(input, (x,y)->leak!(samplesBuf,x,y))
+#     @showprogress for i in 1:nrOfTraces
+#     	input = [rand(UInt8) for i in 1:16]
+#         output = sha1(input, (x,y)->leak!(samplesBuf,x,y))
 
-        if nrOfSamples == 0
-            nrOfSamples = position(samplesBuf)
-            filename = @sprintf("sha1.trs")
-            trs = InspectorTrace(filename, 16+20, UInt8, nrOfSamples)
-        else
-            # sanity check
-            if position(samplesBuf) != nrOfSamples
-                @printf("WOWOOWOOOO!!! Cipher returns non-constant #samples/run\n")
-                return
-            end
-        end
+#         if nrOfSamples == 0
+#             nrOfSamples = position(samplesBuf)
+#             filename = "sha1.trs"
+#             trs = InspectorTrace(filename, 16+20, UInt8, nrOfSamples)
+#         else
+#             # sanity check
+#             if position(samplesBuf) != nrOfSamples
+#                 print("WOWOOWOOOO!!! Cipher returns non-constant #samples/run\n")
+#                 return
+#             end
+#         end
 
-        trs[i] = ([input;output], takebuf_array(samplesBuf))
+#         trs[i] = ([input;output], takebuf_array(samplesBuf))
 
-	end
+# 	end
 
-	close(trs)
-end
+# 	close(trs)
+# end
 
-# MOVE ME
-function sha256traces()
-    samplesBuf = IOBuffer()
-    nrOfSamples = 0
-    nrOfTraces = 100
-    local trs
+# # MOVE ME
+# function sha256traces()
+#     samplesBuf = IOBuffer()
+#     nrOfSamples = 0
+#     nrOfTraces = 100
+#     local trs
 
-    @showprogress for i in 1:nrOfTraces
-        input = [rand(UInt8) for i in 1:16]
-        output = sha256(input, (x,y)->leak!(samplesBuf,x,y))
+#     @showprogress for i in 1:nrOfTraces
+#         input = [rand(UInt8) for i in 1:16]
+#         output = sha256(input, (x,y)->leak!(samplesBuf,x,y))
 
-        if nrOfSamples == 0
-            nrOfSamples = position(samplesBuf)
-            filename = @sprintf("sha256.trs")
-            trs = InspectorTrace(filename, 16+32, UInt8, nrOfSamples)
-        else
-            # sanity check
-            if position(samplesBuf) != nrOfSamples
-                @printf("WOWOOWOOOO!!! Cipher returns non-constant #samples/run\n")
-                return
-            end
-        end
+#         if nrOfSamples == 0
+#             nrOfSamples = position(samplesBuf)
+#             filename = "sha256.trs"
+#             trs = InspectorTrace(filename, 16+32, UInt8, nrOfSamples)
+#         else
+#             # sanity check
+#             if position(samplesBuf) != nrOfSamples
+#                 print("WOWOOWOOOO!!! Cipher returns non-constant #samples/run\n")
+#                 return
+#             end
+#         end
 
-        trs[i] = ([input;output], takebuf_array(samplesBuf))
+#         trs[i] = ([input;output], takebuf_array(samplesBuf))
 
-    end
+#     end
 
-    close(trs)
-end
+#     close(trs)
+# end
 
 function speedtest()
 	state = [rand(UInt8) for i in 1:20]

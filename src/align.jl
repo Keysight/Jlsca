@@ -4,6 +4,9 @@
 
 module Align
 
+using FFTW
+using Statistics
+
 include("align-static.jl")
 
 end

@@ -1,7 +1,7 @@
 using Jlsca.Sca
 using Jlsca.Trs
 
-using Base.Test
+using Test
 
 function testVanilla()
     rows = 100

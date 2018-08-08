@@ -18,7 +18,7 @@ abstract type DesAttack <: Attack{UInt8} end
 
 numberOfTargets(a::DesAttack, phase::Int) = 8
 
-type DesSboxAttack <: DesAttack
+mutable struct DesSboxAttack <: DesAttack
   mode::DesMode
   encrypt::Bool
   direction::Direction
@@ -29,7 +29,7 @@ type DesSboxAttack <: DesAttack
   end
 end
 
-type DesRoundAttack <: DesAttack
+mutable struct DesRoundAttack <: DesAttack
   mode::DesMode
   encrypt::Bool
   direction::Direction
@@ -74,7 +74,7 @@ end
 const desguesses = collect(UInt8,0:63)
 
 # target functions
-type DesSboxOut <: Target{UInt8,UInt8,UInt8} 
+mutable struct DesSboxOut <: Target{UInt8,UInt8,UInt8} 
   sbidx::Int
 end
 
@@ -82,7 +82,7 @@ target(this::DesSboxOut, sixbits::Union{UInt16, UInt8}, kb::UInt8) = Sbox(this.s
 show(io::IO, a::DesSboxOut) = print(io, "Sbox $(a.sbidx) out")
 guesses(a::DesSboxOut) = desguesses
 
-type DesSboxOutXORin <: Target{UInt8,UInt8,UInt8}  end
+mutable struct DesSboxOutXORin <: Target{UInt8,UInt8,UInt8}  end
 
 
 function target(this::DesSboxOutXORin, sixbits::Union{UInt16, UInt8}, kb::UInt8)
@@ -94,7 +94,7 @@ end
 show(io::IO, a::DesSboxOutXORin) = print(io, "Sbox $(a.sbidx) out XOR in")
 guesses(a::DesSboxOutXORin) = desguesses
 
-type RoundOut <: Target{UInt16,UInt16,UInt8} 
+mutable struct RoundOut <: Target{UInt16,UInt16,UInt8} 
   sbidx::Int
 end
 
@@ -105,7 +105,7 @@ guesses(a::RoundOut) = desguesses
 # round functions
 
 # works on rows of data, returns either a vector of UInt8, or UInt16
-function round1(input::Vector{UInt8}, params::DesSboxAttack)
+function round1(input::AbstractVector{UInt8}, params::DesSboxAttack)
   ip = IP(toBits(input[1:8]))
   invplefts = toNibbles(invP(ip[left]))
 
@@ -114,7 +114,7 @@ function round1(input::Vector{UInt8}, params::DesSboxAttack)
   return sboxins
 end
 
-function round1(input::Vector{UInt8}, params::DesRoundAttack)
+function round1(input::AbstractVector{UInt8}, params::DesRoundAttack)
   ip = IP(toBits(input[1:8]))
   invplefts = toNibbles(invP(ip[left]))
   if params.xor
@@ -128,7 +128,7 @@ function round1(input::Vector{UInt8}, params::DesRoundAttack)
 end
 
 # works on rows of data, returns either a vector of UInt8, or UInt16
-function round2(input::Vector{UInt8}, rk1::BitVector, params::DesSboxAttack)
+function round2(input::AbstractVector{UInt8}, rk1::BitVector, params::DesSboxAttack)
   state = IP(toBits(input[1:8]))
   state[1:64] = [state[right]; f(state[right],rk1) .⊻ state[left]]
 
@@ -137,7 +137,7 @@ function round2(input::Vector{UInt8}, rk1::BitVector, params::DesSboxAttack)
   return sboxins
 end
 
-function round2(input::Vector{UInt8}, rk1::BitVector, params::DesRoundAttack)
+function round2(input::AbstractVector{UInt8}, rk1::BitVector, params::DesRoundAttack)
   state = IP(toBits(input[1:8]))
   state[1:64] = [state[right]; f(state[right],rk1) .⊻ state[left]]
 
@@ -151,23 +151,23 @@ function round2(input::Vector{UInt8}, rk1::BitVector, params::DesRoundAttack)
   return map((x,y) -> (UInt16(x) << 6) | y, invplefts, sboxins)
 end
 
-function middleDesRound1(input::Vector{UInt8}, expDesKey::BitVector, encrypt::Bool, params::DesAttack)
+function middleDesRound1(input::AbstractVector{UInt8}, expDesKey::BitVector, encrypt::Bool, params::DesAttack)
   return round1(Des.Cipher(input[1:8], expDesKey, (x,y)->y, encrypt), params)
 end
 
-function middleDesRound2(input::Vector{UInt8}, expDesKey::BitVector, rk1::BitVector, encrypt::Bool, params::DesAttack)
+function middleDesRound2(input::AbstractVector{UInt8}, expDesKey::BitVector, rk1::BitVector, encrypt::Bool, params::DesAttack)
   return round2(Des.Cipher(input[1:8], expDesKey, (x,y)->y, encrypt), rk1, params)
 end
 
-function innerDesRound1(input::Vector{UInt8}, expDesKey1::BitVector, expDesKey2::BitVector, encrypt::Bool, params::DesAttack)
+function innerDesRound1(input::AbstractVector{UInt8}, expDesKey1::BitVector, expDesKey2::BitVector, encrypt::Bool, params::DesAttack)
   return round1(Des.Cipher(Des.Cipher(input[1:8], expDesKey1, (x,y)->y, encrypt), expDesKey2, (x,y)->y, !encrypt), params)
 end
 
-function innerDesRound2(input::Vector{UInt8}, expDesKey1::BitVector, expDesKey2::BitVector, rk1::BitVector, encrypt::Bool, params::DesAttack)
+function innerDesRound2(input::AbstractVector{UInt8}, expDesKey1::BitVector, expDesKey2::BitVector, rk1::BitVector, encrypt::Bool, params::DesAttack)
   return round2(Des.Cipher(Des.Cipher(input[1:8], expDesKey1, (x,y)->y, encrypt), expDesKey2, (x,y)->y, !encrypt), rk1, params)
 end
 
-function getTargets(params::DesSboxAttack, phase::Int, phaseInput::Vector{UInt8})
+function getTargets(params::DesSboxAttack, phase::Int, phaseInput::AbstractVector{UInt8})
   if params.xor
     return [DesSboxOutXORin(sbidx) for sbidx in 1:8]
   else
@@ -175,11 +175,11 @@ function getTargets(params::DesSboxAttack, phase::Int, phaseInput::Vector{UInt8}
   end
 end
 
-function getTargets(params::DesRoundAttack, phase::Int, phaseInput::Vector{UInt8})
+function getTargets(params::DesRoundAttack, phase::Int, phaseInput::AbstractVector{UInt8})
   return [RoundOut(sbidx) for sbidx in 1:8]
 end
 
-function getDataPass(params::DesAttack, phase::Int, phaseInput::Vector{UInt8})
+function getDataPass(params::DesAttack, phase::Int, phaseInput::AbstractVector{UInt8})
   if params.direction == BACKWARD
     encrypt = !params.encrypt
   else
@@ -187,38 +187,38 @@ function getDataPass(params::DesAttack, phase::Int, phaseInput::Vector{UInt8})
   end
 
   if phase == PHASE1
-    roundfn = Nullable(x -> round1(x, params))
+    roundfn = x -> round1(x, params)
   elseif phase == PHASE2
-    roundfn = Nullable(x -> round2(x, toBits(phaseInput, 6), params))
+    roundfn = x -> round2(x, toBits(phaseInput, 6), params)
   elseif phase == PHASE3
     desKey = recoverKeyHelper(params, PHASE2, phaseInput[1:8], phaseInput[9:16])
     expDesKey = Des.KeyExpansion(desKey)
-    roundfn = Nullable(x -> middleDesRound1(x, expDesKey, encrypt, params))
+    roundfn = x -> middleDesRound1(x, expDesKey, encrypt, params)
   elseif phase == PHASE4
     desKey = recoverKeyHelper(params, PHASE2, phaseInput[1:8], phaseInput[9:16])
     expDesKey = Des.KeyExpansion(desKey)
     roundKey = toBits(phaseInput[17:24], 6)
-    roundfn = Nullable(x -> middleDesRound2(x, expDesKey, roundKey, encrypt, params))
+    roundfn = x -> middleDesRound2(x, expDesKey, roundKey, encrypt, params)
   elseif phase == PHASE5
     desKey1 = recoverKeyHelper(params, PHASE2, phaseInput[1:8], phaseInput[9:16])
     desKey2 = recoverKeyHelper(params, PHASE4, phaseInput[17:24], phaseInput[25:32])
     expDesKey1 = Des.KeyExpansion(desKey1)
     expDesKey2 = Des.KeyExpansion(desKey2)
-    roundfn = Nullable(x -> innerDesRound1(x, expDesKey1, expDesKey2, encrypt, params))
+    roundfn = x -> innerDesRound1(x, expDesKey1, expDesKey2, encrypt, params)
   elseif phase == PHASE6
     desKey1 = recoverKeyHelper(params, PHASE2, phaseInput[1:8], phaseInput[9:16])
     desKey2 = recoverKeyHelper(params, PHASE4, phaseInput[17:24], phaseInput[25:32])
     expDesKey1 = Des.KeyExpansion(desKey1)
     expDesKey2 = Des.KeyExpansion(desKey2)
     roundKey = toBits(phaseInput[33:40], 6)
-    roundfn = Nullable(x -> innerDesRound2(x, expDesKey1, expDesKey2, roundKey, encrypt, params))
+    roundfn = x -> innerDesRound2(x, expDesKey1, expDesKey2, roundKey, encrypt, params)
   end
 
   return roundfn
 
 end
 
-function recoverKeyHelper(params::DesAttack, phase::Int, rk1::Vector{UInt8}, rk2::Vector{UInt8})
+function recoverKeyHelper(params::DesAttack, phase::Int, rk1::AbstractVector{UInt8}, rk2::AbstractVector{UInt8})
   rk1bits = toBits(rk1, 6)
   rk2bits = toBits(rk2, 6)
 
@@ -239,7 +239,7 @@ function recoverKeyHelper(params::DesAttack, phase::Int, rk1::Vector{UInt8}, rk2
   return key
 end
 
-function recoverKey(params::DesAttack, phaseInput::Vector{UInt8})
+function recoverKey(params::DesAttack, phaseInput::AbstractVector{UInt8})
     if params.mode == DES || params.mode == TDES1
       key = recoverKeyHelper(params, PHASE2, phaseInput[1:8], phaseInput[9:16])
     elseif params.mode == TDES2
@@ -260,8 +260,8 @@ function recoverKey(params::DesAttack, phaseInput::Vector{UInt8})
     return key
 end
 
-function correctKeyMaterial(params::DesAttack, knownKey::Vector{UInt8})
-  rk = Vector{UInt8}(0)
+function correctKeyMaterial(params::DesAttack, knownKey::AbstractVector{UInt8})
+  rk = Vector{UInt8}(undef,0)
 
   key1 = 1:8
   key2 = 9:16
@@ -312,7 +312,7 @@ function correctKeyMaterial(params::DesAttack, knownKey::Vector{UInt8})
 end
 
 # if two candidates are winning (within 5% margin), then don't consider the winner that equals the round key of the "other" DES
-function pick(scorecol::Vector{Float64}, col::Int, block::UInt8)
+function pick(scorecol::AbstractVector{Float64}, col::Int, block::UInt8)
   sorted = sortperm(scorecol, rev=true)
 
   maxval = max(scorecol[sorted[1]],scorecol[sorted[2]])
@@ -368,4 +368,4 @@ function getPhaseKey(a::DpaAttack, params::DesAttack, phase::Int, sc::RankData)
   end
 end
 
-isKeyCorrect(a::DesAttack, key1::Vector{UInt8}, key2::Vector{UInt8}) = (key1 .& 0xfe) == (key2 .& 0xfe)
+isKeyCorrect(a::DesAttack, key1::AbstractVector{UInt8}, key2::AbstractVector{UInt8}) = (key1 .& 0xfe) == (key2 .& 0xfe)

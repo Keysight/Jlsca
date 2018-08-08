@@ -5,12 +5,12 @@
 module DesTest
 
 using Jlsca.Des
-using Base.Test
+using Test
 
 function testBitsAndBytes()
 	bytes = hex2bytes("deadbeefc335")
 	int = Int(0xdeadbeefc335)
-	bits = BitArray([parse(string(x)) for x in "110111101010110110111110111011111100001100110101"])
+	bits = BitArray([Meta.parse(string(x)) for x in "110111101010110110111110111011111100001100110101"])
 
 	@test toBits(bytes) == toBits(int, 48)
 	@test toBits(bytes) == bits

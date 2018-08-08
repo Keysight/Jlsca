@@ -2,8 +2,10 @@
 #
 # Author: Cees-Bart Breunesse
 
-using Base.Test
+using Test
 
+using Jlsca.Sca
+using Jlsca.Trs
 @everywhere using Jlsca.Sca
 @everywhere using Jlsca.Trs
 
@@ -11,7 +13,7 @@ function ParallelCondReduceTest(splitmode)
     len = 200
 
     fullfilename = "../aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
-    @printf("file: %s\n", fullfilename)
+    print("file: $fullfilename\n")
 
     direction = FORWARD
     params = getParameters(fullfilename, direction)
@@ -61,14 +63,18 @@ function ParallelCondReduceTestWithInterval(splitmode)
     numberOfScas = div(len, updateInterval) + ((len % updateInterval) > 0 ? 1 : 0)
 
     fullfilename = "../aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
-    @printf("file: %s\n", fullfilename)
+    print("file: $fullfilename\n")
 
     direction = FORWARD
     params = getParameters(fullfilename, direction)
 
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0)]
+<<<<<<< HEAD
     params.updateInterval = Nullable(updateInterval)
+=======
+    params.updateInterval = updateInterval
+>>>>>>> julia0.7
     params.maxCols = 1024*4
 
     @everywhere begin
@@ -82,11 +88,11 @@ function ParallelCondReduceTestWithInterval(splitmode)
     end
 
     rankData1 = sca(DistributedTrace(),params,1, len)
-    rankData2 = Vector{RankData}(numberOfScas)
+    rankData2 = Vector{RankData}(undef,numberOfScas)
 
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0)]
-    params.updateInterval = Nullable()
+    params.updateInterval = missing
     params.maxCols = 1024*8
 
     for s in 1:numberOfScas

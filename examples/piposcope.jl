@@ -161,7 +161,7 @@ function setSigGenBuiltIn(handle::Ref{Cshort}, offsetVoltage::Int, pkToPk::Int, 
   end
 end
 
-type Scope
+mutable struct Scope
   handle::Ref{Cshort}
   availableInputChannels::Vector{InputChannel}
   channels::Vector{InputChannel}

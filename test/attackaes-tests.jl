@@ -2,7 +2,7 @@
 #
 # Author: Cees-Bart Breunesse
 
-using Base.Test
+using Test
 
 using Jlsca.Sca
 using Jlsca.Trs
@@ -17,7 +17,8 @@ function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysi
             continue
         end
         fullfilename = joinpath(tracedir,filename)
-        @printf("file: %s\n", fullfilename)
+        print("file: $fullfilename\n"
+            )
 
         params = getParameters(fullfilename, direction)
         params.attack.xor = xor
@@ -25,7 +26,7 @@ function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysi
             continue
         end
 
-        # create Trace instance
+        # create Traces instance
         if conditional
             trs = InspectorTrace(fullfilename)
             setPostProcessor(trs, CondAvg())
@@ -42,7 +43,7 @@ function testAesTraces(conditional::Bool,direction::Direction, analysis::Analysi
 
         key = getKey(params, sca(trs,params,1, 200))
 
-        @test(key == get(params.knownKey))
+        @test(key == params.knownKey)
 
         if onetest
           break
@@ -57,4 +58,4 @@ end
 @time testAesTraces(true, FORWARD, LRA(), true)
 
 @time testAesTraces(false, BACKWARD, CPA(),false,true)
-@time testAesTraces(false, FORWARD, CPA(),false,true)
+@time  testAesTraces(false, FORWARD, CPA(),false,true)

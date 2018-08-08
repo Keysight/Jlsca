@@ -1,5 +1,8 @@
 module Trs
 
+using Distributed
+using Printf
+
 abstract type PostProcessor end
 
 export PostProcessor

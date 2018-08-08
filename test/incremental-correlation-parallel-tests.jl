@@ -2,18 +2,18 @@
 #
 # Author: Cees-Bart Breunesse
 
-using Base.Test
+using Test
 
-@everywhere begin
-  using Jlsca.Sca
-  using Jlsca.Trs
-end
+using Jlsca.Sca
+using Jlsca.Trs
+@everywhere using Jlsca.Sca
+@everywhere using Jlsca.Trs
 
 function IncrementalCPATest()
     len = 200
 
     fullfilename = "../aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
-    @printf("file: %s\n", fullfilename)
+    print("file: $fullfilename\n")
 
     direction = FORWARD
     params = getParameters(fullfilename, direction)
@@ -52,7 +52,7 @@ function ParallelIncrementalCPATest(splitmode)
     len = 200
 
     fullfilename = "../aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
-    @printf("file: %s\n", fullfilename)
+    print("file: $fullfilename\n")
 
     direction = FORWARD
     params = getParameters(fullfilename, direction)
@@ -100,7 +100,7 @@ function ParallelIncrementalCPATestWithInterval(splitmode)
     numberOfScas = div(len, updateInterval) + ((len % updateInterval) > 0 ? 1 : 0)
 
     fullfilename = "../aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs"
-    @printf("file: %s\n", fullfilename)
+    print("file: $fullfilename\n")
 
     direction = FORWARD
     params = getParameters(fullfilename, direction)
@@ -123,9 +123,9 @@ function ParallelIncrementalCPATestWithInterval(splitmode)
     @everywhere close(trs)
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
-    params.updateInterval = Nullable()
+    params.updateInterval = missing
     params.maxCols = 588
-    rankData2 = Vector{RankData}(numberOfScas)
+    rankData2 = Vector{RankData}(undef,numberOfScas)
 
     for s in 1:numberOfScas
       len2 = min(len, updateInterval*s)

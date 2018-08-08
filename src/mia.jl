@@ -16,7 +16,7 @@ Implements Mutual Information Analysis, as described in https://eprint.iacr.org/
 
 Default leakages are `[HW()]` and the number of buckets is 9.
 """
-type MIA <: NonIncrementalAnalysis
+mutable struct MIA <: NonIncrementalAnalysis
   leakages::Vector{Leakage}
   sampleBuckets::Int
 
@@ -45,22 +45,22 @@ function computeScores(a::MIA, data::AbstractArray{In}, samples::AbstractArray, 
   return C
 end
 
-type MiaColumnData{T}
+mutable struct MiaColumnData{T}
   uniques::Set{T}
-  where::Dict{T,IntSet}
+  where::Dict{T,BitSet}
   p::Dict{T, Float64}
   numobs::Int
 
   function MiaColumnData{T}(X::AbstractArray{T}) where T
     uniques = Set{T}()
-    where = Dict{T,IntSet}()
+    where = Dict{T,BitSet}()
     p = Dict{T, Float64}()
     numobs = length(X)
 
     for (idx,val) in enumerate(X)
       push!(uniques, val)
       if !(val in keys(where))
-        where[val] = IntSet()
+        where[val] = BitSet()
       end
       push!(where[val], idx)
     end
@@ -146,9 +146,9 @@ function mia(O::AbstractArray, P::Matrix, nrOfObuckets=9)
   C = zeros(Float64, co, cp)
 
   if eltype(O) <: AbstractFloat
-    Ocolumndata = vec(mapslices(x -> MiaColumnData{Int}(bucket(x, nrOfObuckets)), O, 1))
+    Ocolumndata = vec(mapslices(x -> MiaColumnData{Int}(bucket(x, nrOfObuckets)), O, dims=1))
   else
-    Ocolumndata = vec(mapslices(MiaColumnData{eltype(O)}, O, 1))
+    Ocolumndata = vec(mapslices(MiaColumnData{eltype(O)}, O, dims=1))
   end
 
   # dump(Ocolumndata[1])

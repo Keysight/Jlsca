@@ -1,16 +1,17 @@
 # Play around with this for multi-processing.
 # addprocs(2)
 
-@everywhere begin
-  using Jlsca.Sca
-  using Jlsca.Trs
-  using Jlsca.Align
-end
+using Jlsca.Sca
+using Jlsca.Trs
+using Jlsca.Align
+@everywhere using Jlsca.Sca
+@everywhere using Jlsca.Trs
+@everywhere using Jlsca.Align
 
 # our vanilla  main function
 function gofaster()
   if length(ARGS) < 1
-    @printf("no input trace\n")
+    print("no input trace\n")
     return
   end
 

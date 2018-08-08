@@ -8,7 +8,7 @@ include("incremental-statistics.jl")
 import ..Trs.add,..Trs.getGlobCounter
 export IncrementalCorrelation
 
-type IncrementalCPA <: IncrementalAnalysis
+mutable struct IncrementalCPA <: IncrementalAnalysis
   leakages::Vector{Leakage}
 
   function IncrementalCPA()
@@ -26,7 +26,7 @@ numberOfLeakages(a::IncrementalCPA) = length(a.leakages)
 
 maximization(a::IncrementalCPA) = AbsoluteGlobalMaximization()
 
-type IncrementalCorrelation <: PostProcessor
+mutable struct IncrementalCorrelation <: PostProcessor
   worksplit::WorkSplit
   counter::Int
   meanXinitialized::Bool
@@ -49,7 +49,7 @@ end
 
 show(io::IO, a::IncrementalCorrelation) = print(io, "Incremental correlation")
 
-createTargetCache(t::Target{In,Out,Guess}) where {In,Out,Guess} = Vector{Out}(length(guesses(t)))
+createTargetCache(t::Target{In,Out,Guess}) where {In,Out,Guess} = Vector{Out}(undef,length(guesses(t)))
 
 function init(c::IncrementalCorrelation, targetOffsets::Vector{Int}, leakages::Vector{Leakage}, targets::Vector{Target})
   if c.meanXinitialized 
@@ -62,7 +62,7 @@ function init(c::IncrementalCorrelation, targetOffsets::Vector{Int}, leakages::V
   c.targets = targets
   #FIXME: broken for attacks with different target output types
   #FIXME: broken for leakages that don't fit in an byte
-  c.hypocache = Vector{UInt8}(length(guesses(targets[1])) * length(leakages) * length(targetOffsets))
+  c.hypocache = Vector{UInt8}(undef,length(guesses(targets[1])) * length(leakages) * length(targetOffsets))
   c.targetcache = createTargetCache(targets[1])
   c.guesses = guesses(targets[1])
 end
@@ -99,7 +99,7 @@ function toLeakages!(c::IncrementalCorrelation, t::Target{In,Out,Guess}, input::
   return offset + nrOfFuns*nrOfKbVals
 end
 
-function add(c::IncrementalCorrelation, samples::Vector{S}, data::Vector{D}, traceIdx::Int) where {S,D}
+function add(c::IncrementalCorrelation, samples::AbstractVector{S}, data::AbstractVector{D}, traceIdx::Int) where {S,D}
   hypo = c.hypocache
   if !c.meanXinitialized
       c.covXY = IncrementalCovarianceTiled(length(samples), length(hypo))
@@ -117,7 +117,7 @@ function add(c::IncrementalCorrelation, samples::Vector{S}, data::Vector{D}, tra
   c.counter += 1
 end
 
-function add(c::IncrementalCorrelation, trs::Trace, traceIdx::Int)
+function add(c::IncrementalCorrelation, trs::Traces, traceIdx::Int)
   data = getData(trs, traceIdx)
   if length(data) == 0
     return
@@ -145,7 +145,7 @@ function get(c::IncrementalCorrelation)
       if worker == c.worksplit.worker
         continue
       else
-        other = @fetchfrom worker get(meta(Main.trs).postProcInstance)
+        other = @fetchfrom worker meta(Main.trs).postProcInstance
         merge(c, other)
       end
     end

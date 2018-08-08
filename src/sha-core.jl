@@ -2,6 +2,8 @@
 #
 # Author: Cees-Bart Breunesse
 
+using Printf
+
 export sha1,sha256,hmacsha1,hmacsha256,sha1init,update,final,Sha1state,Sha256state
 export Ch,Maj
 
@@ -49,7 +51,7 @@ const sha1blocksizebytes = 64
 
 abstract type Shastate end
 
-type Sha1state <: Shastate
+mutable struct Sha1state <: Shastate
 	H::Vector{UInt32}
 	block::Vector{UInt8}
 	free::Int
@@ -59,7 +61,7 @@ type Sha1state <: Shastate
 	Sha1state() = new([SHA1H00, SHA1H01, SHA1H02, SHA1H03, SHA1H04], zeros(UInt8, sha1blocksizebytes), sha1blocksizebytes, 0, 0, zeros(UInt32, 80))
 end
 
-function calcW(state::Sha1state, Mi::Vector{UInt32})
+function calcW(state::Sha1state, Mi::AbstractVector{UInt32})
 	W = state.W
 
 	for t in 1:16
@@ -134,7 +136,7 @@ function round(state::Sha1state, rnd::Int, leak::Function=(x,y)->x)
 	state.H[1+4] = e + state.H[1+4]
 end
 
-function update(state::Shastate, msg::Vector{UInt8}, leak::Function=(x,y)->x)
+function update(state::Shastate, msg::AbstractVector{UInt8}, leak::Function=(x,y)->x)
 
 	# update the msg length
 	state.msgLen += length(msg)
@@ -187,13 +189,13 @@ function sha1init()
 	return Sha1state()
 end
 
-function sha1(msg::Vector{UInt8}, leak::Function=(x,y)->x)
+function sha1(msg::AbstractVector{UInt8}, leak::Function=(x,y)->x)
 	state = sha1init()
 	update(state, msg, leak)
 	return final(state, leak)	
 end
 
-function K0(key::Vector{UInt8})
+function K0(key::AbstractVector{UInt8})
 	if length(key) == sha1blocksizebytes
 		return key
 	elseif length(key) > sha1blocksizebytes
@@ -204,7 +206,7 @@ function K0(key::Vector{UInt8})
 	end
 end
 
-function hmacsha1(key::Vector{UInt8}, msg::Vector{UInt8})
+function hmacsha1(key::AbstractVector{UInt8}, msg::AbstractVector{UInt8})
 	innerstate = sha1init()
 	innerkey = K0(key) .⊻ 0x36
 	update(innerstate, innerkey)
@@ -226,7 +228,7 @@ SHA256H05 = UInt32(0x9B05688C)
 SHA256H06 = UInt32(0x1F83D9AB)
 SHA256H07 = UInt32(0x5BE0CD19)
 
-type Sha256state <: Shastate
+mutable struct Sha256state <: Shastate
 	H::Vector{UInt32}
 	block::Vector{UInt8}
 	free::Int
@@ -322,13 +324,13 @@ function sha256init()
 	return Sha256state()
 end
 
-function sha256(msg::Vector{UInt8}, leak::Function=(x,y)->x)
+function sha256(msg::AbstractVector{UInt8}, leak::Function=(x,y)->x)
 	state = sha256init()
 	update(state, msg, leak)
 	return final(state, leak)	
 end
 
-function hmacsha256(key::Vector{UInt8}, msg::Vector{UInt8})
+function hmacsha256(key::AbstractVector{UInt8}, msg::AbstractVector{UInt8})
 	innerstate = sha256init()
 	innerkey = K0(key) .⊻ 0x36
 	update(innerstate, innerkey)
