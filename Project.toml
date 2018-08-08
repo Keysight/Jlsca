@@ -4,6 +4,7 @@ authors = ["Cees-Bart Breunesse <ceesb@riscure.com>"]
 version = "0.1.0"
 
 [deps]
+DSP = "717857b8-e6f2-59f4-9121-6e50c889abd2"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"

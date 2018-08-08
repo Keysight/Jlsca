@@ -2,6 +2,9 @@
 #
 # Author: Cees-Bart Breunesse
 
+using DSP
+
+FFTW.set_num_threads(Threads.nthreads())
 
 export CorrelationAlignFFT
 mutable struct CorrelationAlignFFT
@@ -30,26 +33,26 @@ mutable struct CorrelationAlignFFT
 
 end
 
-function myconv(u::StridedVector{T}, v::StridedVector{T}, plan1, plan2) where {T}
+function myconv(u::AbstractVector{T}, v::AbstractVector{T}, state::CorrelationAlignFFT) where T
     nu = length(u)
     nv = length(v)
     n = nu + nv - 1
-    np2 = n > 1024 ? nextprod([2,3,5], n) : nextpow2(n)
+    np2 = n > 1024 ? nextprod([2,3,5], n) : nextpow(2,n)
     upad = [u; zeros(T, np2 - nu)]
     vpad = [v; zeros(T, np2 - nv)]
     if T <: Real
-      if ismissing(plan1)
-        plan1 = Ref(plan_rfft(upad))
+      if ismissing(state.plan1)
+        state.plan1 = Ref(plan_rfft(upad))
       end
 
-      upad_f = plan1[] * upad
-      vpad_f = plan1[] * vpad
+      upad_f = state.plan1[] * upad
+      vpad_f = state.plan1[] * vpad
       dotp = upad_f .* vpad_f
 
-      if ismissing(plan2)
-        plan2 = Ref(plan_irfft(dotp, np2))
+      if ismissing(state.plan2)
+        state.plan2 = Ref(plan_irfft(dotp, np2))
       end
-      y = plan2[] * dotp
+      y = state.plan2[] * dotp
     else
         throw(ErrorException("don't"))
     end
@@ -74,7 +77,7 @@ function pearson(cv::Vector{Float64},sums_y::Vector{Float64},sums_y2::Vector{Flo
 end
 
 # http://scribblethink.org/Work/nvisionInterface/nip.html (thx Jasper van Woudenberg)
-function fastnormalizedcrosscorrelation(samples::Vector{Float64}, state::CorrelationAlignFFT)
+function fastnormalizedcrosscorrelation(samples, state::CorrelationAlignFFT)
   align::Int = 0
   maxCorr::Float64 = 0
 
@@ -103,7 +106,8 @@ function fastnormalizedcrosscorrelation(samples::Vector{Float64}, state::Correla
   scores = state.scores
 
   # compute convolution (sums of squares between ref and samples)
-  cv::Vector{Float64} = myconv(reversereference0mean, samples[window], plan1, plan2)
+  cv::Vector{Float64} = myconv(reversereference0mean, @view(samples[window]), state)
+  # cv::Vector{Float64} = conv(reversereference0mean, @view(samples[window]))
 
   # pre-compute the sums and sums of squares of samples
   idx = 2
