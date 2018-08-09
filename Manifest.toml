@@ -89,10 +89,10 @@ deps = ["Base64"]
 uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
 
 [[Missings]]
-deps = ["Compat"]
-git-tree-sha1 = "866fb034899be6055dcb6cb1a70fbda379bb0b55"
+deps = ["Dates", "InteractiveUtils", "SparseArrays", "Test"]
+git-tree-sha1 = "196528fa1df03df435025f52f9c1ff8356f94738"
 uuid = "e1d29d7a-bbdc-5cf2-9ac0-f12de2c33e28"
-version = "0.2.10"
+version = "0.3.0"
 
 [[Mmap]]
 uuid = "a63ad114-7e13-5084-954f-fe012c677804"
@@ -102,20 +102,22 @@ deps = ["Dates", "LibGit2", "Markdown", "Printf", "REPL", "Random", "SHA", "UUID
 uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 
 [[Polynomials]]
-deps = ["Compat"]
-git-tree-sha1 = "23d095b4c1ecbacd78bb0eea6b85d6e0872ce3bd"
+deps = ["LinearAlgebra", "SparseArrays", "Test"]
+git-tree-sha1 = "af883752c4935425a3ab30031a2069254c451b8b"
 uuid = "f27b6e38-b328-58d1-80ce-0feddd5e7a45"
-version = "0.4.0"
+version = "0.5.0"
 
 [[Printf]]
 deps = ["Unicode"]
 uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
 [[ProgressMeter]]
-deps = ["Compat"]
-git-tree-sha1 = "30d3473425cdb13b23ff10dfc7727be8bcc2871a"
+deps = ["Printf", "Random", "Test"]
+git-tree-sha1 = "845cd206b1cb258363f3c35c5a859699e169d7c7"
+repo-rev = "master"
+repo-url = "https://github.com/timholy/ProgressMeter.jl.git"
 uuid = "92933f4c-e287-5a05-a399-4b506db050ca"
-version = "0.5.6"
+version = "0.5.6+"
 
 [[REPL]]
 deps = ["InteractiveUtils", "Markdown", "Sockets"]

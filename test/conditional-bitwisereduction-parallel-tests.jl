@@ -70,11 +70,7 @@ function ParallelCondReduceTestWithInterval(splitmode)
 
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0)]
-<<<<<<< HEAD
-    params.updateInterval = Nullable(updateInterval)
-=======
     params.updateInterval = updateInterval
->>>>>>> julia0.7
     params.maxCols = 1024*4
 
     @everywhere begin

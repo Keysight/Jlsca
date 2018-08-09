@@ -185,8 +185,8 @@ function gf2_mul(x::BitMatrix, y::BitMatrix)
 end
 
 function gf2_mul(A::BitMatrix, x::UInt8)
-    # b = reverse(BitArray([parse(string(x)) for x in bin(x,8,false)]))
-    b = reverse(BitArray([x == '1' ? 1 : 0 for x in bin(x,8,false)]))
+    # b = reverse(BitArray([parse(string(x)) for x in Base.bin(x,8,false)]))
+    b = reverse(BitArray([x == '1' ? 1 : 0 for x in Base.bin(x,8,false)]))
     Ab = gf2_mul(A, b)
 
     ret::UInt8 = 0

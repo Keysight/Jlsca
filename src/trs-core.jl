@@ -6,11 +6,9 @@ using ProgressMeter
 
 import Base.length, Base.getindex, Base.setindex!, Base.iterate
 import Base.reset
-import Base.start, Base.done, Base.next, Base.endof
-
 
 export readTraces,addSamplePass,popSamplePass,addDataPass,popDataPass,hasPostProcessor,reset,getCounter,setPostProcessor
-export start,done,next,endof,setindex!
+export setindex!
 
 export Pass
 
@@ -87,10 +85,10 @@ end
 pass(a::SimpleFunctionPass, x::AbstractVector, idx::Int) = a.fn(x) 
 
 # overloading these to implement an iterator
-start(trs::Traces) = 1
-done(trs::Traces, idx) = pipe(trs) ? false : (idx > length(trs))
-next(trs::Traces, idx) = (trs[idx], idx+1)
-endof(trs::Traces) = length(trs)
+# start(trs::Traces) = 1
+# done(trs::Traces, idx) = pipe(trs) ? false : (idx > length(trs))
+# next(trs::Traces, idx) = (trs[idx], idx+1)
+# endof(trs::Traces) = length(trs)
 
 export nrsamples
 

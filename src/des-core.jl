@@ -121,7 +121,7 @@ end
 function toBits(d::Vector{UInt8}, bitsperbyte=8, bits::Int=length(d)*bitsperbyte)
 	(bits >= 0 && bits <= length(d)*bitsperbyte) || throw(DimensionMismatch("wrong length"))
 
-	bitstring = join(map(x -> bin(x,bitsperbyte,false), d))[1:bits]
+	bitstring = join(map(x -> Base.bin(x,bitsperbyte,false), d))[1:bits]
 	bitpacked = BitArray([x == '1' ? 1 : 0 for x in bitstring])
 
 	return bitpacked

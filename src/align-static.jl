@@ -2,7 +2,7 @@
 #
 # Author: Cees-Bart Breunesse
 
-using DSP
+using FFTW
 
 FFTW.set_num_threads(Threads.nthreads())
 
