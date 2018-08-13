@@ -1,6 +1,7 @@
 # Play around with this for multi-processing. IncrementalCPA benefits also from threading, tweak env variable JULIA_NUM_THREADS
 # addprocs(2)
 
+using Distributed
 using Jlsca.Sca
 using Jlsca.Trs
 using Jlsca.Align

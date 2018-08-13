@@ -1,6 +1,8 @@
+using Distributed
 using Jlsca.Sca
 using Jlsca.Trs
 using Jlsca.Align
+using Jlsca.Aes
 @everywhere using Jlsca.Sca
 @everywhere using Jlsca.Trs
 @everywhere using Jlsca.Align
