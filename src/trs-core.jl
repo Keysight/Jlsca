@@ -68,7 +68,7 @@ pass(a::Pass, x::AbstractVector, idx::Int, cols::UnitRange) = pass(a,x,idx)[cols
 
 export inview
 
-inview(a::Pass, outview::UnitRange, inlength::Int, intype::AbstractVector) = Union{Missing,UnitRange}()
+inview(a::Pass, outview::UnitRange, inlength::Int, intype::AbstractVector) = Union{Missing}()
 
 export outlength
 
