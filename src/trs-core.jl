@@ -427,6 +427,7 @@ end
 global progress = nothing
 
 function updateProgress(x::Int)
+  global progress
   # p = Main.getProgress()
   p = progress
   if p != nothing
@@ -435,6 +436,7 @@ function updateProgress(x::Int)
 end
 
 function readAndPostProcessTraces(trs2::Traces, range::UnitRange)
+  global progress
   traceLength = length(range)
 
   if isa(trs2, DistributedTrace)
