@@ -424,10 +424,13 @@ function readNoPostProcessTraces(trs::Traces, range::UnitRange)
   return ((allData, allSamples), eof)
 end
 
+global progress = nothing
+
 function updateProgress(x::Int)
-  progress = Main.getProgress()
-  if progress != nothing
-    update!(progress, progress.counter + x)
+  # p = Main.getProgress()
+  p = progress
+  if p != nothing
+    update!(p, progress.counter + x)
   end
 end
 
@@ -446,7 +449,7 @@ function readAndPostProcessTraces(trs2::Traces, range::UnitRange)
     progress = nothing
   end
 
-  @everywhere getProgress()=$progress
+  # @everywhere getProgress()=$progress
 
   if isa(trs2, DistributedTrace)
     @sync begin
