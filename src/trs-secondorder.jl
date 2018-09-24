@@ -31,7 +31,7 @@ This pass computes the second order triangle (i.e. every sample combined with ev
 
 The `sca` function will attack per column if too many samples are offered (see the `maxCols` parameter in `DpaAttack`). Normally this would mean that all samples but the column under attack are discarded which is is a huge waste. This second order pass will only compute the samples needed for the column under attack, significantly speeding up the attack and requiring much less memory. 
 
-The constructor takes an optional single argument of type `SampleCombination`. The default is `AbsDiff`.
+The constructor takes an optional single argument of type `SampleCombination`. The default is `AbsDiff`. The alternative is `Xor()`, if the input is a BitVector, for whiteboxes.
 
 # Example
 ```
@@ -75,7 +75,7 @@ function offset2samples(o,xl)
     end
 end
 
-function loop1(cmb::SampleCombination,c::Int,i::Int,lj::Int,xl::Int,y::DenseVector,x::AbstractArray{T,1}) where {T}
+function loop1(cmb::SampleCombination,c::Int,i::Int,lj::Int,xl::Int,y::AbstractVector,x::AbstractArray{T,1}) where {T}
     for j in lj:xl
         y[c] = combine(cmb, x[i], x[j])
         c += 1
@@ -83,7 +83,7 @@ function loop1(cmb::SampleCombination,c::Int,i::Int,lj::Int,xl::Int,y::DenseVect
     return c
 end
 
-function loop2(cmb::SampleCombination,c::Int,li::Int,ui::Int,xl::Int,y::DenseVector,x::AbstractArray{T,1}) where {T}
+function loop2(cmb::SampleCombination,c::Int,li::Int,ui::Int,xl::Int,y::AbstractVector,x::AbstractArray{T,1}) where {T}
     for i in li+1:(ui-1)
         for j in i+1:xl
             y[c] = combine(cmb, x[i], x[j])
@@ -93,7 +93,7 @@ function loop2(cmb::SampleCombination,c::Int,li::Int,ui::Int,xl::Int,y::DenseVec
     return c        
 end
 
-function loop3(cmb::SampleCombination,c::Int,i::Int,uj::Int,y::DenseVector,x::AbstractArray{T,1}) where {T}
+function loop3(cmb::SampleCombination,c::Int,i::Int,uj::Int,y::AbstractVector,x::AbstractArray{T,1}) where {T}
     for j in i+1:uj
         y[c] = combine(cmb, x[i], x[j])
         c += 1

@@ -6,7 +6,7 @@ using Test
 
 using Jlsca.Trs
 
-function naivesecondorder(s::SampleCombination, x::Vector)
+function naivesecondorder(s::SampleCombination, x::AbstractVector)
     global y
     xl = length(x)
     y = zeros(Float64, div(xl * (xl-1),2))
@@ -44,6 +44,47 @@ function test3()
 
 end
 
+function test1a()
+	samples = tobits(rand(UInt8, 100))
+	c = SecondOrderPass(Xor())
+
+	@test naivesecondorder(Xor(),samples) == pass(c,samples,1)
+end
+
+function test3()
+	samples = rand(Float64, 100)
+	c = SecondOrderPass(AbsDiff())
+	cols = 10
+
+	naive = naivesecondorder(AbsDiff(),samples)
+	nl = length(naive)
+
+	for i in 1:div(nl+cols-1,cols)
+		l = (i-1)*cols+1
+		u = min(i*cols,nl)
+		# print("col $i\n")
+		@test naive[l:u] == pass(c,samples,1,l:u)
+	end
+
+end
+
+function test3a()
+	samples = tobits(rand(UInt8, 100))
+	c = SecondOrderPass(Xor())
+	cols = 10
+
+	naive = naivesecondorder(Xor(),samples)
+	nl = length(naive)
+
+	for i in 1:div(nl+cols-1,cols)
+		l = (i-1)*cols+1
+		u = min(i*cols,nl)
+		# print("col $i\n")
+		@test naive[l:u] == pass(c,samples,1,l:u)
+	end
+
+end
+
 function perf1() 
 	samples = rand(Float64, 10000)
 	c = SecondOrderPass(AbsDiff())
@@ -54,6 +95,8 @@ function perf1()
 end
 
 test1()
+test1a()
 test3()
+test3a()
 
 perf1()
