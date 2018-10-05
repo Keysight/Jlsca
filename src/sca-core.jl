@@ -10,7 +10,7 @@ export CPA,IncrementalCPA
 export Status,Direction
 export printParameters,getParameters
 export target
-export guesses,numberOfPhases,numberOfTargets,recoverKey,getDataPass,getTargets,isKeyCorrect
+export guesses,numberOfPhases,numberOfTargets,recoverKey,getDataPass,getTargets,isKeyCorrect,correctKeyMaterial,keylength,blocklength
 export totalNumberOfTargets
 export RankData,RankData
 

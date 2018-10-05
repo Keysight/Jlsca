@@ -4,7 +4,7 @@
 
 export InMemory
 
-# simple wrapper around in-memory matrices
+# simple wrapper around in-memory matrices, traces are columns.
 mutable struct InMemory{TS,TD} <: Traces
   samples::AbstractArray{TS,2}
   sampleType::Type
@@ -13,9 +13,9 @@ mutable struct InMemory{TS,TD} <: Traces
   meta::MetaData
 
   function InMemory(data::AbstractArray{TD,2}, samples::AbstractArray{TS,2}) where {TS,TD}
-    nrTraces = size(samples)[1]
-    @assert size(data)[1] == nrTraces
-    new{TS,TD}(samples', TS, data', nrTraces,MetaData())
+    nrTraces = size(samples)[2]
+    @assert size(data)[2] == nrTraces
+    new{TS,TD}(samples, TS, data, nrTraces,MetaData())
   end
 end
 

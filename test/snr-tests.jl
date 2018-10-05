@@ -64,8 +64,8 @@ end
 function mytest() 
     numTraces = 100000
     numSamples = 10
-    data = rand(UInt8, numTraces,1)
-    samples = rand(Float32, numTraces,numSamples)
+    data = rand(UInt8, 1,numTraces)
+    samples = rand(Float32, numSamples,numTraces)
     trs = InMemory(data,samples)
     addDataPass(trs, x -> hw.(x))
 
@@ -82,8 +82,8 @@ mytest()
 function myprofile() 
     numTraces = 100000
     numSamples = 10000
-    data = rand(UInt8, numTraces,1)
-    samples = rand(Float32, numTraces,numSamples)
+    data = rand(UInt8, 1,numTraces)
+    samples = rand(Float32, numSamples,numTraces)
     trs = InMemory(data,samples)
     addDataPass(trs, x -> hw.(x))
 

@@ -18,6 +18,8 @@ function myinv(s)
   return invs
 end
 
+export keylength2Nr
+
 function keylength2Nr(keylength)
     if keylength == 16
         return 10
@@ -25,6 +27,19 @@ function keylength2Nr(keylength)
         return 12
     elseif keylength == 32
         return 14
+    end
+    throw(ErrorException("invalid keylength $keylength"))
+end
+
+export keylength2Nk
+
+function keylength2Nk(keylength)
+    if keylength == 16
+        return 4
+    elseif keylength == 24
+        return 6
+    elseif keylength == 32
+        return 8
     end
     throw(ErrorException("invalid keylength $keylength"))
 end

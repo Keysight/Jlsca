@@ -7,7 +7,7 @@ using ..Trs
 
 import Base.show
 
-export AesSboxAttack,AesMCAttack,AesKeyLength,AesMode
+export AesSboxAttack,AesSboxRoundAttack,AesMCAttack,AesKeyLength,AesMode
 
 @enum AesMode CIPHER=1 INVCIPHER=2 EQINVCIPHER=3
 @enum AesKeyLength KL128=16 KL192=24 KL256=32
@@ -19,7 +19,13 @@ export AesAttack
 
 abstract type AesAttack <: Attack{UInt8} end
 
+blocklength(::AesAttack) = 16
+
 # two types of attacks: sbox or mixcolumn
+"""
+Attacks the (inverse) Sbox output or input, optionally XOR'ed with the input (or output)
+into the (inverse) Sboxes.
+"""
 mutable struct AesSboxAttack <: AesAttack
   mode::AesMode
   keyLength::AesKeyLength
@@ -30,6 +36,21 @@ mutable struct AesSboxAttack <: AesAttack
 
   function AesSboxAttack()
     return new(CIPHER, KL128, FORWARD, false, Aes.sbox, Aes.invsbox)
+  end
+end
+
+"""
+Attacks the (inverse) Sbox output or input XOR'ed with the round input (or output). This is different from the `AesSboxAttack` with the `xor` flag because there's a ShiftRows inbetween.
+"""
+mutable struct AesSboxRoundAttack <: AesAttack
+  mode::AesMode
+  keyLength::AesKeyLength
+  direction::Direction
+  sbox::Vector{UInt8}
+  invsbox::Vector{UInt8}
+
+  function AesSboxRoundAttack()
+    return new(CIPHER, KL128, FORWARD, Aes.sbox, Aes.invsbox)
   end
 end
 
@@ -45,6 +66,10 @@ mutable struct AesMCAttack <: AesAttack
     return new(CIPHER, KL128, FORWARD, false, Aes.sbox, Aes.invsbox)
   end
 end
+
+keylength(a::AesSboxAttack) = Int(a.keyLength)
+keylength(a::AesMCAttack) = Int(a.keyLength)
+keylength(a::AesSboxRoundAttack) = Int(a.keyLength)
 
 # get the round key material the attack is recovering to add known key information in the scoring
 function correctKeyMaterial(params::AesAttack, knownKey::AbstractVector{UInt8})
@@ -64,7 +89,7 @@ function correctKeyMaterial(params::AesAttack, knownKey::AbstractVector{UInt8})
     roundkey1 = w[end-16+1:end]
   end
 
-  if isa(params, AesSboxAttack) && keyLength > KL128
+  if (isa(params, AesSboxAttack) || isa(params, AesSboxRoundAttack)) && keyLength > KL128
     rklength = (keyLength == KL192 ? 8 : 16)
     if fwkeysched
       roundkey2 = w[16+1:16+rklength]
@@ -86,7 +111,7 @@ function correctKeyMaterial(params::AesAttack, knownKey::AbstractVector{UInt8})
   end
 end
 
-function numberOfPhases(params::AesSboxAttack)
+function numberOfPhases(params::AesAttack)
   if params.keyLength == KL128
     return PHASE1
   else
@@ -207,6 +232,20 @@ end
 target(a::InvSboxOutXORIn, data::UInt8, keyByte::UInt8) =  data ⊻ keyByte ⊻ a.invsbox[(data ⊻ keyByte) + 1]
 show(io::IO, a::InvSboxOutXORIn) = print(io, "Inverse Sbox out, xor'ed w/ input")
 
+mutable struct AesRoundOut <: Target{UInt16,UInt8,UInt8}
+  sbox::Vector{UInt8}
+end
+
+target(a::AesRoundOut, data::UInt16, keyByte::UInt8) = a.sbox[(UInt8(data & 0xff) ⊻ keyByte) + 1] ⊻ UInt8(data >> 8)
+show(io::IO, a::AesRoundOut) = print(io, "Sbox out, xor'ed w/ round out")
+
+mutable struct InvAesRoundOut <: Target{UInt16,UInt8,UInt8}
+  invsbox::Vector{UInt8}
+end
+
+target(a::InvAesRoundOut, data::UInt16, keyByte::UInt8) = a.invsbox[(UInt8(data & 0xff) ⊻ keyByte) + 1] ⊻ UInt8(data >> 8)
+show(io::IO, a::InvAesRoundOut) = print(io, "Inverse Sbox out, xor'ed w/ round out")
+
 # some round functions
 function invRound(output::Matrix, roundkey::Matrix)
     state = Aes.AddRoundKey(output, roundkey)
@@ -236,7 +275,7 @@ function recoverKeyHelper(keymaterial::AbstractVector{UInt8}, mode, direction)
     end
 end
 
-function recoverKey(params::AesSboxAttack, phaseInputOrig::AbstractVector{UInt8})
+function recoverKey(params::AesAttack, phaseInputOrig::AbstractVector{UInt8})
   mode = params.mode
   direction = params.direction
   phaseInput = copy(phaseInputOrig)
@@ -281,22 +320,22 @@ numberOfTargets(params::AesMCAttack, phase::Int) = 4
 function getTargets(params::AesMCAttack, phase::Int, phaseInput::AbstractVector{UInt8})
   if (params.direction == FORWARD && params.mode == CIPHER) || (params.direction == BACKWARD && params.mode != CIPHER)
     if params.xor
-      targetfn = McOutXORIn(params.sbox, 0x0, 1)
+      targetfn = McOutXORIn(params.sbox, 0x0, phase)
     else
-      targetfn = McOut(params.sbox, 0x0, 1)
+      targetfn = McOut(params.sbox, 0x0, phase)
     end
   else
     if params.xor
-      targetfn = InvMcOutXORIn(params.invsbox, 0x0, 1)
+      targetfn = InvMcOutXORIn(params.invsbox, 0x0, phase)
     else
-      targetfn = InvMcOut(params.invsbox, 0x0, 1)
+      targetfn = InvMcOut(params.invsbox, 0x0, phase)
     end
   end
 
   return [targetfn for i in 1:4]
 end
 
-numberOfTargets(params::AesSboxAttack, phase::Int) = (params.keyLength == KL192 && phase == PHASE2) ? 8 : 16
+numberOfTargets(params::AesAttack, phase::Int) = (params.keyLength == KL192 && phase == PHASE2) ? 8 : 16
 
 function getTargets(params::AesSboxAttack, phase::Int, phaseInput::AbstractVector{UInt8})
   if (params.direction == FORWARD && params.mode == CIPHER) || (params.direction == BACKWARD && params.mode != CIPHER)
@@ -316,8 +355,19 @@ function getTargets(params::AesSboxAttack, phase::Int, phaseInput::AbstractVecto
   return [targetfn for i in 1:numberOfTargets(params,phase)]
 end
 
-show(io::IO, a::AesSboxAttack) = print(io, "AES Sbox")
-show(io::IO, a::AesMCAttack) = print(io, "AES MC")
+function getTargets(params::AesSboxRoundAttack, phase::Int, phaseInput::AbstractVector{UInt8})
+  if (params.direction == FORWARD && params.mode == CIPHER) || (params.direction == BACKWARD && params.mode != CIPHER)
+      targetfn = AesRoundOut(params.sbox)
+  else
+      targetfn = InvAesRoundOut(params.invsbox)
+  end
+
+  return [targetfn for i in 1:numberOfTargets(params,phase)]
+end
+
+show(io::IO, a::AesSboxRoundAttack) = print(io, "AES Sbox Round ",a.mode, " ",a.keyLength, " ", a.direction)
+show(io::IO, a::AesSboxAttack) = print(io, "AES Sbox ",a.mode, " ",a.keyLength, " ", a.direction, a.xor ? " Xor" : "")
+show(io::IO, a::AesMCAttack) = print(io, "AES MC ",a.mode, " ",a.keyLength, " ", a.direction, a.xor ? " Xor" : "")
 
 function printParameters(params::Union{AesSboxAttack,AesMCAttack})
   @printf("mode:         %s\n", string(params.mode))
@@ -340,8 +390,29 @@ function filterConstantInput(offsets, data::AbstractVector{UInt8}, constant::UIn
   return [data[x] for x in offsets]
 end
 
-function getDataPass(params::AesSboxAttack, phase::Int, phaseInput::AbstractVector{UInt8})
-  if phase == PHASE2 && params.keyLength != KL128
+function mymerge16(lsbs::AbstractArray{UInt8},msbs::AbstractArray{UInt8})
+  length(lsbs) == length(msbs) || throw(DomainError("unequal lengths"))
+  l = length(lsbs)
+  ret = zeros(UInt16, l)
+
+  # print("input ", bytes2hex(lsbs),"\n")
+  # print("srowed input ", bytes2hex(msbs),"\n")
+  for i in 1:l
+    ret[i] = (UInt16(msbs[i]) << 8) | lsbs[i]
+  end
+
+  return ret
+end
+
+function getDataPass(params::AesAttack, phase::Int, phaseInput::AbstractVector{UInt8})
+  cond = (params.mode == CIPHER && params.direction == BACKWARD) || (params.mode == INVCIPHER && params.direction == FORWARD) || (params.mode == EQINVCIPHER && params.direction == FORWARD)
+  stripMC = (params.mode == CIPHER && params.direction == BACKWARD) || (params.mode == INVCIPHER) || (params.mode == EQINVCIPHER && params.direction == BACKWARD)
+
+  secondrnd = phase == PHASE2 && params.keyLength != KL128
+  selection = 1:16
+  local roundfn
+
+  if secondrnd
     if params.keyLength == KL192
       dataWidth = 8
     else
@@ -349,17 +420,42 @@ function getDataPass(params::AesSboxAttack, phase::Int, phaseInput::AbstractVect
     end
 
     # setup the round function to calculate the output or input of the next target round
-    if (params.mode == CIPHER && params.direction == BACKWARD) || (params.mode == INVCIPHER && params.direction == FORWARD) || (params.mode == EQINVCIPHER && params.direction == FORWARD)
-        roundfn_ = x -> invRound(reshape(x[1:16], (4,4)), reshape(phaseInput, (4,4)))[end-dataWidth+1:end]
-      else
-        roundfn_ = x -> round(reshape(x[1:16], (4,4)), reshape(phaseInput, (4,4)))[1:dataWidth]
+    if cond
+        roundfn = x -> invRound(reshape(x[1:16], (4,4)), reshape(phaseInput, (4,4)))
+        selection = (16-dataWidth)+1:16
+    else
+        roundfn = x -> round(reshape(x[1:16], (4,4)), reshape(phaseInput, (4,4)))
+        selection = 1:dataWidth
     end
-    roundfn = roundfn_
   else
     roundfn = x -> x[1:16]
   end
 
-  return roundfn
+  if isa(params,AesSboxRoundAttack)
+    if cond
+      if secondrnd && stripMC
+        roundfn2 = x -> (y=roundfn(x); mymerge16(y,ShiftRows(MixColumns(reshape(y,(4,4))))))
+      else
+        roundfn2 = x -> (y=roundfn(x); mymerge16(y,ShiftRows(reshape(y,(4,4)))))
+      end
+    else
+      if secondrnd && stripMC
+        roundfn2 = x -> (y=roundfn(x); mymerge16(y,InvShiftRows(InvMixColumns(reshape(y,(4,4))))))
+      else
+        roundfn2 = x -> (y=roundfn(x); mymerge16(y,InvShiftRows(reshape(y,(4,4)))))
+      end
+    end
+  else
+    roundfn2 = roundfn
+  end
+
+  # if selection != 1:16
+    roundfn3 = x -> roundfn2(x)[selection]
+  # else 
+    # roundfn3 = roundfn2
+  # end
+
+  return roundfn3
 end
 
 function getDataPass(params::AesMCAttack, phase::Int, phaseInput::AbstractVector{UInt8})

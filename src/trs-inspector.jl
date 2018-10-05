@@ -347,7 +347,7 @@ end
 function writeInspectorTrsHeader(filename::String, dataSpace::Int, sampleType::Type, numberOfSamplesPerTrace::Int, titleSpace::Int)
 
   sampleCoding = Union
-  if sampleType == UInt8
+  if sampleType == UInt8 || sampleType == Int8
     sampleCoding = CodingByte
   elseif sampleType == Int16
     sampleCoding = CodingShort

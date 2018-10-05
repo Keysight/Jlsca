@@ -137,18 +137,31 @@ function updateViews(trs::Traces)
 
   if !fast 
     idx = 1
-    if !ismissing(m.preColRange)
-      samples = readSamples(trs, idx, m.preColRange)
-    else
-      samples = readSamples(trs, idx)
-    end
+    zerolength = true
+    while zerolength 
+      if !ismissing(m.preColRange)
+        samples = readSamples(trs, idx, m.preColRange)
+      else
+        samples = readSamples(trs, idx)
+      end
 
-    lengths[1] = length(samples)
+      lengths[1] = length(samples)
 
-    for i in eachindex(m.passes)
-      p = m.passes[i]
-      samples = pass(p, samples, idx)
-      lengths[i+1] = length(samples)
+      for i in eachindex(m.passes)
+        p = m.passes[i]
+        samples = pass(p, samples, idx)
+        if length(samples) != 0
+          zerolength = false
+        else
+          zerolength = true
+          break
+        end
+        lengths[i+1] = length(samples)
+      end
+
+      if zerolength
+        idx += 1
+      end
     end
   end
 
@@ -166,7 +179,7 @@ function updateViews(trs::Traces)
   end
 
   if !ismissing(m.preColRange)
-    if !ismissing(m.views[1])
+    if !ismissing(views[1])
       views[1] = m.preColRange[views[1]]
     else
       views[1] = m.preColRange

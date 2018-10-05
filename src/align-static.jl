@@ -152,7 +152,7 @@ mutable struct AlignPass <: Pass
   lowerBound::Float64
 
   function AlignPass(c::CorrelationAlignFFT, nrTraces::Int, lowerBound::Float64)
-    new(c, Vector{Tuple{Int,Float64}}(nrTraces), falses(nrTraces), lowerBound)
+    new(c, Vector{Tuple{Int,Float64}}(undef,nrTraces), falses(nrTraces), lowerBound)
   end
 end
 
