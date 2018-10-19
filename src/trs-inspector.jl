@@ -24,12 +24,13 @@ mutable struct InspectorTrace <: Traces
   writeable::Bool
   lengthPosition::Int
   bitshack::Bool
+  readrangecheckonce::Bool
   meta::MetaData
 
   # to open an existing file
   function InspectorTrace(filename::String, bitshack::Bool = false)
     (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, fileDescriptor) = readInspectorTrsHeader(filename, bitshack)
-    new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, false, lengthPosition, bitshack, MetaData())
+    new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, false, lengthPosition, bitshack, true, MetaData())
   end
 
   # to create a new one
@@ -41,7 +42,7 @@ mutable struct InspectorTrace <: Traces
     !isfile(filename) || throw(ErrorException(@sprintf("file %s exists!", filename)))
 
     (titleSpace, traceBlockPosition, lengthPosition, fileDescriptor) = writeInspectorTrsHeader(filename, dataSpace, sampleType, numberOfSamplesPerTrace, titleSpace)
-    new(titleSpace, 0, dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, true, lengthPosition, false,MetaData())
+    new(titleSpace, 0, dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, true, lengthPosition, false, true, MetaData())
   end
 end
 
@@ -282,9 +283,15 @@ end
 function readSamples(trs::InspectorTrace, idx::Int, r::UnitRange)
   if trs.bitshack
     rr = 1:div(trs.numberOfSamplesPerTrace * trs.sampleSpace * 8,64)
-    issubset(r,rr) || error("requested range $r not in trs sample space $rr")
+    if trs.readrangecheckonce
+      issubset(r,rr) || error("requested range $r not in trs sample space $rr")
+      trs.readrangecheckonce = false
+    end
   else
-    issubset(r,1:trs.numberOfSamplesPerTrace) || error("requested range $r not in trs sample space $(1:trs.numberOfSamplesPerTrace)")
+    if trs.readrangecheckonce
+      issubset(r,1:trs.numberOfSamplesPerTrace) || error("requested range $r not in trs sample space $(1:trs.numberOfSamplesPerTrace)")
+      trs.readrangecheckonce = false
+    end
   end
   pos = calcFilePositionForIdx(trs, idx)
   pos += trs.titleSpace

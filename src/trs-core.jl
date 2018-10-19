@@ -431,8 +431,8 @@ function readNoPostProcessTraces(trs::Traces, range::UnitRange)
   resize!(allData, (dataLength*readCount))
   resize!(allSamples, (sampleLength*readCount))
 
-  allData = reshape(allData, (dataLength, readCount))'
-  allSamples = reshape(allSamples, (sampleLength, readCount))'
+  allData = permutedims(reshape(allData, (dataLength, readCount)))
+  allSamples = permutedims(reshape(allSamples, (sampleLength, readCount)))
 
   return ((allData, allSamples), eof)
 end
