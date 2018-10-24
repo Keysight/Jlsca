@@ -213,13 +213,15 @@ function update!(g::NormalizedMaximization, a::RankData, phase::Int, C::Abstract
     C[row,:] ./= s
   end
 
-  (corrvals, corrvaloffsets) = findmax(abs.(C), 1)
+  (corrvals, corrvaloffsets) = findmax(abs.(C), dims=1)
+
+  ci = CartesianIndices(size(C))
 
   for idx in eachindex(corrvals)
     val = corrvals[idx]
     if val > a.scores[phase][target][leakage][idx,r]
       a.scores[phase][target][leakage][idx,r] = val
-      a.offsets[phase][target][leakage][idx,r] = ind2sub(size(C), corrvaloffsets[idx])[1] + colOffset-1
+      a.offsets[phase][target][leakage][idx,r] = ci[corrvaloffsets[idx]][1] + colOffset-1
     end
   end
 end
