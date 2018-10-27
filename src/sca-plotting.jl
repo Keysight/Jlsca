@@ -52,7 +52,7 @@ struct PlotScoresEvolution end
         end
         ranked = sortperm(finalscores, rev=true)[1:5]
         color := reshape([x in ranked ? :auto : :grey for x in 1:cands],(1,cands))
-        label := reshape([x in ranked ? "0x$(hex(x-1))" : "" for x in 1:cands],(1,cands))
+        label := reshape([x in ranked ? "0x$(string(x-1, base=16))" : "" for x in 1:cands],(1,cands))
     end
     ylabel := (rankdata.nrLeakages > 1 && combined ? "$(params.leakageCombinator) of scores" : "scores")
     xlabel := "#traces"
@@ -100,7 +100,7 @@ struct PlotRanksEvolution end
     end
     
     color := :auto
-    label := labels
+    label := reshape(labels, (1, length(labels)))
 
     ylabel := "rank"
     xlabel --> "#traces"

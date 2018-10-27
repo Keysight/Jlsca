@@ -22,16 +22,7 @@ Then, not really that related to this toolbox, but I've been playing with a Pico
 
 # Why would I want it?
 
-It runs standalone or inside Riscure's Inspector as a module, so you would want this if:
-
-* You don't have Inspector but you want to do DPA or understand how it works.
-
-* You have Inspector but you want to play with features that are currently (4.10) not in Inspector, like:
-	* [non-profiled LRA](https://eprint.iacr.org/2013/794.pdf)
- 	* [Conditional averaging](https://eprint.iacr.org/2013/794.pdf)
-	* Conditional sample reduction for attacking whiteboxes (see conditional-bitwisereduction.jl for what that means)
-	* Superduper fast parallization of conditional averaging, conditional bitwise sample reduction, and [incremental correlation statistics](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.214.8508&rep=rep1&type=pdf)!
-	* [Mutual Information Analysis](https://eprint.iacr.org/2007/198.pdf) (MIA)
+Because it's free!
 
 # Who wrote it?
 
@@ -39,9 +30,9 @@ It's written for fun by me (Cees-Bart Breunesse) and Ilya Kizhvatov (whose [pysc
 
 # Installation
 
-1. Install Julia (0.6.0 is tested, everything prior is *no longer compatible*) and make sure the `julia` executable is in your path (notably for Windows users). Start he Julia REPL by executing `julia`.
+1. Install Julia (1.0.1) is tested, everything prior is *no longer compatible*) and make sure the `julia` executable is in your path (notably for Windows users). Start he Julia REPL by executing `julia`.
 
-2. In the REPL type `Pkg.clone("https://github.com/Riscure/Jlsca")`
+2. In the REPL type `using Pkg; Pkg.clone("https://github.com/Riscure/Jlsca")`
 
 You can now close the Julia prompt. 
 
@@ -97,101 +88,6 @@ Last but not least, this file will perform a correlation attack using incrementa
 ```
 JULIA_NUM_THREADS=2 julia examples/main-inccpa.jl aestraces/aes128_mc_invciph_da6339e783ee690017b8604aaeed3a6d.trs
 ```
-
-# Running in the REPL
-
-```julia
-julia> using Jlsca.Trs
-
-julia> trs=InspectorTrace("aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs")
-Opened aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs, #traces 500, #samples 1920 (UInt8), #data 32
-Jlsca.Trs.InspectorTrace(0x00,Union{Missing,Int64}(500),0x0020,1,UInt8,0x00000780,24,IOStream(<file aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs>),Any[],Any[],Union,Union,0,"aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs",24,false,18)
-
-julia> #convert the data bytes to its hamming weight on the fly
-
-julia> addDataPass(trs, x -> Jlsca.Sca.hw.(x))
-1-element Array{Any,1}:
- Jlsca.Sca.hw
-
-julia> # reading all samples and data-converted-to-HW into memory
-
-julia> ((data,samples),eof) = readTraces(trs, 1:length(trs))
-((
-UInt8[0x06 0x06 … 0x02 0x04; 0x04 0x03 … 0x03 0x04; … ; 0x05 0x06 … 0x02 0x08; 0x05 0x04 … 0x05 0x04],
-
-UInt8[0x6f 0x6f … 0x02 0x04; 0xd4 0x2c … 0x03 0x04; … ; 0xad 0xf6 … 0x02 0x08; 0xbc 0xe4 … 0x05 0x04]),false)
-
-julia> using PyPlot.plot
-
-julia> # plotting correlation with byte wise hamming weight of input data
-
-julia> plot(cor(samples, data[:,1:16]))
-
-```
-![Input correlation plot](https://raw.githubusercontent.com/Riscure/Jlsca/master/images/inputcorrelation.png)
-```julia
-julia> # and for the output
-
-julia> plot(cor(samples, data[:,17:32]))
-
-```
-![Output correlation plot](https://raw.githubusercontent.com/Riscure/Jlsca/master/images/outputcorrelation.png)
-
-```julia
-julia> # Remove the HW data pass
-
-julia> popDataPasss(trs)
-
-julia> # Correlate with the cipher state at the start of round 5. We define a leak function first.
-
-julia> round5leak(str,state,globstate) = (if str == "r5.start"; globstate[:] = state; end; return state;)
-round5leak (generic function with 1 method)
-
-julia> # expand the "known key" for this trace set
-
-julia> expkey=KeyExpansion(hex2bytes("0fec9ca47fb2f2fd4df14dcb93aa4967"), 10, 4)
-
-julia> # Then, we define a pass that returns the start of round 5 data for each trace
-
-julia> mypass(data) = (leakstate = zeros(UInt8, 16)
-       ; Cipher(data[1:16], expkey, (str,state) -> round5leak(str, state, leakstate)); return leakstate)
-mypass (generic function with 1 method)
-
-julia> addDataPass(trs,mypass)
-1-element Array{Any,1}:
- mypass
-
-julia> addDataPass(trs, x -> Jlsca.Sca.hw.(x))
-2-element Array{Any,1}:
- mypass      
- Jlsca.Sca.hw
-
-julia> ((data,samples),eof) = readTraces(trs, 1:length(trs))
-Processing traces .. 100% Time: 0:00:01
-((
-UInt8[0x07 0x04 … 0x04 0x05; 0x03 0x05 … 0x04 0x05; … ; 0x02 0x02 … 0x05 0x06; 0x02 0x04 … 0x04 0x04],
-
-UInt8[0x6f 0x6f … 0x02 0x04; 0xd4 0x2c … 0x03 0x04; … ; 0xad 0xf6 … 0x02 0x08; 0xbc 0xe4 … 0x05 0x04]),false)
-
-julia> plot(cor(samples, data))
-```
-![Start of round 5 correlation plot](https://raw.githubusercontent.com/Riscure/Jlsca/master/images/r5startcorrelation.png)
-
-# Running from Inspector
-
-First of all, you're currently missing out on the parallelization when you're running Jlsca from Inspector. This is because from Inspector to Jlsca the trace set data and samples are transported over a pipe, since I thought it was cool to be able to run Jlsca in an Inspector chain. The implementation of parallelization in Jlsca now assumes seekable files for each process, so the pipe is no longer an option. I have not come around to fix the Inspector module to safely pass the temp file data to Inspector. This is TBD.
-
-In addition to the installation steps for Jlsca described before, you also need to:
-
-3. Copy `inspector/Jlsca4InspectorModule.java` to `$HOME/Inspector/modules/jlsca` (or the Windows equivalent).
-
-Start Inspector and open the module source `Jlsca4InspectorModule.java`. Hit compile, and run on a trace set. This will open a dialog. The dialog is intended to be always consistent: i.e. you should only be able to run it in a way that "makes sense". You can still crash everything if you enter wrong offsets. Offset in the dialog are 0-based, as you Java guys would be used to.
-
-Design wise, `Jlsca4InspectorModule.java` consists of 2 classes, a module class that extends Inspector's `Module` class and a panel class that extends `JPanel` and implements the module GUI. The GUI code is horrible, and I'm quite proud of it. The panel classes exposes a `toJlscParameters()` method which is called by the module when you press the OK button. This function returns a String which is a Julia expression that constructs a parameters object which will be passed to Jlsca: it's printed in the "log" window. The module simply executes Julia with Jlsca, passes the parameters, and passes the trace sample and data to standard input of the slave Julia process. Whatever Jlsca prints on std error and std out is printed in the Inspector "log" and "out" console. No correlation traces are returned (also TBD).
-
-If you run the module with a known key and a >0 update interval it will create a KKA file with the key ranking which you can plot in openoffice (Excel for Windows users).
-
-If you attack inner rounds, you'll need to manually cut and paste "next phase input" data from Jlsca's output in Inspector's "out" window into the phase input field in the module's GUI. This is because the Inspector module only makes a single pass over the trace set, whereas to break the inner rounds you need to do another analysis pass.
 
 # Hacking stuff
 
