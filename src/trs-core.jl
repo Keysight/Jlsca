@@ -361,7 +361,7 @@ function getCounter(trs::Traces)
 end
 
 """Set a post processor"""
-function setPostProcessor(trs::Traces, p::PostProcessor)
+function setPostProcessor(trs::Traces, p::Union{Missing,PostProcessor})
   meta(trs).postProcInstance = p
 end
 
