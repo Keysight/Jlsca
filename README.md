@@ -9,7 +9,7 @@ Jlsca is a toolbox in Julia to do the computational part (DPA) of a side channel
 * Correlation power analysis (CPA)
 * non-profiled Linear regression analysis (LRA)
 * Mutual Information Analysis (MIA)
-* AES128/192/256 enc/dec, backward/forward S-box attacks
+* AES128/192/256 enc/dec, backward/forward S-box attacks, backward/forward S-box round attacks
 * AES128 enc/dec chosen input MixColumn attack
 * Some whitebox models for AES (INV MUL / Klemsa)
 * DES/TDES1/TDES2/TDES3 enc/dec, backward/forward attack
@@ -17,6 +17,8 @@ Jlsca is a toolbox in Julia to do the computational part (DPA) of a side channel
 * Known key analysis + key rank evolution CSV output
 * Inspector trace set input and output
 * Split sample and data raw binary (Daredevil) input and output
+* Trace alignment using FFT convolution
+* Trace alignment using Dynamic Time Warping
 
 Then, not really that related to this toolbox, but I've been playing with a Picoscope, and there is an example in `examples/piposcope.jl` that does (a quite fast, if I may say so myself) acquisition on Riscure's Pinata board using the scope's rapid block mode. Check the file header of `piposcope.jl` for more information. 
 
@@ -177,7 +179,7 @@ We can now read a the first trace (i.e. a tuple of the data and corresponding sa
 Suppose now that we would like to take the absolute of all samples, each time we read one trace. You can of course simply run `abs(samples)`, but if you pass the `trs` instance into the Jlsca library that, for example, performs a DPA attack on that file, you'd have to modify this code to call `abs(samples)`. Instead, you can add a "sample pass" to the `trs` object. A pass is simply a function, that will be run over the trace at the moment it's read.
 ```julia
 # add function abs to the trs objet
-addSamplePass(trs, abs)
+addSamplePass(trs, x -> abs.(x))
 # read a trace
 (data, samples) = trs[1]
 # samples now contain the absolute
@@ -193,7 +195,7 @@ A similar mechanism exists for the data in a trace set by means of the function 
 
 ```julia
 # return only the traces with the first data byte set to 0x1
-addDataPass(trs, x -> x[1] == 0x1 ? x : Vector{UInt8}())
+addDataPass(trs, x -> x[1] == 0x1 ? x : Vector{UInt8}(undef,0))
 ```
 
 Once you push a sample or data pass on the stack of passes, you can pop the last one you added by calling popSamplePass() or popDataPass().
@@ -202,7 +204,7 @@ Once you push a sample or data pass on the stack of passes, you can pop the last
 
 Conditional averaging [Conditional averaging](https://eprint.iacr.org/2013/794.pdf) is implemented as a trace post processor that is configured in the "trs" object as follows:
 ```julia
-setPostProcessor(trs, CondAvgXXXX, getNumberOfAverages(params))
+setPostProcessor(trs, CondAvg())
 ```
 For AES, there are max 256 averages per key byte offset. For DES SBOX out there are 64, and for DES ROUNDOUT there are 1024. This is returned by getNumberOfAverages(). See type CondAvg in conditional-average.jl how the averager works: it uses Julia's newly added Threads module. By default only a single thread is used. If you set the JULIA_NUM_THREADS=2 environment variable it will use 2 threads, making it quite much faster if the input has many samples. Using more than 2 threads doesn't currently speed up the process (on my laptop at least), but I haven't profiled it.
 

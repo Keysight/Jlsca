@@ -8,5 +8,6 @@ using FFTW
 using Statistics
 
 include("align-static.jl")
+include("align-fastdtw.jl")
 
 end

@@ -1,9 +1,56 @@
-
 # This file is part of Jlsca, license is GPLv3, see https://www.gnu.org/licenses/gpl-3.0.en.html
 #
 # Author: Cees-Bart Breunesse
 
 using RecipesBase
+
+export PlotRanksEvolution
+
+"""
+Plots the evolution of the rank of the correct key bytes for all phases and targets. You need to know the key to use this plot.
+
+# Example
+
+```
+using Plots
+
+params.knownKey = hex2bytes("00112233445566778899aabbccddeeff")
+params.updateInterval = 1000
+rankdata = sca(trs,params)
+
+plot(PlotRanksEvolution(),rankdata,params)
+```
+"""
+struct PlotRanksEvolution end
+
+@recipe function f(::PlotRanksEvolution, rankdata::RankData, params)
+    if ismissing(params.knownKey) 
+        error("need params.knownKey (or if you don't know the key, look at PlotScoresEvolution)")
+    end
+    
+    xxrows = Vector[]
+    rrankings = Vector[]
+    labels = String[]
+    
+    for phase in getPhases(rankdata)
+        xrows = getNrConsumedRowsEvolution(rankdata,phase)
+        for target in getTargets(rankdata, phase)
+            kb = getCorrectKey(params,phase,target)
+            rankings = getRankingsEvolution(rankdata, phase, target, kb)            
+            push!(xxrows,xrows)
+            push!(rrankings,rankings)
+            push!(labels, "phase $phase, target $target")
+        end
+    end
+    
+    color := :auto
+    label := reshape(labels, (1, length(labels)))
+
+    ylabel := "rank"
+    xlabel --> "#traces"
+    title --> "rank evolution"
+    xxrows,rrankings
+end
 
 export PlotScoresEvolution
 
@@ -58,53 +105,5 @@ struct PlotScoresEvolution end
     xlabel := "#traces"
     title := "score evolution phase $phase, target $target"
     xrows,scores'
-end
-
-export PlotRanksEvolution
-
-"""
-Plots the evolution of the rank of the correct key bytes for all phases and targets. You need to know the key to use this plot.
-
-# Example
-
-```
-using Plots
-
-params.knownKey = hex2bytes("00112233445566778899aabbccddeeff")
-params.updateInterval = 1000
-rankdata = sca(trs,params)
-
-plot(PlotRanksEvolution(),rankdata,params)
-```
-"""
-struct PlotRanksEvolution end
-
-@recipe function f(::PlotRanksEvolution, rankdata::RankData, params)
-    if ismissing(params.knownKey) 
-        error("need params.knownKey (or if you don't know the key, look at PlotScoresEvolution)")
-    end
-    
-    xxrows = Vector[]
-    rrankings = Vector[]
-    labels = String[]
-    
-    for phase in getPhases(rankdata)
-        xrows = getNrConsumedRowsEvolution(rankdata,phase)
-        for target in getTargets(rankdata, phase)
-            kb = getCorrectKey(params,phase,target)
-            rankings = getRankingsEvolution(rankdata, phase, target, kb)            
-            push!(xxrows,xrows)
-            push!(rrankings,rankings)
-            push!(labels, "phase $phase, target $target")
-        end
-    end
-    
-    color := :auto
-    label := reshape(labels, (1, length(labels)))
-
-    ylabel := "rank"
-    xlabel --> "#traces"
-    title --> "rank evolution"
-    xxrows,rrankings
 end
 
