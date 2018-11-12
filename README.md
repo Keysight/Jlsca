@@ -32,9 +32,9 @@ It's written for fun by me (Cees-Bart Breunesse) and Ilya Kizhvatov (whose [pysc
 
 # Installation
 
-1. Install Julia (1.0.1) is tested, everything prior is *no longer compatible*) and make sure the `julia` executable is in your path (notably for Windows users). Start he Julia REPL by executing `julia`.
+1. Install Julia (1.0.2) is tested, everything prior is *no longer compatible*) and make sure the `julia` executable is in your path (notably for Windows users). Start he Julia REPL by executing `julia`.
 
-2. In the REPL type `using Pkg; Pkg.clone("https://github.com/Riscure/Jlsca")`
+2. In the REPL type `using Pkg; Pkg.add("https://github.com/Riscure/Jlsca")`
 
 You can now close the Julia prompt. 
 
