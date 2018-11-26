@@ -19,7 +19,7 @@ end
 function shatest4()
 	expected = hex2bytes("34aa973cd4c4daa4f61eeb2bdbad27316534016f")
 
-	state = sha1init()
+	state = Sha1state()
 
 	for i in 1:1000000
 		update(state, b"a")
@@ -81,6 +81,14 @@ function hmacsha256test1()
 
     @test expected == out
 end
+
+@test md5(b"") == hex2bytes("d41d8cd98f00b204e9800998ecf8427e")
+@test md5(b"a") == hex2bytes("0cc175b9c0f1b6a831c399e269772661")
+@test md5(b"abc") == hex2bytes("900150983cd24fb0d6963f7d28e17f72")
+@test md5(b"message digest") == hex2bytes("f96b697d7cb7938d525a2f31aaf161d0")
+@test md5(b"abcdefghijklmnopqrstuvwxyz") == hex2bytes("c3fcd3d76192e4007dfb496cca67e13b")
+@test md5(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789") == hex2bytes("d174ab98d277d9f5a5611c2c9f419d9f")
+@test md5(b"12345678901234567890123456789012345678901234567890123456789012345678901234567890") == hex2bytes("57edf4a22be3c955ac49da2e2107b67a")
 
 # FIXME move this out
 function leak!(buf, str, state)
