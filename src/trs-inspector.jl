@@ -23,14 +23,13 @@ mutable struct InspectorTrace <: Traces
   filePosition::Int
   writeable::Bool
   lengthPosition::Int
-  bitshack::Bool
   readrangecheckonce::Bool
   meta::MetaData
 
   # to open an existing file
-  function InspectorTrace(filename::String, bitshack::Bool = false)
-    (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, fileDescriptor) = readInspectorTrsHeader(filename, bitshack)
-    new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, false, lengthPosition, bitshack, true, MetaData())
+  function InspectorTrace(filename::String)
+    (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, fileDescriptor) = readInspectorTrsHeader(filename)
+    new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, false, lengthPosition, true, MetaData())
   end
 
   # to create a new one
@@ -42,7 +41,7 @@ mutable struct InspectorTrace <: Traces
     !isfile(filename) || throw(ErrorException(@sprintf("file %s exists!", filename)))
 
     (titleSpace, traceBlockPosition, lengthPosition, fileDescriptor) = writeInspectorTrsHeader(filename, dataSpace, sampleType, numberOfSamplesPerTrace, titleSpace)
-    new(titleSpace, 0, dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, true, lengthPosition, false, true, MetaData())
+    new(titleSpace, 0, dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, true, lengthPosition, true, MetaData())
   end
 end
 
@@ -79,12 +78,12 @@ import Base.skip
 skip(fd::Base.PipeEndpoint, x::Integer) = read(fd, x)
 
 length(trs::InspectorTrace) = ismissing(trs.numberOfTraces) ? typemax(Int) : trs.numberOfTraces
-nrsamples(trs::InspectorTrace) = trs.bitshack ? div(trs.numberOfSamplesPerTrace*sizeof(trs.sampleType)*8,64) : trs.numberOfSamplesPerTrace
-sampletype(trs::InspectorTrace) = trs.bitshack ? Vector{UInt64}() : Vector{trs.sampleType}()
+nrsamples(trs::InspectorTrace) = trs.numberOfSamplesPerTrace
+sampletype(trs::InspectorTrace) = Vector{trs.sampleType}()
 meta(trs::InspectorTrace) = trs.meta
 
 # read the header of a Riscure Inspector trace set (TRS)
-function readInspectorTrsHeader(filename, bitshack::Bool)
+function readInspectorTrsHeader(filename)
     if filename != "-"
       f = open(filename, "r")
     else
@@ -163,19 +162,6 @@ function readInspectorTrsHeader(filename, bitshack::Bool)
           # end
           read(f, length)
         end
-      end
-
-      if bitshack
-        if sampleType != UInt8
-          throw(ErrorException("For bit hack sample type must be UInt8"))
-        end 
-
-        if (numberOfSamplesPerTrace * sampleSpace) % 8 != 0
-          @printf("Warning: bithack enabled: ignoring trailing %d samples that are not 8 byte aligned !!!1\n", (numberOfSamplesPerTrace * sampleSpace) % 8)
-        end
-        # numberOfSamplesPerTrace = div((sampleSpace * numberOfSamplesPerTrace), 8)
-        # sampleType = UInt64
-        # sampleSpace = 8
       end
 
       @printf("Opened %s, #traces %s, #samples %d (%s), #data %d%s\n", filename, ismissing(numberOfTraces) ? "unknown" : @sprintf("%d", numberOfTraces), numberOfSamplesPerTrace, sampleType, dataSpace, titleSpace > 0 ? ", #title $titleSpace" : "")
@@ -272,49 +258,27 @@ function writeTitle(trs::InspectorTrace, idx, data::Vector{UInt8})
 end
 
 function readSamples(trs::InspectorTrace, idx::Int)
-  if !trs.bitshack
     readSamples(trs, idx, 1:trs.numberOfSamplesPerTrace)
-  else
-    readSamples(trs, idx, 1:div(trs.numberOfSamplesPerTrace * trs.sampleSpace * 8,64))
-  end
 end
 
 # read samples for a single trace from an Inspector trace set
 function readSamples(trs::InspectorTrace, idx::Int, r::UnitRange)
-  if trs.bitshack
-    rr = 1:div(trs.numberOfSamplesPerTrace * trs.sampleSpace * 8,64)
-    if trs.readrangecheckonce
-      issubset(r,rr) || error("requested range $r not in trs sample space $rr")
-      trs.readrangecheckonce = false
-    end
-  else
-    if trs.readrangecheckonce
-      issubset(r,1:trs.numberOfSamplesPerTrace) || error("requested range $r not in trs sample space $(1:trs.numberOfSamplesPerTrace)")
-      trs.readrangecheckonce = false
-    end
+  if trs.readrangecheckonce
+    issubset(r,1:trs.numberOfSamplesPerTrace) || error("requested range $r not in trs sample space $(1:trs.numberOfSamplesPerTrace)")
+    trs.readrangecheckonce = false
   end
   pos = calcFilePositionForIdx(trs, idx)
   pos += trs.titleSpace
   pos += trs.dataSpace
-  if trs.bitshack
-    pos += (r[1]-1) * sizeof(UInt64)
-  else
-    pos += (r[1]-1) * trs.sampleSpace
-  end
+  pos += (r[1]-1) * trs.sampleSpace
 
   if position(trs.fileDescriptor) != pos
     # this is going to throw an exception when reading from stdin
     seek(trs.fileDescriptor, pos)
   end
-
   
-  if trs.bitshack
-    samples = Vector{UInt64}(undef,length(r))
-    read!(trs.fileDescriptor, samples)
-  else
-    samples = Vector{trs.sampleType}(undef,length(r))
-    read!(trs.fileDescriptor, samples)
-  end
+  samples = Vector{trs.sampleType}(undef,length(r))
+  read!(trs.fileDescriptor, samples)
 
   if trs.sampleType != UInt8
     if ltoh(ENDIAN_BOM) != ENDIAN_BOM

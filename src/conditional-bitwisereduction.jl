@@ -225,9 +225,9 @@ function getGlobCounter(c::CondReduce)
   return c.globcounter
 end
 
-# This pass will work on trs objects opened with trs = InspectorTrace("name.trs", true)
-function tobits(x::Vector{UInt64})
-  bits = length(x)*64
+export tobits
+
+function tobits(x::AbstractVector{UInt64},bits=length(x)*64)
   # this is a fast hack to create BitVectors
   a = BitVector()
   a.chunks = x
@@ -237,17 +237,15 @@ function tobits(x::Vector{UInt64})
   return a
 end
 
-export tobits
-
-# please don't use this, it's fucking slow.
-function tobits(x::Vector{UInt8})
-  ret = falses(length(x)*8)
-  for i in 1:length(x)
-    for j in 1:8
-      ret[(i-1)*8+j] = ((x[i] >> (j-1)) & 1) == 1
-    end
+function tobits(x::AbstractVector{UInt8})
+  l = length(x)
+  if l & 7 == 0
+    return tobits(reinterpret(UInt64,x))
+  else
+    # rounding up to the nearest 64 bit boundary
+    y = vcat(x,zeros(UInt8, 8-(l&7)))
+    return @view(tobits(reinterpret(UInt64,y))[1:(l*8)])
   end
-  return BitVector(ret)
 end
 
 export BitPass

@@ -1,7 +1,7 @@
 name = "Jlsca"
 uuid = "dcc1f4ae-7dba-11e8-3b6a-0976b94e0e7a"
 authors = ["Cees-Bart Breunesse <ceesb@riscure.com>"]
-version = "0.1.6"
+version = "0.1.7"
 
 [deps]
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
