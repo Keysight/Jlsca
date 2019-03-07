@@ -64,6 +64,57 @@ function testKeyExpansionBackwards()
 	recoveredkey = KeyExpansionBackwards(rk1, rk1num, rk2, rk2num)
 
 	@test key == recoveredkey
+
+	rk1num = 16
+	rk1 = getK(cd, rk1num)
+	rk2num = 15
+	rk2 = getK(cd, rk2num)
+
+	recoveredkey = KeyExpansionBackwards(rk1, rk1num, rk2, rk2num)
+
+	@test key == recoveredkey
+end
+
+function testKeyExpansionBackwardsIncomplete()
+	someinput = [rand(UInt8) for x in 1:8]
+	key = [rand(UInt8) & 0xfe for x in 1:8] 
+	# key = [0xfe for x in 1:8] 
+	expkey = KeyExpansion(key)
+	someoutput = Cipher(someinput,expkey)
+
+	rk1num = 1
+	rk1 = getK(expkey, rk1num)
+	mask = falses(56)
+
+	recoveredkey = KeyExpansionBackwards([(rk1num,rk1)],mask)
+	# print(mapreduce(x -> x ? "1" : "0", *, Des.PC1(toBits(key))),"\n")
+	# print(mapreduce(x -> x ? "1" : "0", *, Des.PC1(toBits(recoveredkey))),"\n")
+
+	nrmissing = 56 - count(mask)
+	idxes = Des.PC1bits[findall(x -> !x, mask)]
+	# @show idxes
+	recoveredkeybits = toBits(recoveredkey)
+	found = false
+
+	# @show 0:2^nrmissing-1
+	for k in 0:2^nrmissing-1
+		for b in 0:nrmissing-1
+			if (k >> b) & 1 == 1
+				recoveredkeybits[idxes[b+1]] = true
+			else
+				recoveredkeybits[idxes[b+1]] = false
+			end
+		end
+
+		expkey2 = KeyExpansion(toBytes(recoveredkeybits))
+		if Cipher(someinput, expkey2) == someoutput
+			found = true
+			break
+		end
+	end
+
+	@test found
+
 end
 
 function testIP()
@@ -123,6 +174,7 @@ testBitsAndBytes()
 testSixbitsShit()
 testKeyExpansion()
 testKeyExpansionBackwards()
+testKeyExpansionBackwardsIncomplete()
 testIP()
 testCipher()
 testTdes2()
