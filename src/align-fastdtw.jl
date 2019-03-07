@@ -278,12 +278,13 @@ function visit(x,y,dims,window)
     if y != dims[2]
         window[y+1,1] = min(window[y+1,1], x)
         window[y+1,2] = max(window[y+1,2], x)
+
+        if x != dims[1]
+            window[y+1,1] = min(window[y+1,1], x+1)
+            window[y+1,2] = max(window[y+1,2], x+1)
+        end
     end
     
-    if x != dims[1]
-        window[y+1,1] = min(window[y+1,1], x+1)
-        window[y+1,2] = max(window[y+1,2], x+1)
-    end
 end
         
 function expandwindow(path, dims, newdims, radius)
