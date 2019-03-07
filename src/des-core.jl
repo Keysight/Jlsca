@@ -182,23 +182,24 @@ function KeyExpansionBackwards(rk1::BitVector, rk2::BitVector)
 end
 
 function KeyExpansionBackwards(rk1::BitVector, rk1Round::Int, rk2::BitVector, rk2Round::Int)
-	(length(rk1) == 48 && length(rk2) == 48) || throw(DimensionMismatch("wrong key size"))
-
-	startround = max(rk1Round, rk2Round)
-	nextround = min(rk1Round, rk2Round)
-
-	(startround != nextround) || throw(DimensionMismatch("wrong exception type but i don't know any other"))
-
-	cd = BitVector(undef,56*(startround+1))
 	mask = bits2mask(invPC2bits)
-
-	if rk1Round == startround
-		cd[startround*56+1:startround*56+56] = invPC2(rk1)
-		nextroundbits = invPC2(rk2)
-	else
-		cd[startround*56+1:startround*56+56] = invPC2(rk2)
-		nextroundbits = invPC2(rk1)
+	KeyExpansionBackwards([(rk1Round,rk1),(rk2Round,rk2)],mask)
+	# this won't happen if you recover with the first two DES round keys, but does happen for example when you try to recover with rounds 3 and 5
+	if false in mask
+		nrmissing = 56 - count(mask)
+		print("missing $nrmissing bits\n")
 	end
+
+end
+
+function KeyExpansionBackwards(rks::Vector{Tuple{Int,BitVector}}, mask::BitVector=bits2mask(invPC2bits))
+
+	length(rks) > 0 || error("Need at least one round key")
+
+	startround = maximum(map(x -> x[1], rks))
+	expkeys = BitVector(undef,56*(startround+1))
+	expkeys[startround*56+1:startround*56+56] = 
+		invPC2(rks[findfirst(x -> x[1] == startround, rks)][2])
 
 	shiftcount = 0
 
@@ -206,25 +207,36 @@ function KeyExpansionBackwards(rk1::BitVector, rk1Round::Int, rk2::BitVector, rk
 		i = k*56
 		o = (k-1)*56
 
-		if k == nextround
+		rkidx = findfirst(x -> x[1] == k, rks)
+
+		if rkidx != nothing
+			rkbits = rks[rkidx	][2]
+			length(rkbits) == 48 || error("wrong key size for rk $k")
+			invpc2rkbits = invPC2(rkbits)
 			mask2 = bits2mask(invPC2bits)
+
 			for b in 1:56
 				# if bit was set before
 				if mask[b] == true
 					# and bit is set in the key we're adding, they'd better be the same
-					if mask2[b] == true && cd[i+b] != nextroundbits[b]
+					if mask2[b] == true && expkeys[i+b] != invpc2rkbits[b]
 						# if not, find from which key byte we got the bit set before and print.
-						bb = (b - shiftcount) % 57
-						if bb <= 0
-							bb += 56
-						end
+						# bb = (b - shiftcount) % 57
+						# if bb <= 0
+						# 	bb += 56
+						# end
 
-						@printf("mismatch in bit %d of Sbox %d key chunk of round %d versus bit %d of Sbox %d key chunk of round %d! (taking round %d value)\n", invPC2bits[b] % 6, div(invPC2bits[b],6)+1, nextround, invPC2bits[bb] %6, div(invPC2bits[bb],6)+1, startround, startround)
+						sbox = div(invPC2bits[b]-1, 8)
+						sboxbit = (invPC2bits[b]-1) % 8
+						print("mismatch adding rk $k bit $b (Sbox $sbox, bit $sboxbit)\n")
+						mask[b] = false
+
+						# @printf("mismatch in bit %d of Sbox %d key chunk of round %d versus bit %d of Sbox %d key chunk of round %d! (taking round %d value)\n", invPC2bits[b] % 6, div(invPC2bits[b],6)+1, nextround, invPC2bits[bb] %6, div(invPC2bits[bb],6)+1, startround, startround)
 					end
 				else
 					# if we didn't have this bit before and it's valid in the key we're adding, add it
 					if mask2[b] == true
-						cd[i+b] = nextroundbits[b]
+						expkeys[i+b] = invpc2rkbits[b]
 						mask[b] = true
 					end
 				end
@@ -234,18 +246,12 @@ function KeyExpansionBackwards(rk1::BitVector, rk1Round::Int, rk2::BitVector, rk
 		shiftcount += shifts[k]
 		mask[1:28] = rightrotate(mask[1:28], shifts[k])
 		mask[29:56] = rightrotate(mask[29:56], shifts[k])
-		cd[o+1:o+28] = rightrotate(cd[i+1:i+28], shifts[k])
-		cd[o+29:o+56] = rightrotate(cd[i+29:i+56], shifts[k])
+		expkeys[o+1:o+28] = rightrotate(expkeys[i+1:i+28], shifts[k])
+		expkeys[o+29:o+56] = rightrotate(expkeys[i+29:i+56], shifts[k])
 	end
 
-	# this won't happen if you recover with the first two DES round keys, but does happen for example when you try to recover with rounds 3 and 5
-	if false in mask
-		@printf("missing some bits: %s\n", string(mask))
-	end
-
-	return toBytes(invPC1(cd[1:56]))
+	return toBytes(invPC1(expkeys[1:56]))
 end
-
 
 function getK(cd::BitVector, i)
 	o = 56*i
@@ -284,8 +290,8 @@ function f(R::BitVector, K::BitVector, round=0, leak::Function=(x,y)->y)
 		output = (i-1)*4
 		input =  (i-1)*6
 		ret[output+1:output+4] = Sbox(tmp[input+1:input+6], Sbox(i))
-		leak(@sprintf("r%d.sbox%d", round, i), ret[output+1:output+4])
-		leak(@sprintf("r%d.sboxXORout%d", round, i), ret[output+1:output+4] .⊻ tmp[input+3:input+6])
+		# leak(@sprintf("r%d.sbox%d", round, i), ret[output+1:output+4])
+		# leak(@sprintf("r%d.sboxXORout%d", round, i), ret[output+1:output+4] .⊻ tmp[input+3:input+6])
 	end
 	ret = leak(@sprintf("r%d.sbox", round), ret)
 
@@ -314,7 +320,7 @@ function Cipher(input::Vector{UInt8}, cb::BitVector, leak::Function=(x,y)->y, en
 		fout = f(state[right],getK(cb,round), round, leak)
 		state[1:64] = [state[right]; fout .⊻ state[left]]
 		leak(@sprintf("r%d.roundF", round), invP(state[right]))
-		leak(@sprintf("r%d.roundinXORout", round), invP(state .⊻ prevstate))
+		leak(@sprintf("r%d.roundinXORout", round), invP(state[right] .⊻ prevstate[right]))
 	end
 
 	state[1:64] = [state[right]; state[left]]
