@@ -397,7 +397,7 @@ function readNoPostProcessTraces(trs::Traces, range::UnitRange)
   for idx in range
     (data, samples) = trs[idx]
 
-    if length(data) == 0 || length(samples) == 0
+    if length(samples) == 0
       continue
     end
 
