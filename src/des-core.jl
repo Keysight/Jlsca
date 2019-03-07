@@ -183,13 +183,13 @@ end
 
 function KeyExpansionBackwards(rk1::BitVector, rk1Round::Int, rk2::BitVector, rk2Round::Int)
 	mask = bits2mask(invPC2bits)
-	KeyExpansionBackwards([(rk1Round,rk1),(rk2Round,rk2)],mask)
+	x = KeyExpansionBackwards([(rk1Round,rk1),(rk2Round,rk2)],mask)
 	# this won't happen if you recover with the first two DES round keys, but does happen for example when you try to recover with rounds 3 and 5
 	if false in mask
 		nrmissing = 56 - count(mask)
 		print("missing $nrmissing bits\n")
 	end
-
+	return x
 end
 
 function KeyExpansionBackwards(rks::Vector{Tuple{Int,BitVector}}, mask::BitVector=bits2mask(invPC2bits))

@@ -106,7 +106,7 @@ function desleak(key,input,attack,leakfun,ismc=false)
 
     if mode == DES
         c = encrypt ? Cipher : InvCipher
-        w = KeyExpansion(key)
+        w = Des.KeyExpansion(key)
     else
         error("FIXME")
     end
@@ -154,11 +154,11 @@ function lf(label,state,leakstate,match)
     return state
 end
 
-roundattacktest(DES,true,FORWARD,[(x,y,z)->lf(x,y,z,"r1.roundF"),(x,y,z)->lf(x,y,z,"r2.roundF")])
+# roundattacktest(DES,true,FORWARD,[(x,y,z)->lf(x,y,z,"r1.roundF"),(x,y,z)->lf(x,y,z,"r2.roundF")])
 
-roundxorattacktest(DES,true,FORWARD,[(x,y,z)->lf(x,y,z,"r1.roundinXORout"),(x,y,z)->lf(x,y,z,"r2.roundinXORout")])
+# roundxorattacktest(DES,true,FORWARD,[(x,y,z)->lf(x,y,z,"r1.roundinXORout"),(x,y,z)->lf(x,y,z,"r2.roundinXORout")])
 
-sboxattacktest(DES,true,FORWARD,[(x,y,z)->lf(x,y,z,"r1.sbox"),(x,y,z)->lf(x,y,z,"r2.sbox")])
-sboxattacktest(DES,false,FORWARD,[(x,y,z)->lf(x,y,z,"r16.sbox"),(x,y,z)->lf(x,y,z,"r15.sbox")])
-sboxattacktest(DES,true,BACKWARD,[(x,y,z)->lf(x,y,z,"r16.sbox"),(x,y,z)->lf(x,y,z,"r15.sbox")])
-sboxattacktest(DES,false,BACKWARD,[(x,y,z)->lf(x,y,z,"r1.sbox"),(x,y,z)->lf(x,y,z,"r2.sbox")])
+# sboxattacktest(DES,true,FORWARD,[(x,y,z)->lf(x,y,z,"r1.sbox"),(x,y,z)->lf(x,y,z,"r2.sbox")])
+# sboxattacktest(DES,false,FORWARD,[(x,y,z)->lf(x,y,z,"r16.sbox"),(x,y,z)->lf(x,y,z,"r15.sbox")])
+# sboxattacktest(DES,true,BACKWARD,[(x,y,z)->lf(x,y,z,"r16.sbox"),(x,y,z)->lf(x,y,z,"r15.sbox")])
+# sboxattacktest(DES,false,BACKWARD,[(x,y,z)->lf(x,y,z,"r1.sbox"),(x,y,z)->lf(x,y,z,"r2.sbox")])
