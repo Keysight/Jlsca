@@ -8,7 +8,7 @@ function testVanilla()
     cols = 100
     maxCols = 21
 
-    trs = InMemory(rand(UInt8, 16,rows), rand(Float64, cols, rows))
+    trs = VirtuaTrace(rand(UInt8, 16,rows), rand(Float64, cols, rows))
 
     attack = AesSboxAttack()
     analysis = CPA() 
@@ -35,7 +35,7 @@ function testCondAvg()
     cols = 100
     maxCols = 21
 
-    trs = InMemory(rand(UInt8,16,rows), rand(Float64,cols,100))
+    trs = VirtuaTrace(rand(UInt8,16,rows), rand(Float64,cols,100))
     setPostProcessor(trs, CondAvg())
 
     attack = AesSboxAttack()
@@ -66,7 +66,7 @@ function testIncCpa()
     cols = 100
     maxCols = 21
 
-    trs = InMemory(rand(UInt8, 16,rows), rand(Float64, cols, rows))
+    trs = VirtuaTrace(rand(UInt8, 16,rows), rand(Float64, cols, rows))
     setPostProcessor(trs, IncrementalCorrelation())
 
     attack = AesSboxAttack()
@@ -95,7 +95,7 @@ function testCondReduce()
     cols = 100
     maxCols = 64
 
-    trs = InMemory(rand(UInt8, 16,rows), rand(UInt8, cols, rows))
+    trs = VirtuaTrace(rand(UInt8, 16,rows), rand(UInt8, cols, rows))
     # addSamplePass(trs, BitPass())
     addSamplePass(trs, BitPass())
 

@@ -66,7 +66,7 @@ function mytest()
     numSamples = 10
     data = rand(UInt8, 1,numTraces)
     samples = rand(Float32, numSamples,numTraces)
-    trs = InMemory(data,samples)
+    trs = VirtuaTrace(data,samples)
     addDataPass(trs, x -> hw.(x))
 
     snr1 = SNRnaive(trs, 1:numTraces)
@@ -84,7 +84,7 @@ function myprofile()
     numSamples = 10000
     data = rand(UInt8, 1,numTraces)
     samples = rand(Float32, numSamples,numTraces)
-    trs = InMemory(data,samples)
+    trs = VirtuaTrace(data,samples)
     addDataPass(trs, x -> hw.(x))
 
     Profile.clear_malloc_data()

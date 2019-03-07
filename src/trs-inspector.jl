@@ -204,7 +204,7 @@ function readData(trs::InspectorTrace, idx)
 end
 
 # write data for a single trace from an Inspector trace set
-function writeData(trs::InspectorTrace, idx, data::Vector{UInt8})
+function writeData(trs::InspectorTrace, idx, data::AbstractVector{UInt8})
   trs.dataSpace == length(data) || throw(ErrorException(@sprintf("wrong data length %d, expecting %d", length(data), trs.dataSpace)))
   pos = calcFilePositionForIdx(trs, idx)
 
@@ -243,7 +243,7 @@ export writeTitle
 """
 Inspector specific function to write metadata `data` (a byte array, should be a readable ascii string for Inspector) from an `InspectorTrace` instance `trs` at index `idx`.
 """
-function writeTitle(trs::InspectorTrace, idx, data::Vector{UInt8})
+function writeTitle(trs::InspectorTrace, idx, data::AbstractVector{UInt8})
   trs.titleSpace >= length(data) || throw(ErrorException(@sprintf("wrong title length %d, expecting <= %d", length(data), trs.titleSpace)))
   pos = calcFilePositionForIdx(trs, idx)
 
@@ -290,7 +290,7 @@ function readSamples(trs::InspectorTrace, idx::Int, r::UnitRange)
 end
 
 # write samples for a single trace into an Inspector trace set
-function writeSamples(trs::InspectorTrace, idx, samples::Vector)
+function writeSamples(trs::InspectorTrace, idx, samples::AbstractVector)
   trs.numberOfSamplesPerTrace == length(samples) || throw(ErrorException(@sprintf("wrong samples length %d, expecting %d", length(samples), trs.numberOfSamplesPerTrace)))
   trs.sampleType == eltype(samples) || throw(ErrorException(@sprintf("wrong samples type %s, expecting %s", eltype(samples), trs.sampleType)))
 
