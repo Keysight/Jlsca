@@ -27,4 +27,5 @@ include("attacksha-core.jl")
 include("incremental-correlation.jl")
 include("sca-defaultparams.jl")
 
+include("sca-skea.jl")
 end
