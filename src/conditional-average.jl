@@ -34,7 +34,7 @@ function reset(c::CondAvg)
   c.globcounter = 0
 end
 
-function addAverage(c::CondAvg, samples::Vector, average::Vector, counter::Int)
+function addAverage(c::CondAvg, samples::AbstractVector, average::Vector, counter::Int)
 
   for i in eachindex(samples)
     @inbounds average[i] += (samples[i] - average[i]) / counter
@@ -56,7 +56,7 @@ function add(c::CondAvg, trs::Traces, traceIdx::Int)
 
 end
 
-function add(c::CondAvg, samples::Vector{S}, data::Vector{D}, traceIdx::Int) where {S,D}
+function add(c::CondAvg, samples::AbstractVector{S}, data::AbstractVector{D}, traceIdx::Int) where {S,D}
   for idx in eachindex(data)
     val = data[idx]
 
