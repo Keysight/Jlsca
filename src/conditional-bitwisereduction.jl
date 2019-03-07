@@ -1,6 +1,6 @@
 # This file is part of Jlsca, license is GPLv3, see https://www.gnu.org/licenses/gpl-3.0.en.html
 #
-# Authors: Cees-Bart Breunesse
+# Author: Cees-Bart Breunesse
 #
 # We reduce sample space by exploiting the assumption that samples
 # representing the bits of the value of a specific target variable do not vary for inputs that create
@@ -99,6 +99,7 @@ function add(c::CondReduce, trs::Traces, traceIdx::Int)
     end
 
     reftrace = getSamplesCached(c, idx, val)
+    # map!((m,s,r) -> m & (s == r), c.mask[idx], c.mask[idx], samples, reftrace)
     c.mask[idx][:] .&= .!(reftrace .⊻ samples)
   end
 
