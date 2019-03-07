@@ -8,7 +8,7 @@ import Base.truncate
 export printScores
 
 # print the scores pretty
-function printScores(params::DpaAttack, phase::Int, rankData::RankData, targets::Vector{Int}, printsubs=false,  m=5, io=stdout) 
+function printScores(rankData::RankData, attack::Attack{T}, knownKey::Union{Missing,Vector{T}}, phase::Int, targets::Vector{Int}, printsubs=false,  m=5, io=stdout) where {T}
   if !(phase in getPhases(rankData))
     return
   end
@@ -17,9 +17,9 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, targets:
   keyLength = length(targets)
   #FIXME: broken for attacks with different target output types
   local winners = nothing
-  phaseDataOffset = offset(params,phase)
-  phaseDataLength = numberOfTargets(params, phase)
-  correctKeyMaterial = !ismissing(params.knownKey) ? params.correctKeyMaterial[phaseDataOffset+1:phaseDataOffset+phaseDataLength] : Vector{UInt8}(undef,0)
+  phaseDataOffset = offset(attack,phase)
+  phaseDataLength = numberOfTargets(attack, phase)
+  knownkeymaterial = !ismissing(knownKey) ? correctKeyMaterial(attack, knownKey)[phaseDataOffset+1:phaseDataOffset+phaseDataLength] : Vector{UInt8}(undef,0)
   nrConsumedRows = getNrConsumedRows(rankData, phase)
   nrConsumedCols = getNrConsumedCols(rankData, phase)
 
@@ -47,13 +47,13 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, targets:
     nrNibbles = Int(ceil(log2(nrGuesses)/4))
     nrDecimals = Int(ceil(log10(nrGuesses)))
 
-    @printf(io, "target: %d, phase: %d, #candidates %d, \"%s\"\n", target, phase, nrGuesses, getTarget(params, phase, target))
+    @printf(io, "target: %d, phase: %d, #candidates %d\n", target, phase, nrGuesses)
 
     printableIndexes = ranks[1:m]
-    if length(correctKeyMaterial) > 0
-      correctKbOffset = findfirst(x -> x == (correctKeyMaterial[target] + 1), ranks)
+    if length(knownkeymaterial) > 0
+      correctKbOffset = findfirst(x -> x == (knownkeymaterial[target] + 1), ranks)
       if correctKbOffset > m
-        printableIndexes = [ ranks[1:m-1] ; correctKeyMaterial[target] + 1]
+        printableIndexes = [ ranks[1:m-1] ; knownkeymaterial[target] + 1]
       end
     end
     
@@ -64,7 +64,7 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, targets:
       peak = scores[i]
       rank = findfirst(x -> x == i, ranks)
 
-      if length(correctKeyMaterial) > 0 && cand == correctKeyMaterial[target]
+      if length(knownkeymaterial) > 0 && cand == knownkeymaterial[target]
         pretty = "correct  "
       else
         pretty = "candidate"
@@ -73,7 +73,7 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, targets:
       pad = repeat(" ", nrDecimals - ndigits(rank,base=10))
       print(io, "rank: ", pad, rank)
       print(io, ", ")
-      if length(correctKeyMaterial) > 0 && correctKeyMaterial[target] == cand
+      if length(knownkeymaterial) > 0 && knownkeymaterial[target] == cand
         color = correctKbOffset == 1 ? :green : :red
         printstyled(io, pretty, bold=true, color=color)
       else
@@ -81,24 +81,18 @@ function printScores(params::DpaAttack, phase::Int, rankData::RankData, targets:
       end
       print(io, ": 0x", string(cand,base=16,pad=nrNibbles))
       print(io, ", ")
-      if nrLeakageFunctions == 1
-        sample = getOffsets(rankData, phase, target)[i]
-        print(io, "peak: ",  @sprintf("%f",peak))
-        print(io, " @ ", sample)
-        print(io, "\n")
-      else
-        # @printf(io, "rank: %s%d, %s: 0x%s, %s of peaks: %f\n", pad, rank, pretty, hex(cand,nrNibbles), params.leakageCombinator, peak)
-        print(io, params.leakageCombinator, " of peaks: ", @sprintf("%f",peak))
-        print(io, "\n")
-        if printsubs
-          # print the max peak for each leakage function
-          for leakage in 1:nrLeakageFunctions
-            lscores = getScores(rankData, phase, target, leakage)
-            loffsets = getOffsets(rankData, phase, target, leakage)
-            lrank = lscores[i]
-            lsample = loffsets[i]
-            @printf(io, " %0.2f @ %d\n", lrank, lsample)
-          end
+      sample = getOffsets(rankData, phase, target)[i]
+      print(io, "score: ",  @sprintf("%f",peak))
+      print(io, " @ ", sample)
+      print(io, "\n")
+      if printsubs && nrLeakageFunctions > 1
+        # print the max peak for each leakage function
+        for leakage in 1:nrLeakageFunctions
+          lscores = getScores(rankData, phase, target, leakage)
+          loffsets = getOffsets(rankData, phase, target, leakage)
+          lrank = lscores[i]
+          lsample = loffsets[i]
+          @printf(io, " %0.2f @ %d\n", lrank, lsample)
         end
       end
     end

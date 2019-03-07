@@ -303,7 +303,7 @@ mutable struct RankData
   intervals
   nrLeakages
 
-  function RankData(params::DpaAttack)
+  function RankData(nintervals::Int,nleakages=1)
     nrConsumedRows = Dict{Int, BitSet}()
     nrConsumedCols = Dict{Int, Vector{Int}}()
     nrRows = Dict{Int, Dict{Int, Vector{Int}}}()
@@ -311,7 +311,11 @@ mutable struct RankData
     combinedScores = Dict{Int, Dict{Int, Matrix{Float64}}}()
     scores = Dict{Int, Dict{Int, Dict{Int, Matrix{Float64}}}}()
     offsets = Dict{Int, Dict{Int, Dict{Int, Matrix{Int}}}}()
-    return new(nrConsumedRows,nrConsumedCols,nrRows,nrCols,scores,offsets,combinedScores,params.intervals,numberOfLeakages(params.analysis))
+    return new(nrConsumedRows,nrConsumedCols,nrRows,nrCols,scores,offsets,combinedScores,nintervals,nleakages)
+  end
+
+  function RankData(params::DpaAttack)
+    RankData(params.intervals,numberOfLeakages(params.analysis))
   end
 end
 
@@ -818,7 +822,7 @@ function sca(trs::Traces, params::DpaAttack, firstTrace::Int=1, numberOfTraces::
         end
       elseif status == INTERMEDIATERANKS
         (rankData, keyOffsets) = statusData
-        printScores(params, phase, rankData, keyOffsets)
+        printScores(rankData, params.attack, params.knownKey, phase, keyOffsets)
       elseif status == PHASERESULT
         phaseOutput = vcat(phaseOutput, statusData)
       elseif status == INTERMEDIATESCORES
