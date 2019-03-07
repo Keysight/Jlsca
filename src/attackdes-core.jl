@@ -17,6 +17,8 @@ const right = 33:64
 abstract type DesAttack <: Attack{UInt8} end
 
 numberOfTargets(a::DesAttack, phase::Int) = 8
+blocklength(::DesAttack) = 8
+keylength(::DesAttack) = 8
 
 mutable struct DesSboxAttack <: DesAttack
   mode::DesMode
@@ -28,6 +30,8 @@ mutable struct DesSboxAttack <: DesAttack
     return new(DES, true, FORWARD, false)
   end
 end
+
+export DesRoundAttack
 
 mutable struct DesRoundAttack <: DesAttack
   mode::DesMode
@@ -82,12 +86,14 @@ target(this::DesSboxOut, sixbits::Union{UInt16, UInt8}, kb::UInt8) = Sbox(this.s
 show(io::IO, a::DesSboxOut) = print(io, "Sbox $(a.sbidx) out")
 guesses(a::DesSboxOut) = desguesses
 
-mutable struct DesSboxOutXORin <: Target{UInt8,UInt8,UInt8}  end
+mutable struct DesSboxOutXORin <: Target{UInt8,UInt8,UInt8}
+  sbidx::Int
+end
 
 
 function target(this::DesSboxOutXORin, sixbits::Union{UInt16, UInt8}, kb::UInt8)
   inp =  ((sixbits & 0x3f) ⊻ kb) & 0xf
-  outp = Sbox(sbidx)[inp + 1]
+  outp = Sbox(this.sbidx)[inp + 1]
   return inp .⊻ outp
 end
 
@@ -107,8 +113,6 @@ guesses(a::RoundOut) = desguesses
 # works on rows of data, returns either a vector of UInt8, or UInt16
 function round1(input::AbstractVector{UInt8}, params::DesSboxAttack)
   ip = IP(toBits(input[1:8]))
-  invplefts = toNibbles(invP(ip[left]))
-
 	sboxins = toSixbits(E(ip[right]))
 
   return sboxins
