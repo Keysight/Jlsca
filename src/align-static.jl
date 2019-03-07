@@ -145,6 +145,27 @@ export AlignPass
 import ..Trs.Pass
 import ..Trs.pass
 
+"""
+Performs alignment by computing the convolution of a reference with each
+trace, and circshifts the trace so that the highest correlation peaks line up
+in time. You can set a minimum correlation value and a maximum shift distance.
+
+# Example
+
+```
+offset = 700
+len = 600
+maxshift = 2000
+mincor = 0.7
+
+ref = getSamples(trs,1)[offset:offset+len-1]
+ca = CorrelationAlignFFT(ref,200,maxshift)
+align = AlignPass(ca,length(trs),mincor)
+
+addSamplePass(trs, align)
+```
+
+"""
 mutable struct AlignPass <: Pass 
   c::CorrelationAlignFFT
   shifts::Vector{Tuple{Int,Float64}}
