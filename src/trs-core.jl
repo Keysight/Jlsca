@@ -146,6 +146,7 @@ function updateViews(trs::Traces)
       end
 
       lengths[1] = length(samples)
+      types[1] = Vector{eltype(samples)}(undef,0)
 
       for i in eachindex(m.passes)
         p = m.passes[i]
@@ -157,6 +158,7 @@ function updateViews(trs::Traces)
           break
         end
         lengths[i+1] = length(samples)
+        types[i+1] = Vector{eltype(samples)}(undef,0)
       end
 
       if zerolength
@@ -166,6 +168,7 @@ function updateViews(trs::Traces)
   end
 
   # @show lengths
+  # @show types
 
   v = m.colRange
   views[nrPasses+1] = v
@@ -407,7 +410,7 @@ function readNoPostProcessTraces(trs::Traces, range::UnitRange)
         dataLength = length(data)
         if isa(samples, BitVector)
           # bit vectors are 8 times better than Vectors of bools since bit vectors are packed
-          allSamples = BitVector(sampleLength * traceLength)
+          allSamples = BitVector(undef,sampleLength * traceLength)
         else
           allSamples = Vector{eltype(samples)}(undef,sampleLength * traceLength)
         end
