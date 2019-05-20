@@ -54,6 +54,7 @@ mutable struct IncrementalCovariance
   meanVarY::IncrementalMeanVariance
   cov::Matrix{Float64}
   n::Int
+  locked::Bool
 
   function IncrementalCovariance(numberOfX::Int, numberOfY::Int)
     IncrementalCovariance(IncrementalMeanVariance(numberOfX), IncrementalMeanVariance(numberOfY))
@@ -64,53 +65,13 @@ mutable struct IncrementalCovariance
   end
 
   function IncrementalCovariance(meanVarX::IncrementalMeanVariance, meanVarY::IncrementalMeanVariance, cov::AbstractArray{Float64,2})
-    new(meanVarX, meanVarY, cov, 0)
+    new(meanVarX, meanVarY, cov, 0, false)
   end
 end
 
-function updateCovCacheFuckExample(cov::Matrix{Float64}, dataXn::AbstractVector, dataYn::AbstractVector, ndiv::Float64)
-  for x in eachindex(dataXn)
-    @inbounds dataXnx = dataXn[x] * ndiv
-      for y in eachindex(dataYn)
-      @inbounds cov[x,y] += dataYn[y]*dataXnx
-    end
-  end
-end
-
-# function updateCov!(cov::Matrix{Float64}, dataXn::AbstractVector, dataYn::AbstractVector, ndiv::Float64)
-#   for y in eachindex(dataYn)
-#     @inbounds dataYny = dataYn[y] * ndiv
-#     for x in eachindex(dataXn)
-#       @inbounds cov[x,y] += dataXn[x]*dataYny
-#     end
-#   end  
-# end
-
-
-# function add!(state::IncrementalCovariance, dataX::AbstractVector, dataY::AbstractVector, dataXn::AbstractVector=dataX.-state.meanVarX.mean, updateMeanX::Bool=true, dataYn::AbstractVector=dataY.-state.meanVarY.mean, updateMeanY::Bool=true)
-#   @assert((length(dataX),length(dataY)) == size(state.cov))
-
-#   state.n += 1
-#   const n = state.n
-#   const ndiv::Float64 = (n-1)/n
-
-#   updateCov!(state.cov, dataXn, dataYn, ndiv)
-
-#   if updateMeanX
-#     add!(state.meanVarX, dataX, dataXn)
-#   end
-
-#   if updateMeanY
-#     add!(state.meanVarY, dataY, dataYn)
-#   end
-
-# end
-
-@inline function updateCov!(cov::Matrix{Float64}, dataXn::Vector{Float64}, dataYn::Vector{Float64}, ndiv::Float64)
-  updateCov!(cov, dataXn, 1, length(dataXn), dataYn, 1, length(dataYn), ndiv)
-end
-
-function updateCov!(cov::Matrix{Float64}, dataXn::Vector{Float64}, minX::Int, maxX::Int, dataYn::Vector{Float64}, minY::Int, maxY::Int, ndiv::Float64)
+# This a separate function and not inlined in add! so that it shall be optimized for 
+# the specific type of argument cov.
+@inline function updateCov!(cov::Matrix{Float64}, dataXn::Vector{Float64}, minX::Int, maxX::Int, dataYn::Vector{Float64}, minY::Int, maxY::Int, ndiv::Float64)
   for y in minY:maxY
     @inbounds dataYny = dataYn[y] * ndiv
     ypos = y-minY+1
@@ -120,30 +81,33 @@ function updateCov!(cov::Matrix{Float64}, dataXn::Vector{Float64}, minX::Int, ma
   end  
 end
 
+@inline function add!(state::IncrementalCovariance, dataXn::AbstractVector, minX::Int, maxX::Int, dataYn::AbstractVector, minY::Int, maxY::Int)
+ 
+  state.n += 1
+  if state.locked
+    ndiv = 1.0
+  else
+    n = state.n
+    ndiv = (n-1)/n
+  end
+
+  updateCov!(state.cov, dataXn, minX, maxX, dataYn, minY, maxY, ndiv)
+end
+
 function add!(state::IncrementalCovariance, dataX::AbstractVector, dataY::AbstractVector, updateMeanX::Bool=true, updateMeanY::Bool=true)
   dataXn = dataX .- state.meanVarX.mean
   dataYn = dataY .- state.meanVarY.mean
-  add!(state, dataX, 1, length(dataX), dataY, 1, length(dataY), dataXn, updateMeanX, dataYn, updateMeanY)
-
-end
-
-function add!(state::IncrementalCovariance, dataX::AbstractVector, minX::Int, maxX::Int, dataY::AbstractVector, minY::Int, maxY::Int, dataXn::AbstractVector=dataX.-state.meanVarX.mean, updateMeanX::Bool=true, dataYn::AbstractVector=dataY.-state.meanVarY.mean, updateMeanY::Bool=true)
-  # @assert((length(dataX),length(dataY)) == size(state.cov))
-
-  state.n += 1
-  n = state.n
-  ndiv::Float64 = (n-1)/n
-
-  updateCov!(state.cov, dataXn, minX, maxX, dataYn, minY, maxY, ndiv)
+  add!(state, dataXn, 1, length(dataX), dataYn, 1, length(dataY))
 
   if updateMeanX
+    !state.locked || throw(ErrorException("mean and variance are locked so you can't update the mean!"))
     add!(state.meanVarX, dataX)
   end
 
   if updateMeanY
+    !state.locked || throw(ErrorException("mean and variance are locked so you can't update the mean!"))
     add!(state.meanVarY, dataY)
   end
-
 end
 
 function add!(this::IncrementalCovariance, other::IncrementalCovariance, updateMeanX::Bool=true, updateMeanY::Bool=true)
@@ -153,6 +117,7 @@ function add!(this::IncrementalCovariance, other::IncrementalCovariance, updateM
 end
 
 function add!(this::IncrementalCovariance, other::IncrementalCovariance, minX::Int, minY::Int, updateMeanX::Bool=true, updateMeanY::Bool=true)
+  !this.locked || throw(ErrorException("not supported in this state: mean and variance are locked"))
   deltaX = this.meanVarX.mean .- other.meanVarX.mean
   deltaY = this.meanVarY.mean .- other.meanVarY.mean
   n = this.n + other.n
@@ -176,6 +141,42 @@ function add!(this::IncrementalCovariance, other::IncrementalCovariance, minX::I
   end
 end
 
+
+function getCov(state::IncrementalCovariance)
+  return 1/(state.n-1) .* state.cov
+end
+
+function getCorr(state::IncrementalCovariance)
+  corr = similar(state.cov)
+
+  xstddev = getStdDev(state.meanVarX)
+  ystddev = getStdDev(state.meanVarY)
+
+  for y in 1:size(corr)[2]
+    for x in 1:size(corr)[1]
+      corr[x,y] = 1/(state.n-1) * state.cov[x,y] / (xstddev[x] * ystddev[y])
+    end
+  end
+
+  return corr
+end
+
+export lockandreset!
+
+"""
+Resets the co-variance matrix and counter to 0, but locks the mean and variance.
+This means you can re-use this instance *if you are sure that the mean
+variance will be the same for the subsequent run*! After you called this function *the 
+mean and variance will not be updated* on subsequent add! operations. If you have no idea
+what any of this means, create a new instance instead. Useful for when you want to compute 
+different correlations by re-ordering rows of the same data, like in collision attacks. 
+Call this function each time you want to compute correlation for a collision.
+"""
+function lockandreset!(this::IncrementalCovariance)
+  fill!(this.cov,0.0)
+  this.n = 0
+  this.locked = true
+end
 
 const cachechunkmagic = 2^14
 
@@ -201,6 +202,7 @@ mutable struct IncrementalCovarianceTiled
   cacheYn::Vector{Vector{Float64}}
   cacheCount::Int
   cacheMax::Int
+  locked::Bool
 
   function IncrementalCovarianceTiled(numberOfX::Int, numberOfY::Int)
     meanVarX = IncrementalMeanVariance(numberOfX)
@@ -225,8 +227,6 @@ mutable struct IncrementalCovarianceTiled
     nrTilesY = div(numberOfY+tilesizeY-1, tilesizeY)
     covXY = Matrix{IncrementalCovariance}(undef,nrTilesX, nrTilesY)
 
-    # @printf("#threads %d, numberOfX %d, numberOfY %d, nrTilesX %d, nrTilesY %d\n", Threads.nthreads(), numberOfX, numberOfY, nrTilesX, nrTilesY)
-
     for y in 1:nrTilesY
       minY = (y-1)*tilesizeY+1
       maxY = min(tilesizeY, numberOfY-(y-1)*tilesizeY)
@@ -246,7 +246,7 @@ mutable struct IncrementalCovarianceTiled
       cachesYn[i] = Vector{Float64}(undef,numberOfY)
     end
 
-    new(numberOfX, numberOfY, tilesizeX, tilesizeY, nrTilesX, nrTilesY, meanVarX, meanVarY, covXY, cachesXn, cachesYn, 0, caches)
+    new(numberOfX, numberOfY, tilesizeX, tilesizeY, nrTilesX, nrTilesY, meanVarX, meanVarY, covXY, cachesXn, cachesYn, 0, caches, false)
   end
 end
 
@@ -268,13 +268,7 @@ function dothreadwork(stateref::Ref{IncrementalCovarianceTiled}, y::Int)
       dataXn = state.cacheXn[t]
       dataYn = state.cacheYn[t]
 
-      # add!(state.covXY[x,y], dataXn, minX, maxX, dataYn, minY, maxY, false,)
-
-      state.covXY[x,y].n += 1
-      n = state.covXY[x,y].n
-      ndiv::Float64 = (n-1)/n
-
-      updateCov!(state.covXY[x,y].cov, dataXn, minX, maxX, dataYn, minY, maxY, ndiv)
+      add!(state.covXY[x,y], dataXn, minX, maxX, dataYn, minY, maxY)
     end
   end
   return
@@ -302,7 +296,8 @@ function storecache(cache::Vector{Float64}, data, datamean)
 end
 
 function add!(state::IncrementalCovarianceTiled, dataX::AbstractVector, dataY::AbstractVector, updateMeanX::Bool=true, updateMeanY::Bool=true)
-  @assert((length(dataX),length(dataY)) == (state.numberOfX,state.numberOfY))
+  length(dataX) == state.numberOfX || throw(DomainError("dataX has wrong length"))
+  length(dataY) == state.numberOfY || throw(DomainError("dataY has wrong length"))
 
   state.cacheCount += 1
   cacheCount = state.cacheCount
@@ -310,10 +305,12 @@ function add!(state::IncrementalCovarianceTiled, dataX::AbstractVector, dataY::A
   storecache(state.cacheYn[cacheCount], dataY, state.meanVarY.mean)
 
   if updateMeanX
+    !state.locked || throw(ErrorException("mean and variance are locked so you can't update the mean!"))
     add!(state.meanVarX, dataX)
   end
 
   if updateMeanY
+    !state.locked || throw(ErrorException("mean and variance are locked so you can't update the mean!"))
     add!(state.meanVarY, dataY)
   end
 
@@ -326,7 +323,7 @@ function add!(state::IncrementalCovarianceTiled, dataX::AbstractVector, dataY::A
 end
 
 function add!(this::IncrementalCovarianceTiled, other::IncrementalCovarianceTiled, updateMeanX::Bool=true, updateMeanY::Bool=true)
-  @assert(length(this.covXY) == length(other.covXY))
+  size(this.covXY) == size(other.covXY) || throw(DomainError("sizes of this and other should be equal")) 
 
   flushcache!(this)
   flushcache!(other)
@@ -356,11 +353,6 @@ function add!(this::IncrementalCovarianceTiled, other::IncrementalCovarianceTile
 
 end
 
-
-function getCov(state::IncrementalCovariance)
-  return 1/(state.n-1) .* state.cov
-end
-
 function getCov(state::IncrementalCovarianceTiled)
   flushcache!(state)
   cov = zeros(Float64, state.numberOfX, state.numberOfY)
@@ -388,21 +380,6 @@ function getCov(state::IncrementalCovarianceTiled)
   cov .*= 1/(n-1)
 
   return cov
-end
-
-function getCorr(state::IncrementalCovariance)
-  corr = similar(state.cov)
-
-  xstddev = getStdDev(state.meanVarX)
-  ystddev = getStdDev(state.meanVarY)
-
-  for y in 1:size(corr)[2]
-    for x in 1:size(corr)[1]
-      corr[x,y] = 1/(state.n-1) * state.cov[x,y] / (xstddev[x] * ystddev[y])
-    end
-  end
-
-  return corr
 end
 
 function getCorr(state::IncrementalCovarianceTiled)
@@ -441,4 +418,11 @@ function getCorr(state::IncrementalCovarianceTiled)
   end
 
   return corr
+end
+
+function lockandreset!(this::IncrementalCovarianceTiled)
+  this.cacheCount == 0 || throw(ErrorException("wrong state: call getCorr first"))
+  for i in this.covXY
+    lockandreset!(i)
+  end
 end
