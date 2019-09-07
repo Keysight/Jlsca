@@ -345,19 +345,19 @@ end
 
 function MixColumn(s::AbstractVector{UInt8})
     s_p = zeros(UInt8, 4)
-    s_p[1] = gf8_mul(s[1], gf8_square(0x2, squares)) ⊻ gf8_mul(s[2], gf8_square(0x3, squares)) ⊻ s[3] ⊻ s[4]
-    s_p[2] = s[1] ⊻ gf8_mul(s[2], gf8_square(0x2, squares)) ⊻ gf8_mul(s[3], gf8_square(0x3, squares)) ⊻ s[4]
-    s_p[3] = s[1] ⊻ s[2] ⊻ gf8_mul(s[3], gf8_square(0x2, squares)) ⊻ gf8_mul(s[4], gf8_square(0x3, squares))
-    s_p[4] = gf8_mul(s[1], gf8_square(0x3, squares)) ⊻ s[2] ⊻ s[3] ⊻ gf8_mul(s[4], gf8_square(0x2, squares))
+    s_p[1] = gf8_mul(s[1], 0x2) ⊻ gf8_mul(s[2], 0x3) ⊻ s[3] ⊻ s[4]
+    s_p[2] = s[1] ⊻ gf8_mul(s[2], 0x2) ⊻ gf8_mul(s[3], 0x3) ⊻ s[4]
+    s_p[3] = s[1] ⊻ s[2] ⊻ gf8_mul(s[3], 0x2) ⊻ gf8_mul(s[4], 0x3)
+    s_p[4] = gf8_mul(s[1], 0x3) ⊻ s[2] ⊻ s[3] ⊻ gf8_mul(s[4], 0x2)
     return s_p
 end
 
 function InvMixColumn(s::AbstractVector{UInt8})
     s_p = zeros(UInt8, 4)
-    s_p[1] = gf8_mul(s[1], gf8_square(0xe, squares)) ⊻ gf8_mul(s[2], gf8_square(0xb, squares)) ⊻ gf8_mul(s[3], gf8_square(0xd, squares)) ⊻ gf8_mul(s[4], gf8_square(0x9, squares))
-    s_p[2] = gf8_mul(s[1], gf8_square(0x9, squares)) ⊻ gf8_mul(s[2], gf8_square(0xe, squares)) ⊻ gf8_mul(s[3], gf8_square(0xb, squares)) ⊻ gf8_mul(s[4], gf8_square(0xd, squares))
-    s_p[3] = gf8_mul(s[1], gf8_square(0xd, squares)) ⊻ gf8_mul(s[2], gf8_square(0x9, squares)) ⊻ gf8_mul(s[3], gf8_square(0xe, squares)) ⊻ gf8_mul(s[4], gf8_square(0xb, squares))
-    s_p[4] = gf8_mul(s[1], gf8_square(0xb, squares)) ⊻ gf8_mul(s[2], gf8_square(0xd, squares)) ⊻ gf8_mul(s[3], gf8_square(0x9, squares)) ⊻ gf8_mul(s[4], gf8_square(0xe, squares))
+    s_p[1] = gf8_mul(s[1], 0xe) ⊻ gf8_mul(s[2], 0xb) ⊻ gf8_mul(s[3], 0xd) ⊻ gf8_mul(s[4], 0x9)
+    s_p[2] = gf8_mul(s[1], 0x9) ⊻ gf8_mul(s[2], 0xe) ⊻ gf8_mul(s[3], 0xb) ⊻ gf8_mul(s[4], 0xd)
+    s_p[3] = gf8_mul(s[1], 0xd) ⊻ gf8_mul(s[2], 0x9) ⊻ gf8_mul(s[3], 0xe) ⊻ gf8_mul(s[4], 0xb)
+    s_p[4] = gf8_mul(s[1], 0xb) ⊻ gf8_mul(s[2], 0xd) ⊻ gf8_mul(s[3], 0x9) ⊻ gf8_mul(s[4], 0xe)
     return s_p
 end
 
@@ -417,7 +417,7 @@ function Cipher(i::AbstractMatrix{UInt8}, w::AbstractVector{UInt8}, leak::Functi
         prevstate = state
         state = SubBytes(state)
         state = leak(@sprintf("r%d.s_box", round), state)
-        leak(@sprintf("r%d.s_boxXORin", round), state .⊻ prevstate)
+        # leak(@sprintf("r%d.s_boxXORin", round), state .⊻ prevstate)
 
         state = ShiftRows(state)
         state = leak(@sprintf("r%d.s_row", round), state)
@@ -425,7 +425,7 @@ function Cipher(i::AbstractMatrix{UInt8}, w::AbstractVector{UInt8}, leak::Functi
         prevstate = state
         state = MixColumns(state)
         state = leak(@sprintf("r%d.m_col", round), state)
-        leak(@sprintf("r%d.m_colXORin", round), state .⊻ prevstate)
+        # leak(@sprintf("r%d.m_colXORin", round), state .⊻ prevstate)
 
         roundkey = reshape(w[round*Nb*wz+1:(round+1)*Nb*wz], (4,Nb))
         leak(@sprintf("r%d.k_sch", round), roundkey)
@@ -438,7 +438,7 @@ function Cipher(i::AbstractMatrix{UInt8}, w::AbstractVector{UInt8}, leak::Functi
     prevstate = state
     state = SubBytes(state)
     state = leak(@sprintf("r%d.s_box", Nr), state)
-    leak(@sprintf("r%d.s_boxXORin", Nr), state .⊻ prevstate)
+    # leak(@sprintf("r%d.s_boxXORin", Nr), state .⊻ prevstate)
 
     state = ShiftRows(state)
     state = leak(@sprintf("r%d.s_row", Nr), state)
