@@ -20,7 +20,17 @@ end
 
 # some leakages for CPA
 
-mutable struct Bit <: Leakage
+"""
+Identity leakage
+"""
+struct ID <: Leakage end
+
+leak(this::ID, x) = x
+
+"""
+Bit-wise leakage
+"""
+struct Bit <: Leakage
   idx::Int
 end
 
@@ -28,8 +38,10 @@ show(io::IO, a::Bit) = print(io, "bit$(a.idx)")
 
 leak(this::Bit, intermediate::Unsigned) = UInt8((intermediate >> this.idx) & 1)
 
-mutable struct HW <: Leakage
-end
+"""
+Hamming weight leakage
+"""
+struct HW <: Leakage end
 
 show(io::IO, a::HW) = print(io, "HW")
 
