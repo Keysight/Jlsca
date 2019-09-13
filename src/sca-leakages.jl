@@ -20,6 +20,8 @@ end
 
 # some leakages for CPA
 
+export ID
+
 """
 Identity leakage
 """
