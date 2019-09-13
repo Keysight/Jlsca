@@ -82,6 +82,20 @@ nrsamples(trs::InspectorTrace) = trs.numberOfSamplesPerTrace
 sampletype(trs::InspectorTrace) = Vector{trs.sampleType}()
 meta(trs::InspectorTrace) = trs.meta
 
+function length2type(x)
+  if x == 1
+    t = UInt8
+  elseif x == 2
+    t = UInt16
+  elseif x == 4
+    t = UInt32
+  elseif x == 8
+    t = UInt64
+  else
+    error("unsupported type")
+  end
+end
+
 # read the header of a Riscure Inspector trace set (TRS)
 function readInspectorTrsHeader(filename)
     if filename != "-"
@@ -112,37 +126,38 @@ function readInspectorTrsHeader(filename)
       # end
 
       while !done
+        mypos = position(f)
         tag = read(f, UInt8)
-        length = read(f, UInt8)
+        x = read(f, UInt8)
 
-        if length & 0x80 == 0x80
-          lolwut = length & 0x7f
-          length = 0
+        if x & 0x80 == 0x80
+          lolwut = x & 0x7f
+          x = 0
           for i in 1:lolwut
-            length += (UInt(read(f, UInt8)) << (8*(i-1)))
+            x += (UInt(read(f, UInt8)) << (8*(i-1)))
           end
         end
 
-        if tag == TraceBlock && length == 0
+        if tag == TraceBlock && x == 0
           if seekable
             traceBlockPosition = position(f)
           end
           done = true
-        elseif tag == TitleSpace && length == TitleSpaceLength
-          titleSpace = read(f, UInt8)
-        elseif tag == NumberOfTraces && length == NumberOfTracesLength
+        elseif tag == TitleSpace
+          titleSpace = read(f, length2type(x))
+        elseif tag == NumberOfTraces
           if seekable
             lengthPosition = position(f)
           else
             lengthPosition = -1
           end
-          numberOfTraces = ltoh(read(f, UInt32))
-        elseif tag == DataSpace && length == DataSpaceLength
-          dataSpace = ltoh(read(f, UInt16))
-        elseif tag == NumberOfSamplesPerTrace && length == NumberOfSamplesPerTraceLength
-          numberOfSamplesPerTrace = ltoh(read(f, UInt32))
-        elseif tag == SampleCoding && length == SampleCodingLength
-          sampleCoding = read(f, UInt8)
+          numberOfTraces = ltoh(read(f, length2type(x)))
+        elseif tag == DataSpace
+          dataSpace = ltoh(read(f, length2type(x)))
+        elseif tag == NumberOfSamplesPerTrace
+          numberOfSamplesPerTrace = ltoh(read(f, length2type(x)))
+        elseif tag == SampleCoding
+          sampleCoding = read(f, length2type(x))
           if sampleCoding == CodingFloat
             sampleType = Float32
             sampleSpace = 4
@@ -158,9 +173,9 @@ function readInspectorTrsHeader(filename)
           end
         else
           # if verbose
-            println("[x] Skipping unknown tag $tag with length $length")
+            println("[x] Skipping unknown tag $tag with length $x @ position $mypos")
           # end
-          read(f, length)
+          read(f, x)
         end
       end
 
