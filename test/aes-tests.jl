@@ -123,6 +123,16 @@ function testMixColumns()
     state3 = InvMixColumns(state1)
 
     @test(state3 == state)
+
+    statex = copy(state)
+
+    MixColumns!(statex)
+
+    @test statex == state2
+
+    InvMixColumns!(statex)
+
+    @test statex == state
 end
 
 function testShiftRows()
@@ -134,6 +144,16 @@ function testShiftRows()
     state3 = InvShiftRows(state1)
 
     @test(state3 == state)
+
+    statex = copy(state)
+
+    ShiftRows!(statex)
+
+    @test statex == state2
+
+    InvShiftRows!(statex)
+
+    @test  statex == state
 end
 
 function testAddRoundKey()
@@ -148,6 +168,12 @@ function testAddRoundKey()
     state3 = AddRoundKey(state1, key)
 
     @test(state3 == state)
+
+    statex = copy(state)
+
+    AddRoundKey!(statex,key)
+
+    @test statex == state2
 end
 
 function testSubBytes()
@@ -159,6 +185,15 @@ function testSubBytes()
     state3 = InvSubBytes(state1)
 
     @test(state3 == state)
+
+    statex = copy(state)
+    SubBytes!(statex)
+
+    @test(state2 == statex)
+
+    InvSubBytes!(statex)
+
+    @test(state == statex)
 end
 
 
@@ -248,7 +283,7 @@ end
 
 function rewrite(targetstr::String, targetstate::Matrix, str::String, origstate::Matrix)
     if str == targetstr
-        @printf("REWRITING state\n")
+        # @printf("REWRITING state\n")
         origstate = targetstate
     end
     return origstate

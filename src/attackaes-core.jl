@@ -131,9 +131,9 @@ mutable struct InvMcOut <: Target{UInt8,UInt32,UInt8}
 end
 
 function target(a::InvMcOut, x::UInt8, keyByte::UInt8)
-    mcIn = fill(a.constant, 4)
+    mcIn = fill(a.constant, (4,1))
     mcIn[a.position] = a.invsbox[(x ⊻ keyByte) + 1]
-    mcOut = Aes.InvMixColumn(mcIn)
+    mcOut = Aes.InvMixColumn!(mcIn)
     ret::UInt32 = 0
     for i in 1:4
       ret <<= 8
@@ -151,9 +151,9 @@ mutable struct McOut <: Target{UInt8,UInt32,UInt8}
 end
 
 function target(a::McOut, x::UInt8, keyByte::UInt8)
-    mcIn = fill(a.constant, 4)
+    mcIn = fill(a.constant, (4,1))
     mcIn[a.position] = a.sbox[(x ⊻ keyByte) + 1]
-    mcOut = Aes.MixColumn(mcIn)
+    mcOut = Aes.MixColumn!(mcIn)
     ret::UInt32 = 0
     for i in 1:4
       ret <<= 8
@@ -171,9 +171,9 @@ mutable struct McOutXORIn <: Target{UInt8,UInt32,UInt8}
 end
 
 function target(a::McOutXORIn, x::UInt8, keyByte::UInt8)
-    mcIn = fill(a.constant, 4)
+    mcIn = fill(a.constant, (4,1))
     mcIn[a.position] = a.sbox[(x ⊻ keyByte) + 1]
-    mcOut = Aes.MixColumn(mcIn) .⊻ mcIn
+    mcOut = Aes.MixColumn!(copy(mcIn)) .⊻ mcIn
     ret::UInt32 = 0
     for i in 1:4
       ret <<= 8
@@ -191,9 +191,9 @@ mutable struct InvMcOutXORIn <: Target{UInt8,UInt32,UInt8}
 end
 
 function target(a::InvMcOutXORIn, x::UInt8, keyByte::UInt8)
-    mcIn = fill(a.constant, 4)
+    mcIn = fill(a.constant, (4,1))
     mcIn[a.position] = a.sbox[(x ⊻ keyByte) + 1]
-    mcOut = Aes.InvMixColumn(mcIn) .⊻ mcIn
+    mcOut = Aes.InvMixColumn!(copy(mcIn)) .⊻ mcIn
     ret::UInt32 = 0
     for i in 1:4
       ret <<= 8
@@ -248,18 +248,18 @@ show(io::IO, a::InvAesRoundOut) = print(io, "Inverse Sbox out, xor'ed w/ round o
 
 # some round functions
 function invRound(output::Matrix, roundkey::Matrix)
-    state = Aes.AddRoundKey(output, roundkey)
-    state = Aes.InvShiftRows(state)
-    state = Aes.InvSubBytes(state)
-    state = Aes.InvMixColumns(state)
+    state = Aes.AddRoundKey!(copy(output), roundkey)
+    state = Aes.InvShiftRows!(state)
+    state = Aes.InvSubBytes!(state)
+    state = Aes.InvMixColumns!(state)
     return state
 end
 
 function round(output::Matrix, roundkey::Matrix)
-    state = Aes.AddRoundKey(output, roundkey)
-    state = Aes.SubBytes(state)
-    state = Aes.ShiftRows(state)
-    state = Aes.MixColumns(state)
+    state = Aes.AddRoundKey!(copy(output), roundkey)
+    state = Aes.SubBytes!(state)
+    state = Aes.ShiftRows!(state)
+    state = Aes.MixColumns!(state)
     return state
 end
 
@@ -434,15 +434,15 @@ function getDataPass(params::AesAttack, phase::Int, phaseInput::AbstractVector{U
   if isa(params,AesSboxRoundAttack)
     if cond
       if secondrnd && stripMC
-        roundfn2 = x -> (y=roundfn(x); mymerge16(y,ShiftRows(MixColumns(reshape(y,(4,4))))))
+        roundfn2 = x -> (y=roundfn(x); mymerge16(y,ShiftRows!(MixColumns!(reshape(copy(y),(4,4))))))
       else
-        roundfn2 = x -> (y=roundfn(x); mymerge16(y,ShiftRows(reshape(y,(4,4)))))
+        roundfn2 = x -> (y=roundfn(x); mymerge16(y,ShiftRows!(reshape(copy(y),(4,4)))))
       end
     else
       if secondrnd && stripMC
-        roundfn2 = x -> (y=roundfn(x); mymerge16(y,InvShiftRows(InvMixColumns(reshape(y,(4,4))))))
+        roundfn2 = x -> (y=roundfn(x); mymerge16(y,InvShiftRows!(InvMixColumns!(reshape(copy(y),(4,4))))))
       else
-        roundfn2 = x -> (y=roundfn(x); mymerge16(y,InvShiftRows(reshape(y,(4,4)))))
+        roundfn2 = x -> (y=roundfn(x); mymerge16(y,InvShiftRows!(reshape(copy(y),(4,4)))))
       end
     end
   else

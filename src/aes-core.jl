@@ -8,7 +8,7 @@
 
 const squares = 0
 
-export gf8_mul,gf8_square,gf2_mul,gf8_sqrt,gf8_exp,gf2_dot,KeyExpansion,KeyExpansionBackwards,InvMixColumns,InvMixColumn,MixColumns,MixColumn,ShiftRows,InvShiftRows,AddRoundKey,Cipher,InvCipher,EqInvCipher,EqInvKeyExpansion,SubBytes,InvSubBytes,Nb,sbox,invsbox
+export gf8_mul,gf8_square,gf2_mul,gf8_sqrt,gf8_exp,gf2_dot,KeyExpansion,KeyExpansionBackwards,Cipher,InvCipher,EqInvCipher,EqInvKeyExpansion,Nb,sbox,invsbox
 
 function myinv(s)
   invs = zeros(UInt8, length(s))
@@ -331,67 +331,175 @@ function EqInvKeyExpansion(key::AbstractVector{UInt8}, Nr, Nk)
     return w
 end
 
-function SubBytes(state::AbstractArray)
-    return map(x -> sbox[x+1], state)
+export SubBytes!
+
+function SubBytes!(state::AbstractArray)
+    size(state) == (4,4) || error("wrong dimensions")
+
+    @inbounds for col in 1:4
+        for row in 1:4
+            state[row,col] = sbox[state[row,col]+1]
+        end
+    end
+
+    return state
 end
 
-function InvSubBytes(state::AbstractArray)
-    return map(x -> invsbox[x+1], state)
+export SubBytes
+
+SubBytes(state) = SubBytes!(copy(state))
+
+export InvSubBytes!
+
+function InvSubBytes!(state::AbstractArray)
+    size(state) == (4,4) || error("wrong dimensions")
+
+    @inbounds for col in 1:4
+        for row in 1:4
+            state[row,col] = invsbox[state[row,col]+1]
+        end
+    end
+
+    return state
 end
 
-function AddRoundKey(state::AbstractMatrix, k::AbstractMatrix)
-    return state .⊻ k
+export InvSubBytes
+
+InvSubBytes(state) = InvSubBytes!(copy(state))
+
+export AddRoundKey!
+
+function AddRoundKey!(state::AbstractMatrix, k::AbstractMatrix)
+    (size(state) == (4,4) && size(k) == (4,4)) || error("wrong dimensions")
+
+    @inbounds for col in 1:4
+        for row in 1:4
+            state[row,col] = state[row,col] ⊻ k[row,col]
+        end
+    end
+
+    return state
 end
 
-function MixColumn(s::AbstractVector{UInt8})
-    s_p = zeros(UInt8, 4)
-    s_p[1] = gf8_mul(s[1], 0x2) ⊻ gf8_mul(s[2], 0x3) ⊻ s[3] ⊻ s[4]
-    s_p[2] = s[1] ⊻ gf8_mul(s[2], 0x2) ⊻ gf8_mul(s[3], 0x3) ⊻ s[4]
-    s_p[3] = s[1] ⊻ s[2] ⊻ gf8_mul(s[3], 0x2) ⊻ gf8_mul(s[4], 0x3)
-    s_p[4] = gf8_mul(s[1], 0x3) ⊻ s[2] ⊻ s[3] ⊻ gf8_mul(s[4], 0x2)
-    return s_p
+export AddRoundKey
+
+AddRoundKey(state,rk) = AddRoundKey!(copy(state),rk)
+
+function create_mclookup()
+    table = zeros(UInt8,256,256)
+    nX,nY = size(table)
+    for x in 1:nX
+        for y in 1:nY
+            table[x,y] = gf8_mul(UInt8(x-1),UInt8(y-1))
+        end
+    end
+
+    table
 end
 
-function InvMixColumn(s::AbstractVector{UInt8})
-    s_p = zeros(UInt8, 4)
-    s_p[1] = gf8_mul(s[1], 0xe) ⊻ gf8_mul(s[2], 0xb) ⊻ gf8_mul(s[3], 0xd) ⊻ gf8_mul(s[4], 0x9)
-    s_p[2] = gf8_mul(s[1], 0x9) ⊻ gf8_mul(s[2], 0xe) ⊻ gf8_mul(s[3], 0xb) ⊻ gf8_mul(s[4], 0xd)
-    s_p[3] = gf8_mul(s[1], 0xd) ⊻ gf8_mul(s[2], 0x9) ⊻ gf8_mul(s[3], 0xe) ⊻ gf8_mul(s[4], 0xb)
-    s_p[4] = gf8_mul(s[1], 0xb) ⊻ gf8_mul(s[2], 0xd) ⊻ gf8_mul(s[3], 0x9) ⊻ gf8_mul(s[4], 0xe)
-    return s_p
+const GF8M = create_mclookup()
+
+export MixColumn!
+
+function MixColumn!(s,col=1)
+    length(s) >= 4 || error("wrong dimensions")
+    col == 1 || size(s)[2] >= col || error("wrong dimensions")
+    @inbounds begin
+        s_p1 = GF8M[s[1,col]+1, 0x2+1] ⊻ GF8M[s[2,col]+1, 0x3+1] ⊻ s[3,col] ⊻ s[4,col]
+        s_p2 = s[1,col] ⊻ GF8M[s[2,col]+1, 0x2+1] ⊻ GF8M[s[3,col]+1, 0x3+1] ⊻ s[4,col]
+        s_p3 = s[1,col] ⊻ s[2,col] ⊻ GF8M[s[3,col]+1, 0x2+1] ⊻ GF8M[s[4,col]+1, 0x3+1]
+        s_p4 = GF8M[s[1,col]+1, 0x3+1] ⊻ s[2,col] ⊻ s[3,col] ⊻ GF8M[s[4,col]+1, 0x2+1]
+        s[1,col] = s_p1
+        s[2,col] = s_p2
+        s[3,col] = s_p3
+        s[4,col] = s_p4
+    end
+    return s
 end
 
-function MixColumns(state::AbstractMatrix)
-    return mapslices(MixColumn, state, dims=1)
+export MixColumn
+
+MixColumn(s::AbstractVector{UInt8}) = MixColumn!(copy(s))
+
+export InvMixColumn!
+
+function InvMixColumn!(s,col=1)
+    length(s) >= 4 || error("wrong dimensions")
+    col == 1 || size(s)[2] >= col || error("wrong dimensions")
+    @inbounds begin
+        s_p1 = GF8M[s[1,col]+1, 0xe+1] ⊻ GF8M[s[2,col]+1, 0xb+1] ⊻ GF8M[s[3,col]+1, 0xd+1] ⊻ GF8M[s[4,col]+1, 0x9+1]
+        s_p2 = GF8M[s[1,col]+1, 0x9+1] ⊻ GF8M[s[2,col]+1, 0xe+1] ⊻ GF8M[s[3,col]+1, 0xb+1] ⊻ GF8M[s[4,col]+1, 0xd+1]
+        s_p3 = GF8M[s[1,col]+1, 0xd+1] ⊻ GF8M[s[2,col]+1, 0x9+1] ⊻ GF8M[s[3,col]+1, 0xe+1] ⊻ GF8M[s[4,col]+1, 0xb+1]
+        s_p4 = GF8M[s[1,col]+1, 0xb+1] ⊻ GF8M[s[2,col]+1, 0xd+1] ⊻ GF8M[s[3,col]+1, 0x9+1] ⊻ GF8M[s[4,col]+1, 0xe+1]
+        s[1,col] = s_p1
+        s[2,col] = s_p2
+        s[3,col] = s_p3
+        s[4,col] = s_p4
+    end
+    return s
 end
 
-function InvMixColumns(state::AbstractMatrix)
-    return mapslices(InvMixColumn, state, dims=1)
+export InvMixColumn
+
+InvMixColumn(s::AbstractVector{UInt8}) = InvMixColumn!(copy(s))
+
+export MixColumns!
+
+function MixColumns!(state::AbstractMatrix)
+    size(state) == (4,4) || error("wrong dimensions")
+    MixColumn!(state,1)
+    MixColumn!(state,2)
+    MixColumn!(state,3)
+    MixColumn!(state,4)
 end
 
-function ShiftRows(state::AbstractMatrix)
-    state_p = similar(state)
-    state_p[1,:] = state[1,:]
-    state_p[2,1:3] = state[2,2:4]
-    state_p[2,4] = state[2,1]
-    state_p[3,1:2] = state[3,3:4]
-    state_p[3,3:4] = state[3,1:2]
-    state_p[4,1] = state[4,4]
-    state_p[4,2:4] = state[4,1:3]
-    return state_p
+export MixColumns
+
+MixColumns(state) = MixColumns!(copy(state))
+
+export InvMixColumns!
+
+function InvMixColumns!(state::AbstractMatrix)
+    size(state) == (4,4) || error("wrong dimensions")
+    InvMixColumn!(state,1)
+    InvMixColumn!(state,2)
+    InvMixColumn!(state,3)
+    InvMixColumn!(state,4)
 end
 
-function InvShiftRows(state::AbstractMatrix)
-    state_p = similar(state)
-    state_p[1,:] = state[1,:]
-    state_p[2,2:4] = state[2,1:3]
-    state_p[2,1] = state[2,4]
-    state_p[3,3:4] = state[3,1:2]
-    state_p[3,1:2] = state[3,3:4]
-    state_p[4,4] = state[4,1]
-    state_p[4,1:3] = state[4,2:4]
-    return state_p
+export InvMixColumns
+
+InvMixColumns(state) = InvMixColumns!(copy(state))
+
+export  ShiftRows!
+
+function ShiftRows!(state::AbstractMatrix)
+    size(state) == (4,4) || error("wrong dimensions")
+    @inbounds state[2,1],state[2,2],state[2,3],state[2,4] = state[2,2],state[2,3],state[2,4],state[2,1]
+    @inbounds state[3,1],state[3,2],state[3,3],state[3,4] = state[3,3],state[3,4],state[3,1],state[3,2]
+    @inbounds state[4,1],state[4,2],state[4,3],state[4,4] = state[4,4],state[4,1],state[4,2],state[4,3]
+
+    return state
 end
+
+export ShiftRows
+
+ShiftRows(state) = ShiftRows!(copy(state))
+
+export InvShiftRows!
+
+function InvShiftRows!(state::AbstractMatrix)
+    size(state) == (4,4) || error("wrong dimensions")
+    @inbounds state[2,1],state[2,2],state[2,3],state[2,4] = state[2,4],state[2,1],state[2,2],state[2,3]
+    @inbounds state[3,1],state[3,2],state[3,3],state[3,4] = state[3,3],state[3,4],state[3,1],state[3,2]
+    @inbounds state[4,1],state[4,2],state[4,3],state[4,4] = state[4,2],state[4,3],state[4,4],state[4,1]
+
+    return state
+end
+
+export InvShiftRows
+
+InvShiftRows(state) = InvShiftRows!(copy(state))
 
 function Cipher(i::AbstractVector{UInt8}, w::AbstractVector{UInt8}, leak::Function=(x,y)->y)
     im = reshape(i, (4,Nb))
@@ -402,51 +510,47 @@ end
 function Cipher(i::AbstractMatrix{UInt8}, w::AbstractVector{UInt8}, leak::Function=(x,y)->y)
     Nr = div(div(length(w),wz),Nb) - 1
 
-    state = i
+    state = copy(i)
 
     state = leak("r0.input",state)
 
     roundkey = reshape(w[1:Nb*wz], (4,Nb))
     leak("r0.k_sch", roundkey)
 
-    state = AddRoundKey(state, roundkey)
+    state = AddRoundKey!(state, roundkey)
 
     for round in 1:(Nr-1)
         state = leak(@sprintf("r%d.start", round), state)
 
-        prevstate = state
-        state = SubBytes(state)
+        state = SubBytes!(state)
         state = leak(@sprintf("r%d.s_box", round), state)
-        # leak(@sprintf("r%d.s_boxXORin", round), state .⊻ prevstate)
 
-        state = ShiftRows(state)
+        state = ShiftRows!(state)
         state = leak(@sprintf("r%d.s_row", round), state)
 
-        prevstate = state
-        state = MixColumns(state)
+        state = MixColumns!(state)
         state = leak(@sprintf("r%d.m_col", round), state)
-        # leak(@sprintf("r%d.m_colXORin", round), state .⊻ prevstate)
 
         roundkey = reshape(w[round*Nb*wz+1:(round+1)*Nb*wz], (4,Nb))
         leak(@sprintf("r%d.k_sch", round), roundkey)
 
-        state = AddRoundKey(state, roundkey)
+        state = AddRoundKey!(state, roundkey)
     end
 
     state = leak(@sprintf("r%d.start", Nr), state)
 
     prevstate = state
-    state = SubBytes(state)
+    state = SubBytes!(state)
     state = leak(@sprintf("r%d.s_box", Nr), state)
     # leak(@sprintf("r%d.s_boxXORin", Nr), state .⊻ prevstate)
 
-    state = ShiftRows(state)
+    state = ShiftRows!(state)
     state = leak(@sprintf("r%d.s_row", Nr), state)
 
     roundkey = reshape(w[Nr*Nb*wz+1:(Nr+1)*Nb*wz], (4,Nb))
     leak(@sprintf("r%d.k_sch", Nr), roundkey)
 
-    state = AddRoundKey(state, roundkey)
+    state = AddRoundKey!(state, roundkey)
     leak(@sprintf("r%d.output", Nr), state)
 
     return state
@@ -461,49 +565,49 @@ end
 function InvCipher(i::AbstractMatrix{UInt8}, w::AbstractVector{UInt8}, leak::Function=(x,y)->y)
     Nr = div(div(length(w),wz),Nb) - 1
 
-    state = i
+    state = copy(i)
     state = leak("r0.iinput", state)
 
     roundkey = reshape(w[Nr*Nb*wz+1:(Nr+1)*Nb*wz], (4,4))
     leak("r0.ik_sch", roundkey)
-    state = AddRoundKey(state, roundkey)
+    state = AddRoundKey!(state, roundkey)
 
     for round in (Nr-1):-1:1
         state = leak(@sprintf("r%d.istart", (Nr - round)), state)
 
-        state = InvShiftRows(state)
+        state = InvShiftRows!(state)
         state = leak(@sprintf("r%d.is_row", (Nr - round)), state)
 
         prevstate = state
-        state = InvSubBytes(state)
+        state = InvSubBytes!(state)
         state = leak(@sprintf("r%d.is_box", (Nr - round)), state)
         leak(@sprintf("r%d.is_boxXORin", (Nr - round)), state .⊻ prevstate)
 
         roundkey = reshape(w[round*Nb*wz+1:(round+1)*Nb*wz], (4,Nb))
         leak(@sprintf("r%d.ik_sch", (Nr - round)), roundkey)
 
-        state = AddRoundKey(state, roundkey)
+        state = AddRoundKey!(state, roundkey)
         leak(@sprintf("r%d.ik_add", (Nr - round)), state)
 
         prevstate = state
-        state = InvMixColumns(state)
+        state = InvMixColumns!(state)
         leak(@sprintf("r%d.im_colXORin", (Nr - round)), state .⊻ prevstate)
     end
 
     state = leak(@sprintf("r%d.istart", Nr), state)
 
-    state = InvShiftRows(state)
+    state = InvShiftRows!(state)
     state = leak(@sprintf("r%d.is_row", Nr), state)
 
     prevstate = state
-    state = InvSubBytes(state)
+    state = InvSubBytes!(state)
     state = leak(@sprintf("r%d.is_box", Nr), state)
     leak(@sprintf("r%d.is_boxXORin", Nr), state .⊻ prevstate)
 
     roundkey = reshape(w[1:Nb*wz], (4,Nb))
     leak(@sprintf("r%d.ik_sch", Nr), roundkey)
 
-    state = AddRoundKey(state, roundkey)
+    state = AddRoundKey!(state, roundkey)
     state = leak(@sprintf("r%d.ioutput", Nr), state)
 
     return state
@@ -518,49 +622,49 @@ end
 function EqInvCipher(i::AbstractMatrix{UInt8}, w::AbstractVector{UInt8}, leak::Function=(x,y)->y)
     Nr = div(div(length(w),wz),Nb) - 1
 
-    state = i
+    state = copy(i)
     state = leak("r0.iinput", state)
 
     roundkey = reshape(w[Nr*Nb*wz+1:(Nr+1)*Nb*wz], (4,4))
     leak("r0.ik_sch", roundkey)
-    state = AddRoundKey(state, roundkey)
+    state = AddRoundKey!(state, roundkey)
 
     for round in (Nr-1):-1:1
         state = leak(@sprintf("r%d.istart", (Nr - round)), state)
 
         prevstate = state
-        state = InvSubBytes(state)
+        state = InvSubBytes!(state)
         state = leak(@sprintf("r%d.is_box", (Nr - round)), state)
         leak(@sprintf("r%d.is_boxXORin", (Nr - round)), state .⊻ prevstate)
 
-        state = InvShiftRows(state)
+        state = InvShiftRows!(state)
         state = leak(@sprintf("r%d.is_row", (Nr - round)), state)
 
         prevstate = state
-        state = InvMixColumns(state)
+        state = InvMixColumns!(state)
         state = leak(@sprintf("r%d.im_col", (Nr - round)), state)
         leak(@sprintf("r%d.im_colXORin", (Nr - round)), state .⊻ prevstate)
 
         roundkey = reshape(w[round*Nb*wz+1:(round+1)*Nb*wz], (4,Nb))
         leak(@sprintf("r%d.ik_sch", (Nr - round)), roundkey)
 
-        state = AddRoundKey(state, roundkey)
+        state = AddRoundKey!(state, roundkey)
     end
 
     state = leak(@sprintf("r%d.istart", Nr), state)
 
     prevstate = state
-    state = InvSubBytes(state)
+    state = InvSubBytes!(state)
     state = leak(@sprintf("r%d.is_box", Nr), state)
     leak(@sprintf("r%d.is_boxXORin", Nr), state .⊻ prevstate)
 
-    state = InvShiftRows(state)
+    state = InvShiftRows!(state)
     state = leak(@sprintf("r%d.is_row", Nr), state)
 
     roundkey = reshape(w[1:Nb*wz], (4,Nb))
     leak(@sprintf("r%d.ik_sch", Nr), roundkey)
 
-    state = AddRoundKey(state, roundkey)
+    state = AddRoundKey!(state, roundkey)
     state = leak(@sprintf("r%d.ioutput", Nr), state)
 
     return state
