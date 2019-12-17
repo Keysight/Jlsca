@@ -44,7 +44,6 @@ params.maxCols = 100000
 
 addSamplePass(trs, SecondOrderPass(AbsDiff()))
 
-setPostProcessor(trs, CondAvg())
 sca(trs,params)
 ``` 
 """

@@ -10,36 +10,28 @@ using Jlsca.Align
 @everywhere using Jlsca.Align
 
 
-# our vanilla  main function
-function gofaster()
-  if length(ARGS) < 1
-    print("no input trace\n")
-    return
-  end
-
-  filename = ARGS[1]
-  direction::Direction = (length(ARGS) > 1 && ARGS[2] == "BACKWARD" ? BACKWARD : FORWARD)
-  params = getParameters(filename, direction)
-  if params == nothing
-    throw(ErrorException("Params cannot be derived from filename, assign and config your own here!"))
-    # params = DpaAttack(AesSboxAttack(),IncrementalCPA())
-  end
-
-  analysis = IncrementalCPA()
-  analysis.leakages = params.analysis.leakages
-  params.analysis = analysis
-
-  @everywhere begin
-      trs = InspectorTrace($filename)
-
-      setPostProcessor(trs, IncrementalCorrelation(SplitByTracesBlock()))
-  end
-
-  numberOfTraces = length(trs)
-
-  ret = sca(DistributedTrace(), params, 1, numberOfTraces)
-
-  return ret
+if length(ARGS) < 1
+  print("no input trace\n")
+  return
 end
 
-@time gofaster()
+filename = ARGS[1]
+direction = (length(ARGS) > 1 && ARGS[2] == "BACKWARD" ? BACKWARD : FORWARD)
+params = getParameters(filename, direction)
+if params == nothing
+  throw(ErrorException("Params cannot be derived from filename, assign and config your own here!"))
+  # params = DpaAttack(AesSboxAttack(),IncrementalCPA())
+end
+
+analysis = IncrementalCPA()
+analysis.leakages = params.analysis.leakages
+params.analysis = analysis
+
+@everywhere begin
+    trs = InspectorTrace($filename)
+    getTrs() = trs
+end
+
+numberOfTraces = length(trs)
+
+@time ret = sca(DistributedTrace(getTrs), params, 1, numberOfTraces)

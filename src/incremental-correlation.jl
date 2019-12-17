@@ -5,29 +5,10 @@
 # TODO: move incremental-statistics.jl into its own module
 include("incremental-statistics.jl")
 
-import ..Trs.add,..Trs.getGlobCounter
+import ..Trs.add,..Trs.getGlobCounter,..Trs.init,..Trs.merge
 export IncrementalCorrelation
 
-mutable struct IncrementalCPA <: IncrementalAnalysis
-  leakages::Vector{Leakage}
-
-  function IncrementalCPA()
-    return new([HW()])
-  end
-end
-
-show(io::IO, a::IncrementalCPA) = print(io, "Incremental CPA")
-
-function printParameters(a::IncrementalCPA)
-  @printf("leakages:     %s\n", a.leakages)
-end
-
-numberOfLeakages(a::IncrementalCPA) = length(a.leakages)
-
-maximization(a::IncrementalCPA) = AbsoluteGlobalMaximization()
-
 mutable struct IncrementalCorrelation <: PostProcessor
-  worksplit::WorkSplit
   counter::Int
   meanXinitialized::Bool
   covXY::IncrementalCovarianceTiled
@@ -39,11 +20,7 @@ mutable struct IncrementalCorrelation <: PostProcessor
   guesses
 
   function IncrementalCorrelation()
-    IncrementalCorrelation(NoSplit())
-  end
-
-  function IncrementalCorrelation(w::WorkSplit)
-    return new(w, 0, false)
+    return new(0, false)
   end
 end
 
@@ -117,20 +94,20 @@ function add(c::IncrementalCorrelation, samples::AbstractVector{S}, data::Abstra
   c.counter += 1
 end
 
-function add(c::IncrementalCorrelation, trs::Traces, traceIdx::Int)
-  data = getData(trs, traceIdx)
-  if length(data) == 0
-    return
-  end
+# function add(c::IncrementalCorrelation, trs::Traces, traceIdx::Int)
+#   data = getData(trs, traceIdx)
+#   if length(data) == 0
+#     return
+#   end
 
-  samples = getSamples(trs, traceIdx)
-  if length(samples) == 0
-    return
-  end
+#   samples = getSamples(trs, traceIdx)
+#   if length(samples) == 0
+#     return
+#   end
 
-  add(c,samples,data,traceIdx)
+#   add(c,samples,data,traceIdx)
 
-end
+# end
 
 function merge(this::IncrementalCorrelation, other::IncrementalCorrelation)
   this.counter += other.counter
@@ -139,18 +116,6 @@ end
 
 
 function get(c::IncrementalCorrelation)
-  @assert myid() == 1
-  if !isa(c.worksplit, NoSplit)
-    for worker in workers()
-      if worker == c.worksplit.worker
-        continue
-      else
-        other = @fetchfrom worker meta(Main.trs).postProcInstance
-        merge(c, other)
-      end
-    end
-  end
-  
   C = getCorr(c.covXY)
 
   return C
@@ -159,3 +124,23 @@ end
 function getGlobCounter(c::IncrementalCorrelation)
   return c.counter
 end
+
+
+mutable struct IncrementalCPA <: IncrementalAnalysis
+  leakages::Vector{Leakage}
+  postProcessor::Type{IncrementalCorrelation}
+
+  function IncrementalCPA()
+    return new([HW()],IncrementalCorrelation)
+  end
+end
+
+show(io::IO, a::IncrementalCPA) = print(io, "Incremental CPA")
+
+function printParameters(a::IncrementalCPA)
+  @printf("leakages:     %s\n", a.leakages)
+end
+
+numberOfLeakages(a::IncrementalCPA) = length(a.leakages)
+
+maximization(a::IncrementalCPA) = AbsoluteGlobalMaximization()

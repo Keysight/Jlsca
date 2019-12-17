@@ -4,10 +4,10 @@
 
 using ProgressMeter
 
-import Base.length, Base.getindex, Base.setindex!, Base.iterate
+import Base.getindex, Base.setindex!, Base.iterate
 import Base.reset
 
-export readTraces,addSamplePass,popSamplePass,addDataPass,popDataPass,hasPostProcessor,reset,getCounter,setPostProcessor
+export readTraces,addSamplePass,popSamplePass,addDataPass,popDataPass,hasPostProcessor,reset,getCounter
 export setindex!
 
 export Pass
@@ -60,6 +60,11 @@ iterate(t::DefaultTrace, i::Int=1) = (i == 1 ? (t.data,2) : i == 2 ? (t.samples,
 export meta
 
 meta(trs::Traces) = error("implement me for $(typeof(trs))")
+
+import Base.length
+export length
+
+length(trs::Traces) = error("implement me for $(typeof(trs))")
 
 export pass
 
@@ -364,9 +369,21 @@ function getCounter(trs::Traces)
 end
 
 """Set a post processor"""
-function setPostProcessor(trs::Traces, p::Union{Missing,PostProcessor})
-  meta(trs).postProcInstance = p
+function setPostProcessor(trs::Traces, p::Union{Missing,Type{<: PostProcessor}})
+  if ismissing(p)
+    meta(trs).postProcInstance = missing
+  else
+    meta(trs).postProcInstance = p()
+  end
 end
+
+export initPostProcessor
+
+"""calls init on the post processor with variable arguments"""
+function initPostProcessor(trs::Traces, args...)
+  init(meta(trs).postProcInstance,args...)
+end
+
 
 """Returns true when a post processor is set to this trace set"""
 function hasPostProcessor(trs::Traces)
@@ -451,18 +468,22 @@ function updateProgress(x::Int)
   end
 end
 
-function readAndPostProcessTraces(trs2::Traces, range::UnitRange)
-  global progress
-  traceLength = length(range)
+function getPostProcessorResult(trs::Traces)
+  return get(meta(trs).postProcInstance)
+end
 
-  if isa(trs2, DistributedTrace)
-    worksplit = @fetch meta(Main.trs).postProcInstance.worksplit
-  else
-    worksplit = meta(trs2).postProcInstance.worksplit
-  end
+function readAndPostProcessTraces(trs2::Traces, globalrange::UnitRange)
+  global progress
+  traceLength = length(globalrange)
+
+  # if isa(trs2, DistributedTrace)
+  #   worksplit = @fetch meta(trs.trsfn()).postProcInstance.worksplit
+  # else
+  #   worksplit = meta(trs2).postProcInstance.worksplit
+  # end
 
   if !pipe(trs2)
-    progress = Progress(traceLength, 1, @sprintf("Processing traces %s.. ", range))
+    progress = Progress(traceLength, 1, @sprintf("Processing traces %s.. ", globalrange))
   else
     progress = nothing
   end
@@ -474,25 +495,31 @@ function readAndPostProcessTraces(trs2::Traces, range::UnitRange)
       for w in workers()
         @async begin
           @fetchfrom w begin
-            add(meta(Main.trs).postProcInstance, Main.trs, range, updateProgress)
+            localrange = getWorkerRange(trs2.worksplit,globalrange)
+            localtrs = trs2.trsfn()
+            add(meta(localtrs).postProcInstance, localtrs, localrange, updateProgress)
           end
         end
       end
     end
   else
-    add(meta(trs2).postProcInstance, trs2, range, updateProgress)
+    localrange = globalrange[1],1,globalrange[end]
+    add(meta(trs2).postProcInstance, trs2, localrange, updateProgress)
   end
 
   if progress != nothing
     finish!(progress)
   end
 
-  if isa(trs2, DistributedTrace)
-    worker1copy = @fetchfrom workers()[1] meta(Main.trs).postProcInstance
-    ret = get(worker1copy)
-  else
-    ret = get(meta(trs2).postProcInstance)
-  end
+  ret = getPostProcessorResult(trs2)
+
+  # if isa(trs2, DistributedTrace)
+  #   worker1copy = @fetchfrom workers()[1] meta(trs2.trsfn()).postProcInstance
+  #   ret = get(worker1copy,trs2)
+  #   # ret = @fetchfrom workers()[1] get(meta(trs2.trsfn()).postProcInstance,trs2)
+  # else
+  #   ret = get(meta(trs2).postProcInstance,missing)
+  # end
 
   return (ret, true)
 

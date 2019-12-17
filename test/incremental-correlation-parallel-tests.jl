@@ -22,13 +22,13 @@ function IncrementalCPATest()
     params.analysis.leakages = [Bit(0),Bit(7)]
 
     trs = InspectorTrace(fullfilename)
-    setPostProcessor(trs, IncrementalCorrelation())
 
     rankData1 = sca(trs,params,1, len)
     close(trs)
 
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
+    params.analysis.postProcessor = missing
 
     trs = InspectorTrace(fullfilename)
 
@@ -60,23 +60,23 @@ function ParallelIncrementalCPATest(splitmode)
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
 
-    @everywhere begin
-      trs = InspectorTrace($fullfilename)
-      if $splitmode == 1
-        setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
-      elseif $splitmode == 2
-        setPostProcessor(trs, IncrementalCorrelation(SplitByTracesBlock()))
+    # forcing a new world, in Julia notebooks just do the
+    # @everywhere block creating the function in a different cell,
+    # in that case no let required
+    let
+      @everywhere begin
+        trs = InspectorTrace($fullfilename)
+        getTrs() = trs
       end
     end
 
-    rankData1 = sca(DistributedTrace(),params,1, len)
+    rankData1 = sca(DistributedTrace(getTrs,splitmode),params,1, len)
     @everywhere close(trs)
 
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
 
     trs = InspectorTrace(fullfilename)
-    setPostProcessor(trs, IncrementalCorrelation())
 
     rankData2 = sca(trs,params,1, len)
     close(trs)
@@ -110,16 +110,17 @@ function ParallelIncrementalCPATestWithInterval(splitmode)
     params.updateInterval = updateInterval
     params.maxCols = 600
 
-    @everywhere begin
-      trs = InspectorTrace($fullfilename)
-      if $splitmode == 1
-        setPostProcessor(trs, IncrementalCorrelation(SplitByTracesSliced()))
-      elseif $splitmode == 2
-        setPostProcessor(trs, IncrementalCorrelation(SplitByTracesBlock()))
+    # forcing a new world, in Julia notebooks just do the
+    # @everywhere block creating the function in a different cell,
+    # in that case no let required
+    let
+      @everywhere begin
+        trs = InspectorTrace($fullfilename)
+        getTrs() = trs
       end
     end
 
-    rankData1 = sca(DistributedTrace(),params,1, len)
+    rankData1 = sca(DistributedTrace(getTrs,splitmode),params,1, len)
     @everywhere close(trs)
     params.analysis = IncrementalCPA()
     params.analysis.leakages = [Bit(0),Bit(7)]
@@ -131,7 +132,6 @@ function ParallelIncrementalCPATestWithInterval(splitmode)
       len2 = min(len, updateInterval*s)
       trs = InspectorTrace(fullfilename)
       
-      setPostProcessor(trs, IncrementalCorrelation())
       rankData2[s] = sca(trs,params,1, len2)
 
       close(trs)
@@ -156,8 +156,8 @@ end
 
 IncrementalCPATest()
 
-ParallelIncrementalCPATest(1)
-ParallelIncrementalCPATest(2)
+ParallelIncrementalCPATest(SplitByTracesSliced())
+ParallelIncrementalCPATest(SplitByTracesBlock())
 
-ParallelIncrementalCPATestWithInterval(1)
-ParallelIncrementalCPATestWithInterval(2)
+ParallelIncrementalCPATestWithInterval(SplitByTracesSliced())
+ParallelIncrementalCPATestWithInterval(SplitByTracesBlock())

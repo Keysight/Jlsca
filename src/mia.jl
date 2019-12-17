@@ -19,9 +19,10 @@ Default leakages are `[HW()]` and the number of buckets is 9.
 mutable struct MIA <: NonIncrementalAnalysis
   leakages::Vector{Leakage}
   sampleBuckets::Int
+  postProcessor::Union{Type{CondAvg},Type{CondReduce},Missing}
 
   function MIA()
-    return new([HW()], 9)
+    return new([HW()],9,CondAvg)
   end
 end
 

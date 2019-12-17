@@ -8,7 +8,7 @@ using Jlsca.Sca
 using Jlsca.Trs
 using Jlsca.Des
 
-function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysis, onetest::Bool=false, xor=false)
+function testDesTraces(direction::Direction, analysis::Analysis, onetest::Bool=false, xor=false)
     tracedir = "../destraces"
     filenames = readdir(tracedir)
 
@@ -24,13 +24,7 @@ function testDesTraces(conditional::Bool,direction::Direction, analysis::Analysi
         params.analysis = analysis
 
         # create Traces instance
-        if conditional
-            trs = InspectorTrace(fullfilename)
-
-            setPostProcessor(trs, CondAvg(SplitByTracesSliced()))
-        else
-          trs = InspectorTrace(fullfilename)
-        end
+        trs = InspectorTrace(fullfilename)
 
         key = getKey(params, sca(trs,params,1, 200))
 
@@ -44,18 +38,18 @@ end
 
 x = CPA()
 x.leakages = [HW()]
-
-@time testDesTraces(true, BACKWARD, x)
-@time testDesTraces(true, FORWARD, CPA())
-@time testDesTraces(false, BACKWARD, CPA())
-@time testDesTraces(false, FORWARD, CPA())
+@time testDesTraces(BACKWARD, x)
+@time testDesTraces(FORWARD, CPA())
+x.postProcessor = missing
+@time testDesTraces(BACKWARD, CPA())
+@time testDesTraces(FORWARD, CPA())
 
 x = LRA()
 x.basisModel = x -> basisModelSingleBits(x, 4)
-@time testDesTraces(true, FORWARD, x, true)
+@time testDesTraces(FORWARD, x, true)
 
-@time testDesTraces(false, BACKWARD, CPA(), false, true)
-@time testDesTraces(false, FORWARD, CPA(), false, true)
+@time testDesTraces(BACKWARD, CPA(), false, true)
+@time testDesTraces(FORWARD, CPA(), false, true)
 
 
 # WIP to replace tests above with tests below

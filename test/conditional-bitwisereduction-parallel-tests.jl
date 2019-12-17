@@ -20,25 +20,27 @@ function ParallelCondReduceTest(splitmode)
 
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0)]
+    params.analysis.postProcessor = CondReduce
 
-    @everywhere begin
-      trs = InspectorTrace($fullfilename)
-      addSamplePass(trs, BitPass())
-      if $splitmode == 1
-        setPostProcessor(trs, CondReduce(SplitByTracesSliced()))
-      elseif $splitmode == 2
-        setPostProcessor(trs, CondReduce(SplitByTracesBlock()))
+    # forcing a new world, in Julia notebooks just do the
+    # @everywhere block creating the function in a different cell,
+    # in that case no let required
+    let
+      @everywhere begin
+        trs = InspectorTrace($fullfilename)
+        addSamplePass(trs, BitPass())
+        getTrs() = trs
       end
     end
 
-    rankData1 = sca(DistributedTrace(),params,1, len)
+    rankData1 = sca(DistributedTrace(getTrs,splitmode),params,1, len)
 
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0)]
+    params.analysis.postProcessor = CondReduce
 
     trs = InspectorTrace(fullfilename)
     addSamplePass(trs, BitPass())
-    setPostProcessor(trs, CondReduce())
 
     rankData2 = sca(trs,params,1, len)
 
@@ -70,24 +72,27 @@ function ParallelCondReduceTestWithInterval(splitmode)
 
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0)]
+    params.analysis.postProcessor = CondReduce
     params.updateInterval = updateInterval
     params.maxCols = 1024*4
 
-    @everywhere begin
-      trs = InspectorTrace($fullfilename)
-      addSamplePass(trs, BitPass())
-      if $splitmode == 1
-        setPostProcessor(trs, CondReduce(SplitByTracesSliced()))
-      elseif $splitmode == 2
-        setPostProcessor(trs, CondReduce(SplitByTracesBlock()))
+    # forcing a new world, in Julia notebooks just do the
+    # @everywhere block creating the function in a different cell,
+    # in that case no let required
+    let
+      @everywhere begin
+        trs = InspectorTrace($fullfilename)
+        addSamplePass(trs, BitPass())
+        getTrs() = trs
       end
     end
 
-    rankData1 = sca(DistributedTrace(),params,1, len)
+    rankData1 = sca(DistributedTrace(getTrs,splitmode),params,1, len)
     rankData2 = Vector{RankData}(undef,numberOfScas)
 
     params.analysis = CPA()
     params.analysis.leakages = [Bit(0)]
+    params.analysis.postProcessor = CondReduce
     params.updateInterval = missing
     params.maxCols = 1024*8
 
@@ -96,7 +101,6 @@ function ParallelCondReduceTestWithInterval(splitmode)
 
       trs = InspectorTrace(fullfilename)
       addSamplePass(trs, BitPass())
-      setPostProcessor(trs, CondReduce())
 
       rankData2[s] = sca(trs,params,1, len2)
     end
@@ -120,9 +124,9 @@ end
 
 @assert nworkers() > 1
 
-ParallelCondReduceTest(1)
-ParallelCondReduceTest(2)
+ParallelCondReduceTest(SplitByTracesSliced())
+ParallelCondReduceTest(SplitByTracesBlock())
 
-ParallelCondReduceTestWithInterval(1)
-ParallelCondReduceTestWithInterval(2)
+ParallelCondReduceTestWithInterval(SplitByTracesSliced())
+ParallelCondReduceTestWithInterval(SplitByTracesBlock())
 

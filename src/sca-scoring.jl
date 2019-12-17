@@ -284,11 +284,11 @@ export getTargetType
 function getTargetType(evo::RankData, phase::Int, target::Int)
   maxval = size(evo.combinedScores[phase][target])[1]-1
   local mytype
-  if maxval < 2^8
+  if maxval <= typemax(UInt8)
     mytype = UInt8
-  elseif  maxval < 2^16
+  elseif  maxval <= typemax(UInt16)
     mytype = UInt16
-  elseif  maxval < 2^32
+  elseif  maxval <= typemax(UInt32)
     mytype = UInt32
   else
     throw(ErrorException("broken"))
@@ -303,11 +303,11 @@ export getGuesses
 function getGuesses(evo::RankData, phase::Int, target::Int)
   maxval = size(evo.combinedScores[phase][target])[1]-1
   local mytype
-  if maxval < 2^8
+  if maxval <= typemax(UInt8)
     mytype = UInt8
-  elseif  maxval < 2^16
+  elseif  maxval <= typemax(UInt16)
     mytype = UInt16
-  elseif  maxval < 2^32
+  elseif  maxval <= typemax(UInt32)
     mytype = UInt32
   else
     throw(ErrorException("broken"))

@@ -19,8 +19,6 @@ function mytest()
 	# samples are intermediates, convert to "leakage" here.
   	addSamplePass(trs, x -> hw.(x))
 
-  	setPostProcessor(trs, IncrementalCorrelation())
-
   	rankdata = sca(trs,params,1,100)
 
   	key = getKey(params, rankdata)
@@ -58,8 +56,6 @@ function mytest2()
 
 	# samples are intermediates, convert to "leakage" here.
   	addSamplePass(trs, x -> hw.(x))
-
-  	setPostProcessor(trs, IncrementalCorrelation())
 
   	rankdata = nothing
 

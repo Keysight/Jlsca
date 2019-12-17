@@ -4,9 +4,10 @@
 
 mutable struct CPA <: NonIncrementalAnalysis
   leakages::Vector{Leakage}
+  postProcessor::Union{Type{CondAvg},Type{CondReduce},Missing}
 
   function CPA()
-    return new([HW()])
+    return new([HW()],CondAvg)
   end
 end
 

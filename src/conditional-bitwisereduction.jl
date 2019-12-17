@@ -23,78 +23,74 @@ mutable struct CondReduce <: Cond
   mask::Dict{Int,BitVector}
   traceIdx::Dict{Int,Dict{Int,Int}}
   globcounter::Int
-  worksplit::WorkSplit
   bitcompressedInitialized::Bool
-  usesamplescache::Bool
   samplescache::Dict{Int,Dict{Int,BitVector}}
   globalDCR::Bool
   trs::Traces
   
   function CondReduce(globalDCR=false)
-    CondReduce(NoSplit(), globalDCR)
-  end
-
-  function CondReduce(worksplit::WorkSplit, globalDCR=false)
     mask = Dict{Int,BitVector}()
     traceIdx = Dict{Int,Dict{Int,Int}}()
     # @printf("Conditional bitwise sample reduction, split %s\n", worksplit)
 
-    new(mask, traceIdx, 0, worksplit, false, true, Dict{Int,Dict{Int,BitVector}}(), globalDCR)
+    new(mask, traceIdx, 0, false, Dict{Int,Dict{Int,BitVector}}(), globalDCR)
   end
 end
 
 show(io::IO, a::CondReduce) = print(io, "Cond reduce")
+
+function init(c::CondReduce,trs::Traces)
+  c.trs = trs
+end
 
 function reset(c::CondReduce)
   c.mask = Dict{Int,BitVector}()
   c.traceIdx = Dict{Int,Dict{Int,Int}}()
   c.globcounter = 0
   c.bitcompressedInitialized = true
-  if c.usesamplescache
-    c.samplescache = Dict{Int,Dict{Int,BitVector}}()
-  end
+  c.samplescache = Dict{Int,Dict{Int,BitVector}}()
 end
 
 function getSamplesCached(c::CondReduce, idx::Int, val::Integer) 
-  if c.usesamplescache && haskey(c.samplescache, idx) && haskey(c.samplescache[idx], val)
+  if haskey(c.samplescache, idx) && haskey(c.samplescache[idx], val)
     reftrace = c.samplescache[idx][val]
   else
-    reftrace = getSamples(c.trs, c.traceIdx[idx][val])
+    error("borked implementation")
   end
 end
 
 # only works on samples of BitVector type, do addSamplePass(trs, BitPass())
 # to create this input efficiently!
-function add(c::CondReduce, trs::Traces, traceIdx::Int)
-  c.trs = trs
-  data = getData(trs, traceIdx)
+# function add(c::CondReduce, trs::Traces, traceIdx::Int)
+#   c.trs = trs
+#   data = getData(trs, traceIdx)
 
-  if length(data) == 0
-    return
-  end
+#   if length(data) == 0
+#     return
+#   end
 
-  samples = getSamples(trs, traceIdx)
+#   samples = getSamples(trs, traceIdx)
 
-  if length(samples) == 0
-    return
-  end
+#   if length(samples) == 0
+#     return
+#   end
 
+#   add(c,samples,data,traceIdx)
+# end
+
+function add(c::CondReduce,samples::AbstractVector,data::AbstractVector,traceIdx::Int)
   for idx in eachindex(data)
     val = data[idx]
 
     if !haskey(c.mask, idx)
       c.mask[idx] = trues(length(samples))
       c.traceIdx[idx] = Dict{Int,Int}()
-      if c.usesamplescache
-        c.samplescache[idx] = Dict{Int,BitVector}()
-      end
+      c.samplescache[idx] = Dict{Int,BitVector}()
     end
 
     if !haskey(c.traceIdx[idx], val)
       c.traceIdx[idx][val] = traceIdx
-      if c.usesamplescache
-        c.samplescache[idx][val] = samples
-      end
+      c.samplescache[idx][val] = samples
       continue
     end
 
@@ -108,23 +104,22 @@ end
 
 function merge(this::CondReduce, other::CondReduce)
   this.globcounter += other.globcounter
-  for (idx,dictofavgs) in other.traceIdx
+  for idx in keys(other.traceIdx)
     if !haskey(this.traceIdx, idx)
-      this.traceIdx[idx] = dictofavgs
+      this.traceIdx[idx] = other.traceIdx[idx]
       this.mask[idx] = other.mask[idx]
     else
       this.mask[idx][:] .&= other.mask[idx]
-      for (val, avg) in dictofavgs
+      for val in keys(other.traceIdx[idx])
         if val in keys(this.traceIdx[idx])
           if this.traceIdx[idx][val] != other.traceIdx[idx][val]
-            cachedreftrace = getSamples(this.trs, other.traceIdx[idx][val])
-            cachedsamples = getSamples(this.trs, this.traceIdx[idx][val])
+            cachedreftrace = getSamplesCached(other,idx,val)
+            cachedsamples = getSamplesCached(this,idx,val)
             this.mask[idx][:] .&= .!(cachedreftrace .⊻ cachedsamples)
           end
         else
-          # cachedsamples = getSamples(this.trs, other.traceIdx[idx][val])
-
           this.traceIdx[idx][val] = other.traceIdx[idx][val]
+          this.samplescache[idx][val] = other.samplescache[idx][val]
         end
       end
     end
@@ -132,25 +127,16 @@ function merge(this::CondReduce, other::CondReduce)
 end
 
 function get(c::CondReduce)
-  @assert myid() == 1
-  if !isa(c.worksplit, NoSplit)  
-    return @fetchfrom workers()[1] realget(meta(Main.trs).postProcInstance)
-  else
-    return realget(c)
-  end
-end
-
-function realget(c::CondReduce)
-  if !isa(c.worksplit, NoSplit)
-    for worker in workers()
-      if worker == c.worksplit.worker
-        continue
-      else
-        other = @fetchfrom worker meta(Main.trs).postProcInstance
-        merge(c, other)
-      end
-    end
-  end
+  # if !ismissing(trs)
+  #   for worker in workers()
+  #     if worker == myid()
+  #       continue
+  #     else
+  #       other = @fetchfrom worker meta(trs.trsfn()).postProcInstance
+  #       merge(c, other)
+  #     end
+  #   end
+  # end
 
   datas = Array[]
   reducedsamples = Matrix[]
@@ -180,9 +166,9 @@ function realget(c::CondReduce)
     (keptnondups, keptnondupsandinvcols) = stats(bc)
   end
 
-  if maxVal <= 2^8
+  if maxVal <= typemax(UInt8)
     dataType = UInt8
-  elseif maxVal <= 2^16
+  elseif maxVal <= typemax(UInt16)
     dataType = UInt16
   else
     throw(Exception("Unsupported and not recommended ;)"))

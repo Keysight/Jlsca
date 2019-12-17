@@ -18,11 +18,11 @@ function prepSKEA(results::RankData,factor::Int=100,phase::Int=1)
     nY = length(results.combinedScores[phase])
     nX = length(results.combinedScores[phase][1])
     scoresfloat = zeros(Float64, nX,nY)
-    if nX <= 2^8
+    if nX <= typemax(UInt8)
         mytype = UInt8
-    elseif  maxval <= 2^16
+    elseif  maxval <= typemax(UInt16)
         mytype = UInt16
-    elseif  maxval <= 2^32
+    elseif  maxval <= typemax(UInt32)
         mytype = UInt32
     else
         mytype = UInt

@@ -5,6 +5,9 @@ using Printf
 
 abstract type PostProcessor end
 
+export init
+init(::PostProcessor) = nothing
+
 export PostProcessor
 export getData,getSamples,writeData,writeSamples
 

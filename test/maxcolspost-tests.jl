@@ -36,7 +36,6 @@ function testCondAvg()
     maxCols = 21
 
     trs = VirtuaTrace(rand(UInt8, 16,rows), rand(Float64, cols, rows))
-    setPostProcessor(trs, CondAvg())
 
     attack = AesSboxAttack()
     analysis = CPA() 
@@ -65,7 +64,6 @@ function testIncCpa()
     maxCols = 21
 
     trs = VirtuaTrace(rand(UInt8, 16,rows), rand(Float64, cols, rows))
-    setPostProcessor(trs, IncrementalCorrelation())
 
     attack = AesSboxAttack()
     analysis = IncrementalCPA() 
@@ -96,11 +94,11 @@ function testCondReduce()
     trs = VirtuaTrace(rand(UInt8, 16,rows), rand(UInt8, cols, rows))
     addSamplePass(trs, BitPass())
 
-    setPostProcessor(trs, CondReduce())
 
     attack = AesSboxAttack()
     analysis = CPA() 
     params = DpaAttack(attack,analysis)
+    params.analysis.postProcessor = CondReduce
 
     rankData1 = sca(trs, params, 1, length(trs))
 

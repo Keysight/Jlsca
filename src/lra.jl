@@ -12,9 +12,10 @@ Default basisModel function is `basisModelSingleBits`.
 """
 mutable struct LRA <: NonIncrementalAnalysis
   basisModel::Function
+  postProcessor::Union{Type{CondAvg},Type{CondReduce},Missing}
 
   function LRA()
-    return new(basisModelSingleBits)
+    return new(basisModelSingleBits,CondAvg)
   end
 end
 

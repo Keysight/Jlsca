@@ -11,18 +11,11 @@ mutable struct CondAvg <: Cond
   averages::Dict{Int,Dict{Int,Vector{Float64}}}
   counters::Dict{Int,Dict{Int,Int}}
   globcounter::Int
-  worksplit::WorkSplit
 
   function CondAvg()
-    CondAvg(NoSplit())
-  end
-
-  function CondAvg(worksplit::WorkSplit)
     averages = Dict{Int,Dict{Int,Vector{Float64}}}()
     counters = Dict{Int,Dict{Int,Int}}()
-    # @printf("Conditional averaging, split %s\n", worksplit)
-
-    new(averages, counters, 0, worksplit)
+    new(averages, counters, 0)
   end
 end
 
@@ -41,20 +34,20 @@ function addAverage(c::CondAvg, samples::AbstractVector, average::Vector, counte
   end
 end
 
-function add(c::CondAvg, trs::Traces, traceIdx::Int)
-  data = getData(trs, traceIdx)
-  if length(data) == 0
-    return
-  end
+# function add(c::CondAvg, trs::Traces, traceIdx::Int)
+#   data = getData(trs, traceIdx)
+#   if length(data) == 0
+#     return
+#   end
 
-  samples = getSamples(trs, traceIdx)
-  if length(samples) == 0
-    return
-  end
+#   samples = getSamples(trs, traceIdx)
+#   if length(samples) == 0
+#     return
+#   end
 
-  add(c,samples,data,traceIdx)
+#   add(c,samples,data,traceIdx)
 
-end
+# end
 
 function add(c::CondAvg, samples::AbstractVector{S}, data::AbstractVector{D}, traceIdx::Int) where {S,D}
   for idx in eachindex(data)
@@ -115,27 +108,28 @@ function merge(this::CondAvg, other::CondAvg)
 end
 
 function get(c::CondAvg)
-  @assert myid() == 1
-  if !isa(c.worksplit, NoSplit)
-    for worker in workers()
-      if worker == c.worksplit.worker
-        continue
-      else
-        other = @fetchfrom worker meta(Main.trs).postProcInstance
-        merge(c, other)
-      end
-    end
-  end
-
+  # @assert myid() == 1
+  # if !ismissing(trs)
+  #   ww = workers()
+  #   for worker in ww
+  #     if worker == ww[1]
+  #       # skip this because we fetched this result into process 1 already
+  #       continue
+  #     else
+  #       other = @fetchfrom worker meta(trs.trsfn()).postProcInstance
+  #       merge(c, other)
+  #     end
+  #   end
+  # end
 
   maxVal = 0
   for k in keys(c.counters)
     maxVal = max(maxVal, findmax(collect(keys(c.counters[k])))[1])
   end
 
-  if maxVal <= 2^8
+  if maxVal <= typemax(UInt8)
     dataType = UInt8
-  elseif maxVal <= 2^16
+  elseif maxVal <= typemax(UInt16)
     dataType = UInt16
   else
     throw(ErrorException("Unsupported and not recommended ;)"))

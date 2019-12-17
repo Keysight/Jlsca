@@ -5,6 +5,9 @@
 using ..Trs
 
 import ..Trs.reset
+# no longer exported in Trs because shouldn't be called 
+# by user code anymore.
+import ..Trs.setPostProcessor
 
 export CPA,IncrementalCPA
 export Status,Direction
@@ -215,8 +218,6 @@ Once an instance is created, the following fields can be tweaked to change the b
 * `maximization`: specify a `Maximization` strategy, default depends on the analysis.
 * `maxCols`: splits up the work by considering maxCols columns of the observation matrix at a time, before feeding it into a post processor. Results per split are combined transparently. You may need to set this (to not run out of memory) for traces with lots of columns, or if you specify a large amount of leakages (for example Klemsa). 
 * `maxColsPost`: almost the same as `maxCols`, but this splits up work *after* a post processor. This is only different from `maxCols` and only useful when you're using the `CondReduce` postprocessor, since this is currently the only one that would return less columns than you put in.
-* `saveCond`: this allows you to save the output of the conditional averager or other post processor, so that you can run a different sca attack without having run all traces through the processor again. Set `saveCond` to a string, and that string will be used as a prefix for all the intermediate files dumped in this mode. See `recoverCond`.
-* `recoverCond`: this allowws you to use the previously saved conditional output with `saveCond`. Use the same string here as used with `saveCond`. You cannot have both `saveCond` and `recoverCond` set, or error will occur. You should be careful with this feature, since it may blow in your face. For example, if you have this feature enabled, adding a sample pass on a subsequent run will be discarded, since it's using the cached conditional output! Be warned!
 
 # Example
 ```
@@ -231,7 +232,6 @@ params.targetOffsets = [1,3]
 params.leakageCombinator = Sum()
 params.maximization = AbsoluteGlobalMaximization()
 params.maxCols = 200000
-params.saveCond = "myprefix"
 ```
 """
 mutable struct DpaAttack
@@ -250,8 +250,6 @@ mutable struct DpaAttack
   maximization::Union{Missing,Maximization}
   maxCols::Union{Missing,Int}
   maxColsPost::Union{Missing,Int}
-  saveCond::Union{Missing,String}
-  recoverCond::Union{Missing,String}
   # caching stuff below, not configurable, overwritten for each sca run
   targets::Vector{Vector{Target}}
   phasefn::Vector{Union{Missing,Function}}
@@ -261,7 +259,7 @@ mutable struct DpaAttack
   rankData
 
   function DpaAttack(attack::Attack, analysis::Analysis)
-    new(attack,analysis,1,missing,missing,missing,missing,missing,missing, missing, missing, Sum(), missing,missing, missing,missing,missing)
+    new(attack,analysis,1,missing,missing,missing,missing,missing,missing, missing, missing, Sum(), missing,missing, missing)
   end
 end
 
@@ -361,78 +359,20 @@ unittype(a::Attack{T}) where {T} = T
 
 export numberOfLeakages
 
-function saveToDisk(params::DpaAttack,phase::Int,target::Int,rows::UnitRange,kbsamples::AbstractArray,kbdata::AbstractArray)
-  # if !ismissing(params.saveCond)
-  #   sampleType = eltype(kbsamples)
-  #   (nrTraces,nrSamples) = size(kbsamples)
-  #   fname = params.saveCond) * "_p$(phase)_t$(target)_$(rows_")
-  #   fnamedata = fname * "data_UInt8_$(nrTraces)t.bin"
-  #   fnamesamples = fname * "samples_$(sampleType)_$(nrTraces)t.bin"
-  #   trs = SplitBinary(fnamedata, 1, fnamesamples, nrSamples, sampleType, nrTraces, true)    
-  #   for row in 1:nrTraces
-  #     data = [kbdata[row]]
-  #     samples = kbsamples[row,:]
-  #     trs[row] = (data,samples)
-  #   end
-  #   close(trs)
-  # end
-end
-
-function recoverFromDisk(params::DpaAttack,phase::Int,targetOffsets::Vector{Int},rows::UnitRange)
-    # datas = Array[]
-    # averages = Matrix[]
-
-    # for target in targetOffsets
-
-    #   dataregex = Regex(params.recoverCond) * "_p$(phase)_t$(target)_$(rows_data_(Int64|UInt64|Int32|UInt32|Float64|Float32|Int16|UInt16|Int8|UInt8)?(_[0-9]+s)?(_[0-9]+t)?\\.bin")
-    #   samplesregex = Regex(params.recoverCond) * "_p$(phase)_t$(target)_$(rows_samples_(Int64|UInt64|Int32|UInt32|Float64|Float32|Int16|UInt16|Int8|UInt8)?(_[0-9]+s)?(_[0-9]+t)?\\.bin")
-    #   datafname = nothing
-    #   samplesfname = nothing
-    #   for fname in readdir()
-    #     m = match(dataregex, fname)
-    #     if m != nothing
-    #       datafname = fname
-    #       continue
-    #     end
-    #     m = match(samplesregex, fname)
-    #     if m != nothing
-    #       samplesfname = fname
-    #       continue
-    #     end
-    #     if datafname != nothing && samplesfname != nothing
-    #       break
-    #     end
-    #   end
-
-    #   (datafname != nothing && samplesfname != nothing) || throw(ErrorException("Cannot find saved conditional output for phase $phase, target $target, rows $rows with prefix $(get(params.recoverCond))"))
-
-    #   print("Using conditional output from $datafname and $samplesfname\n")
-
-    #   trs = SplitBinary(datafname, samplesfname)
-    #   ((data,samples), eof) = readTraces(trs, 1:length(trs))
-    #   push!(datas, vec(data))
-    #   push!(averages,samples)
-    #   close(trs)
-    # end
-
-    # return (datas,averages)
-end
-
-function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Traces, firstTrace::Int, rows::UnitRange, cols::UnitRange, rankData::RankData)
+function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Traces, resettrs::Bool, firstTrace::Int, rows::UnitRange, cols::UnitRange, rankData::RankData)
 
   local kbsamples
   local kbdata
 
   targetOffsets = getTargetOffsets(params, phase)
 
-  if ismissing(params.recoverCond) 
-    ((data, samples), eof) = readTraces(trs, rows)
-    nrTraces = getCounter(trs)
-  else
-    (data,samples) = recoverFromDisk(params,phase,targetOffsets,firstTrace:rows[end])
-    nrTraces = length(firstTrace:rows[end])
+  if !ismissing(a.postProcessor) && resettrs
+    setPostProcessor(trs,a.postProcessor)
+    initPostProcessor(trs)
   end
 
+  ((data, samples), eof) = readTraces(trs, rows)
+  nrTraces = getCounter(trs)
 
   if data == nothing || samples == nothing
     return
@@ -444,7 +384,6 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
     if hasPostProcessor(trs)
       kbsamples = samples[o]
       kbdata = data[o]
-      saveToDisk(params,phase,o,firstTrace:rows[end],kbsamples,kbdata)
     else
       kbsamples = samples
       kbdata = @view data[:,o]
@@ -493,18 +432,23 @@ function attack(a::NonIncrementalAnalysis, params::DpaAttack, phase::Int, super:
   end
 end
 
-function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Traces, firstTrace::Int, rows::UnitRange, cols::UnitRange, rankData::RankData)
+function attack(a::IncrementalAnalysis, params::DpaAttack, phase::Int, super::Task, trs::Traces, resettrs::Bool, firstTrace::Int, rows::UnitRange, cols::UnitRange, rankData::RankData)
   targetOffsets = getTargetOffsets(params, phase)
   leakages = params.analysis.leakages
   targets = getTargets(params, phase)
 
 
-  if isa(trs, DistributedTrace)
-    @sync for w in workers()
-      @spawnat w init(meta(Main.trs).postProcInstance, targetOffsets, leakages, targets)
-    end
-  else
-    init(meta(trs).postProcInstance, targetOffsets, leakages, targets)
+  # if isa(trs, DistributedTrace)
+  #   @sync for w in workers()
+  #     @spawnat w init(meta(trs.trsfn()).postProcInstance, targetOffsets, leakages, targets)
+  #   end
+  # else
+  #   init(meta(trs).postProcInstance, targetOffsets, leakages, targets)
+  # end
+
+  if resettrs
+    setPostProcessor(trs, a.postProcessor)
+    initPostProcessor(trs, targetOffsets, leakages, targets)
   end
 
   (C,eof) = readTraces(trs, rows)
@@ -541,7 +485,7 @@ end
 function analysis(super::Task, params::DpaAttack, phase::Int, trs::Traces, rows::UnitRange)
     local rankData
 
-    if !ismissing(params.updateInterval) && !hasPostProcessor(trs)
+    if !ismissing(params.updateInterval) && ismissing(params.analysis.postProcessor)
         throw(ErrorException("WARNING: update interval only supported for runs with a post processor"))
     end
 
@@ -550,8 +494,6 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Traces, rows:
     # FIXME: need to pick something sane here
     maxCols = coalesce(params.maxCols, 200000)
     nrsegments = div(samplecols+maxCols-1,maxCols)
-
-    ((nrsegments > 1) && (!ismissing(params.recoverCond) || !ismissing(params.saveCond))) && throw(ErrorException("Increase params.maxCols, segmentation and saving or recovering conditional output is not supported"))
 
     i = 1
     for sr in 1:maxCols:samplecols
@@ -569,11 +511,13 @@ function analysis(super::Task, params::DpaAttack, phase::Int, trs::Traces, rows:
       stepSize = min(numberOfTraces, coalesce(params.updateInterval, numberOfTraces))
 
       rankData = params.rankData
+      resettrs = true
 
       for offset in firstTrace:stepSize:(firstTrace-1+numberOfTraces)
         interval = offset:(offset+min(stepSize, firstTrace - 1 + numberOfTraces - offset + 1)-1)
 
-        attack(params.analysis, params, phase, super, trs, firstTrace, interval, sr:srEnd, rankData)
+        attack(params.analysis, params, phase, super, trs, resettrs, firstTrace, interval, sr:srEnd, rankData)
+        resettrs = false
       end
 
       if nrsegments > 1

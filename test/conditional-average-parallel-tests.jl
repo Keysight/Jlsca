@@ -3,9 +3,7 @@
 # Author: Cees-Bart Breunesse
 
 using Test
-
-using Jlsca.Sca
-using Jlsca.Trs
+using Distributed
 @everywhere using Jlsca.Sca
 @everywhere using Jlsca.Trs
 
@@ -21,22 +19,22 @@ function ParallelCondAvgTest(splitmode)
     params.analysis = CPA()
     params.analysis.leakages = [HW()]
 
-    @everywhere begin
-      trs = InspectorTrace($fullfilename)
-      if $splitmode == 1
-        setPostProcessor(trs, CondAvg(SplitByTracesSliced()))
-      elseif $splitmode == 2
-        setPostProcessor(trs, CondAvg(SplitByTracesBlock()))
+    # forcing a new world, in Julia notebooks just do the
+    # @everywhere block creating the function in a different cell,
+    # in that case no let required
+    let
+      @everywhere begin
+        trs = InspectorTrace($fullfilename)
+        getTrs() = trs
       end
     end
 
-    rankData1 = sca(DistributedTrace(),params,1, len)
+    rankData1 = sca(DistributedTrace(getTrs,splitmode),params,1, len)
 
     params.analysis = CPA()
     params.analysis.leakages = [HW()]
 
     trs = InspectorTrace(fullfilename)
-    setPostProcessor(trs, CondAvg())
 
     rankData2 = sca(trs,params,1, len)
 
@@ -70,28 +68,28 @@ function ParallelCondAvgTestWithInterval(splitmode)
     params.updateInterval = updateInterval
     params.maxCols = 500
 
-    @everywhere begin
-      trs = InspectorTrace($fullfilename)
-      if $splitmode == 1
-        setPostProcessor(trs, CondAvg(SplitByTracesSliced()))
-      elseif $splitmode == 2
-        setPostProcessor(trs, CondAvg(SplitByTracesBlock()))
+    # forcing a new world, in Julia notebooks just do the
+    # @everywhere block creating the function in a different cell,
+    # in that case no let required
+    let
+      @everywhere begin
+        trs = InspectorTrace($fullfilename)
+        getTrs() = trs
       end
     end
 
-    rankData1 = sca(DistributedTrace(),params,1, len)
+    rankData1 = sca(DistributedTrace(getTrs,splitmode),params,1, len)
     rankData2 = Vector{RankData}(undef,numberOfScas)
 
-    params.analysis = CPA()
-    params.analysis.leakages = [HW()]
-    params.updateInterval = missing
-    params.maxCols = 440
 
     for s in 1:numberOfScas
-      len2 = min(len, updateInterval*s)
+      params.analysis = CPA()
+      params.analysis.leakages = [HW()]
+      params.updateInterval = missing
+      params.maxCols = 440
 
+      len2 = min(len, updateInterval*s)
       trs = InspectorTrace(fullfilename)
-      setPostProcessor(trs, CondAvg())
 
       rankData2[s] = sca(trs,params,1, len2)
     end
@@ -113,9 +111,9 @@ end
 
 @assert nworkers() > 1
 
-ParallelCondAvgTest(1)
-ParallelCondAvgTest(2)
+ParallelCondAvgTest(SplitByTracesSliced())
+ParallelCondAvgTest(SplitByTracesBlock())
 
-ParallelCondAvgTestWithInterval(1)
-ParallelCondAvgTestWithInterval(2)
+ParallelCondAvgTestWithInterval(SplitByTracesSliced())
+ParallelCondAvgTestWithInterval(SplitByTracesBlock())
 
