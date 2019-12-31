@@ -21,11 +21,11 @@ include("trs-bitcompress.jl")
 include("trs-virtuatrace.jl")
 include("trs-secondorder.jl")
 
-include("distributed.jl")
 include("conditional-average.jl")
 include("conditional-bitwisereduction.jl")
 # include("incremental-correlation.jl")
 
 include("trs-convert.jl")
+include("distributed.jl")
 
 end

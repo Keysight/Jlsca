@@ -183,7 +183,7 @@ const cachechunkmagic = 2^14
 function mystrategy(nrX,nrY)
   tilesY = max(1,min(128,div(nrY,Threads.nthreads())))
   tilesX = max(1,div(cachechunkmagic,tilesY))
-  cache = 32
+  cache = 32+16+16
   # @show (tilesX,tilesY,cache)
   return (tilesX,tilesY,cache)
 end

@@ -2,9 +2,21 @@
 #
 # Authors: Cees-Bart Breunesse
 
+@inline function add(c::PostProcessor,trs::Traces,idx::Int)
+      data = getData(trs,idx)
+      if length(data) == 0
+        return
+      end
 
+      samples = getSamples(trs,idx)
+      if length(samples) == 0
+        return
+      end
 
-function add(c::PostProcessor, trs::Traces, localrange, update::Function)
+      add(c,samples,data,idx)
+end
+
+function add(c::PostProcessor, trs::Traces, localrange::Tuple, update::Function)
   traceStart,traceStep,traceEnd = localrange
   rangestr = @sprintf("trace range %s", traceStart:traceStep:traceEnd)
   m = meta(trs)
@@ -19,18 +31,7 @@ function add(c::PostProcessor, trs::Traces, localrange, update::Function)
       #   Profile.clear_malloc_data()
       #   Profile.start_timer()
       # end
-      # add(c, trs, idx)
-      data = getData(trs,idx)
-      if length(data) == 0
-        continue
-      end
-
-      samples = getSamples(trs,idx)
-      if length(samples) == 0
-        continue
-      end
-
-      add(c,samples,data,idx)
+      add(c, trs, idx)
       total += 1
 
       t2 = time()
