@@ -204,46 +204,46 @@ end
 
 show(io::IO, a::InvMcOutXORIn) = print(io, "Inverse MC out, XOR'ed w/ input")
 
-mutable struct SboxOut <: Target{UInt8,UInt8,UInt8}
+struct SboxOut <: Target{UInt8,UInt8,UInt8}
   sbox::Vector{UInt8}
 end
 
-target(a::SboxOut, data::UInt8, keyByte::UInt8) = a.sbox[(data ⊻ keyByte) + 1]
+@inline target(a::SboxOut, data::UInt8, keyByte::UInt8) = @inbounds a.sbox[(data ⊻ keyByte) + 1]
 show(io::IO, a::SboxOut) = print(io, "Sbox out")
 
-mutable struct InvSboxOut <: Target{UInt8,UInt8,UInt8}
+struct InvSboxOut <: Target{UInt8,UInt8,UInt8}
   invsbox::Vector{UInt8}
 end
 
-target(a::InvSboxOut, data::UInt8, keyByte::UInt8) = a.invsbox[(data ⊻ keyByte) + 1]
+@inline target(a::InvSboxOut, data::UInt8, keyByte::UInt8) = @inbounds a.invsbox[(data ⊻ keyByte) + 1]
 show(io::IO, a::InvSboxOut) = print(io, "Inverse sbox out")
 
-mutable struct SboxOutXORIn <: Target{UInt8,UInt8,UInt8}
+struct SboxOutXORIn <: Target{UInt8,UInt8,UInt8}
   sbox::Vector{UInt8}
 end
 
-target(a::SboxOutXORIn, data::UInt8, keyByte::UInt8) = data ⊻ keyByte ⊻ a.sbox[(data ⊻ keyByte) + 1]
+target(a::SboxOutXORIn, data::UInt8, keyByte::UInt8) = @inbounds data ⊻ keyByte ⊻ a.sbox[(data ⊻ keyByte) + 1]
 show(io::IO, a::SboxOutXORIn) = print(io, "Sbox out, xor'ed w/ input")
 
-mutable struct InvSboxOutXORIn <: Target{UInt8,UInt8,UInt8}
+struct InvSboxOutXORIn <: Target{UInt8,UInt8,UInt8}
   invsbox::Vector{UInt8}
 end
 
-target(a::InvSboxOutXORIn, data::UInt8, keyByte::UInt8) =  data ⊻ keyByte ⊻ a.invsbox[(data ⊻ keyByte) + 1]
+target(a::InvSboxOutXORIn, data::UInt8, keyByte::UInt8) = @inbounds data ⊻ keyByte ⊻ a.invsbox[(data ⊻ keyByte) + 1]
 show(io::IO, a::InvSboxOutXORIn) = print(io, "Inverse Sbox out, xor'ed w/ input")
 
-mutable struct AesRoundOut <: Target{UInt16,UInt8,UInt8}
+struct AesRoundOut <: Target{UInt16,UInt8,UInt8}
   sbox::Vector{UInt8}
 end
 
-target(a::AesRoundOut, data::UInt16, keyByte::UInt8) = a.sbox[(UInt8(data & 0xff) ⊻ keyByte) + 1] ⊻ UInt8(data >> 8)
+target(a::AesRoundOut, data::UInt16, keyByte::UInt8) = @inbounds a.sbox[(UInt8(data & 0xff) ⊻ keyByte) + 1] ⊻ UInt8(data >> 8)
 show(io::IO, a::AesRoundOut) = print(io, "Sbox out, xor'ed w/ round out")
 
-mutable struct InvAesRoundOut <: Target{UInt16,UInt8,UInt8}
+struct InvAesRoundOut <: Target{UInt16,UInt8,UInt8}
   invsbox::Vector{UInt8}
 end
 
-target(a::InvAesRoundOut, data::UInt16, keyByte::UInt8) = a.invsbox[(UInt8(data & 0xff) ⊻ keyByte) + 1] ⊻ UInt8(data >> 8)
+target(a::InvAesRoundOut, data::UInt16, keyByte::UInt8) = @inbounds a.invsbox[(UInt8(data & 0xff) ⊻ keyByte) + 1] ⊻ UInt8(data >> 8)
 show(io::IO, a::InvAesRoundOut) = print(io, "Inverse Sbox out, xor'ed w/ round out")
 
 # some round functions
