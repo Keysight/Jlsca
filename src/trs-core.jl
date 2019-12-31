@@ -457,72 +457,123 @@ function readNoPostProcessTraces(trs::Traces, range::UnitRange)
   return ((allData, allSamples), eof)
 end
 
-global progress = nothing
-
-function updateProgress(x::Int)
-  global progress
-  # p = Main.getProgress()
-  p = progress
-  if p != nothing
-    update!(p, progress.counter + x)
-  end
-end
-
 function getPostProcessorResult(trs::Traces)
   return get(meta(trs).postProcInstance)
+end
+
+@inline function add(c::PostProcessor, trs::Traces, idx::Int)
+      data = getData(trs,idx)
+      if length(data) == 0
+        return
+      end
+
+      samples = getSamples(trs,idx)
+      if length(samples) == 0
+        return
+      end
+
+      add(c,samples,data,idx)
+end
+
+function add(c::PostProcessor, trs::Traces, localrange::Tuple, progressch)
+  traceStart,traceStep,traceEnd = localrange
+  rangestr = "trace range $(traceStart:traceStep:traceEnd)"
+  m = meta(trs)
+  print("Running \"$c\" on $rangestr, $(length(m.dataPasses)) data passes, $(length(m.passes)) sample passes\n")
+  counter = 0
+  try
+    t1 = time()
+    # uncomment for hot loop profiling
+    # Profile.clear_malloc_data()
+    # Profile.start_timer()
+    for idx in traceStart:traceStep:traceEnd
+      add(c,trs,idx)
+
+      counter += 1
+
+      t2 = time()
+      if t2 - t1 > 1.0
+        t1 = time()
+        put!(progressch,counter)
+        counter = 0
+      end
+    end
+    # uncomment for hot loop profiling
+    # Profile.stop_timer()
+    # Profile.print(maxdepth=20,combine=true)
+    # exit()
+  catch e
+    if !isa(e, EOFError)
+      rethrow(e)
+    else
+      print("EOF!!!!1\n")
+    end
+  end
+
+  m.tracesReturned = getGlobCounter(c)
 end
 
 function readAndPostProcessTraces(trs2::Traces, globalrange::UnitRange)
   global progress
   traceLength = length(globalrange)
 
-  # if isa(trs2, DistributedTrace)
-  #   worksplit = @fetch meta(trs.trsfn()).postProcInstance.worksplit
-  # else
-  #   worksplit = meta(trs2).postProcInstance.worksplit
-  # end
-
   if !pipe(trs2)
-    progress = Progress(traceLength, 1, @sprintf("Processing traces %s.. ", globalrange))
+    progress = Progress(traceLength, 1, "Processing traces $globalrange")
   else
-    progress = nothing
+    error("pipes are not supported anymore")
   end
 
-  # @everywhere getProgress()=$progress
+  progressch = RemoteChannel(() -> Channel{Int}(0))
 
   if isa(trs2, DistributedTrace)
-    @sync begin
-      for w in workers()
-        @async begin
-          @fetchfrom w begin
+      ww = workers()
+      futures = Vector{Future}(undef,length(ww))
+      channels = [Channel{Any}(1) for w in 1:length(ww)]
+
+      for w in eachindex(ww)
+          futures[w] = @spawnat ww[w] begin
             localrange = getWorkerRange(trs2.worksplit,globalrange)
             localtrs = trs2.trsfn()
-            add(meta(localtrs).postProcInstance, localtrs, localrange, updateProgress)
+            add(meta(localtrs).postProcInstance, localtrs, localrange, progressch)
+            myid()
           end
-        end
       end
-    end
+
+      for w in eachindex(ww)
+        @async put!(channels[w],fetch(futures[w]))
+      end
   else
+    ww = [1]
+    channels = [Channel{Any}(1) for w in 1:length(ww)]
     localrange = globalrange[1],1,globalrange[end]
-    add(meta(trs2).postProcInstance, trs2, localrange, updateProgress)
+    @async begin
+      add(meta(trs2).postProcInstance, trs2, localrange, progressch)
+      put!(channels[1],true)
+    end
   end
 
-  if progress != nothing
-    finish!(progress)
+  cnt = 0
+  done = false
+  while !done
+      yield()
+
+      while isready(progressch)
+          cnt += take!(progressch)
+          update!(progress,cnt)
+      end
+
+      done = true
+
+      for w in eachindex(ww)
+          done &= isready(channels[w])
+      end
   end
+
+  finish!(progress)
 
   ret = getPostProcessorResult(trs2)
 
-  # if isa(trs2, DistributedTrace)
-  #   worker1copy = @fetchfrom workers()[1] meta(trs2.trsfn()).postProcInstance
-  #   ret = get(worker1copy,trs2)
-  #   # ret = @fetchfrom workers()[1] get(meta(trs2.trsfn()).postProcInstance,trs2)
-  # else
-  #   ret = get(meta(trs2).postProcInstance,missing)
-  # end
-
   return (ret, true)
-
 end
 
 inIJulia() = isdefined(Main, :IJulia) && Main.IJulia.inited
