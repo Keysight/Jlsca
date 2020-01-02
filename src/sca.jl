@@ -21,6 +21,7 @@ include("lra.jl")
 include("mia.jl")
 
 include("attackaes-core.jl")
+include("attackaes-countermode.jl")
 include("attackdes-core.jl")
 include("attacksha-core.jl")
 
