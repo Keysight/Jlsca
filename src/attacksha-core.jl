@@ -36,8 +36,19 @@ function target(a::FoutZ4b, data::UInt8, keyByte::UInt8)
     return (((x & y) ⊻ (~x & keyByte)) & 0xf)
 end
 
-show(io::IO, a::FoutZ4b) = print(io, "Ch out, 4-bits")
+show(io::IO, a::FoutZ4b) = print(io, "Ch out, 4-bits in")
 guesses(a::FoutZ4b) = collect(UInt8, 0:15)
+
+mutable struct FoutZ16b <: Target{UInt16,UInt8,UInt8} end
+
+function target(a::FoutZ16b, data::UInt16, keyByte::UInt8)
+    x = UInt8(data & 0xff)
+    y = UInt8((data >> 8) & 0xff)
+    return (((x & y) ⊻ (~x & keyByte)) & 0xff)
+end
+
+show(io::IO, a::FoutZ16b) = print(io, "Ch out, 16-bits in")
+guesses(a::FoutZ16b) = collect(UInt8, 0:255)
 
 mutable struct FoutZ8b <: Target{UInt8,UInt8,UInt8} 
     y::UInt8
@@ -47,7 +58,7 @@ function target(a::FoutZ8b, x::UInt8, keyByte::UInt8)
     return (((x & a.y) ⊻ (~x & keyByte)) & 0xff)
 end
 
-show(io::IO, a::FoutZ8b) = print(io, "Ch out, 8-bits")
+show(io::IO, a::FoutZ8b) = print(io, "Ch out, 8-bits in")
 guesses(a::FoutZ8b) = collect(UInt8, 0:255)
 
 # 0-based idx, big endian order
@@ -62,21 +73,23 @@ W3(input::AbstractVector{UInt8}) = ntoh(reinterpret(UInt32, input[13:16])[1])
 
 R0(pi::AbstractVector{UInt8}) = ltoh(reinterpret(UInt32, pi[1:4])[1])
 R1(pi::AbstractVector{UInt8}) = ltoh(reinterpret(UInt32, pi[5:8])[1])
+a0rot(pi::AbstractVector{UInt8}) = ltoh(reinterpret(UInt32, pi[9:12])[1])
 
-function a0rot(pi::AbstractVector{UInt8})
-    nibbles = pi[9:16]
-    ret::UInt32 = 0
-    for i in 8:-1:1
-        ret <<= 4
-        ret |= (nibbles[i] & 0xf)
-        # nibbles[i] <<= 4
-    end
+# nibblesfuck
+# function a0rot(pi::AbstractVector{UInt8})
+#     nibbles = pi[9:16]
+#     ret::UInt32 = 0
+#     for i in 8:-1:1
+#         ret <<= 4
+#         ret |= (nibbles[i] & 0xf)
+#         # nibbles[i] <<= 4
+#     end
 
-    return ret
-end
+#     return ret
+# end
 
-b0rot(pi::AbstractVector{UInt8}) = ltoh(reinterpret(UInt32, pi[17:20])[1])
-R3(pi::AbstractVector{UInt8}) = ltoh(reinterpret(UInt32, pi[21:24])[1])
+b0rot(pi::AbstractVector{UInt8}) = ltoh(reinterpret(UInt32, pi[13:16])[1])
+R3(pi::AbstractVector{UInt8}) = ltoh(reinterpret(UInt32, pi[17:20])[1])
 
 # data per row
 function prepModAdd1(byteIdx::Int, key::UInt32, data::AbstractArray{UInt8}, initialXor::UInt32)
@@ -109,14 +122,14 @@ function prepFoutZ3(data::AbstractArray{UInt8}, state::AbstractVector{UInt8})
     t0::UInt32 = R0(state) + W0(data)
     t0rot = Sha.rotl(t0,30)
     t1::UInt32 = Sha.rotl(t0, 5) + R1(state) + W1(data)
-    ret = zeros(UInt8, 8)
+    ret = zeros(UInt16, 4)
 
-    for i in 0:7
-        shift = i*4
-        idx = i
-        ret[idx+1] = (t0rot >> shift) & 0xf
-        ret[idx+1] <<= 4
-        ret[idx+1] |= (t1 >> shift) & 0xf
+    for i in 0:3
+        shift = i*8
+        idx = i+1
+        ret[idx] = (t0rot >> shift) & 0xff
+        ret[idx] <<= 8
+        ret[idx] |= (t1 >> shift) & 0xff
     end
     return ret
 end
@@ -177,11 +190,11 @@ function getDataPass(params::Sha1InputAttack, phase::Int, phaseInput::AbstractVe
         # DPA 3 
         # no XOR attack for this one!
         roundfn = x -> prepFoutZ3(x, phaseInput)
-    elseif intIdx == 4
+    elseif intIdx == 3
         # DPA 4 
         # no XOR attack for this one!
         roundfn = x -> prepFoutZ4(x, phaseInput)
-    elseif intIdx == 5
+    elseif intIdx == 4
         # DPA 5
         if params.xor 
             roundfn = x -> [prepModAdd5(byteIdx, partialKey, x, phaseInput)]
@@ -203,7 +216,7 @@ function numberOfTargets(params::Sha1InputAttack, phase::Int)
     if (1 <= phase <= 8) || (11 <= phase <= 14)
         return 1
     elseif phase == 9
-        return 8
+        return 4
     elseif phase == 10
         return 4
     end
@@ -217,7 +230,7 @@ function getTargets(params::Sha1InputAttack, phase::Int, phaseInput::AbstractVec
             return [ModAdd()]
         end
     elseif phase == 9
-        return [FoutZ4b() for i in 1:8]
+        return [FoutZ16b() for i in 1:4]
     elseif phase == 10
         a0r = a0rot(phaseInput)
         return [FoutZ8b((a0r >> ((i-1)*8)) & 0xff) for i in 1:4]
@@ -251,19 +264,21 @@ function correctKeyMaterial(params::Sha1InputAttack, knownKey::AbstractVector{UI
     res[1] = e0 + Sha.rotl(a0,5) + Sha.Ch(b0,c0,d0) + Sha.K(0)
     res[2] = d0 + Sha.Ch(a0,Sha.rotl(b0,30),c0) + Sha.K(1)
     a0r = Sha.rotl(a0,30)
-    res[3] = 0
-    for i in 3:-1:0
-        res[3] <<= 8
-        res[3] |= ((a0r >> (i*4)) & 0xf)
-    end
-    res[4] = 0
-    for i in 7:-1:4
-        res[4] <<= 8
-        res[4] |= ((a0r >> (i*4)) & 0xf)
-    end
+    res[3] = a0r
+    # res[3] = 0
+    # nibblesfuck
+    # for i in 3:-1:0
+    #     res[3] <<= 8
+    #     res[3] |= ((a0r >> (i*4)) & 0xf)
+    # end
+    # res[4] = 0
+    # for i in 7:-1:4
+    #     res[4] <<= 8
+    #     res[4] |= ((a0r >> (i*4)) & 0xf)
+    # end
     b0r = Sha.rotl(b0,30)
-    res[5] = b0r
-    res[6] = c0 + Sha.K(2)
+    res[4] = b0r
+    res[5] = c0 + Sha.K(2)
 
     return reinterpret(UInt8, map(htol, res))
 end

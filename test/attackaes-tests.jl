@@ -76,6 +76,11 @@ function attacktester(attack,leaker,leakfuns,randfun=myrand)
         if p > 1
             phaseInput = knownkeymaterial[1:phaseDataOffset]
         end
+
+        if p > length(leakfuns)
+            error("incomplete test!")
+        end
+
         output,routput,data = leaker(key,input,attack,leakfuns[p])
         datapass = getDataPass(attack,p,phaseInput)
         rinput = datapass(data)
