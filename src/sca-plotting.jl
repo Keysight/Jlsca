@@ -39,13 +39,16 @@ struct PlotRanksEvolution end
             rankings = getRankingsEvolution(rankdata, phase, target, kb)            
             push!(xxrows,xrows)
             push!(rrankings,rankings)
-            push!(labels, "phase $phase, target $target")
+            push!(labels, "$phase / $target / $(rankings[end])")
         end
     end
     
     color := :auto
     label := reshape(labels, (1, length(labels)))
 
+    legendtitlefonthalign = :left
+    legendtitlefontsize := 8
+    legendtitle := "phase / target / final rank"
     ylabel := "rank"
     xlabel --> "#traces"
     title --> "rank evolution"
