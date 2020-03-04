@@ -170,15 +170,6 @@ function mcxorattacktest(mode,keyLength,direction,leakfuns)
     attacktester(attack,(a,b,c,d)->aesleak(a,b,c,d,true),leakfuns,mcrand) 
 end
 
-# @time testAesTraces(true, BACKWARD, CPA())
-# @time testAesTraces(true, FORWARD, CPA())
-# @time testAesTraces(false, BACKWARD, CPA())
-# @time testAesTraces(false, FORWARD, CPA())
-# @time testAesTraces(true, FORWARD, LRA(), true)
-
-# @time testAesTraces(false, BACKWARD, CPA(),false,true)
-# @time  testAesTraces(false, FORWARD, CPA(),false,true)
-
 const m = reshape(collect(1:16), (4,4))
 
 roundattacktest(CIPHER,KL128,FORWARD,[(x,y,z)->lfxor(x,y,z,"r0.input","r1.s_row",InvShiftRows(m))])
@@ -259,27 +250,35 @@ sboxxorattacktest(EQINVCIPHER,KL256,FORWARD,[(x,y,z)->lfxor(x,y,z,"r1.istart","r
 sboxxorattacktest(EQINVCIPHER,KL256,BACKWARD,[(x,y,z)->lfxor(x,y,z,"r14.istart","r14.is_box",InvShiftRows(m)),(x,y,z)->lfxor(x,y,z,"r13.istart","r13.is_box",InvShiftRows(m))])
 
 
-function mclfcipher(label,state,leakstate,t,x=false)
+function mclfcipher(label,state,leakstate,t,x=false,roundmode=false)
+    @assert !(x && roundmode)
     # print(label,"\t", bytes2hex(state),"\n")
-    if label == "r1.s_row"
+    if label == "r0.input" 
+        if roundmode
+            leakstate .= state
+        end
+    elseif label == "r1.s_row"
+        if roundmode
+            input = copy(leakstate)
+        end
         leakstate .= state
-        leakstate[[i for i in t:4:16]] .= 0
+        leakstate[setdiff(1:16,t:4:16)] .= 0
         leakstate[:] = MixColumns(leakstate)
+        
         if x
-            input = similar(state)
-            input[:] = state
+            input = copy(state)
             input[setdiff(1:4,t),:] .= 0
             leakstate .⊻= input
+        elseif roundmode
+            leakstate .⊻= input
         end
-    elseif label == "r1.m_col"
-        leakstate .⊻= state
+
         leakstate[:] = circshift(leakstate,(0,(t-1)))
-        # print("prediction: ",bytes2hex(leakstate),"\n")
-        # leakstate[:] = InvShiftRows(leakstate)
     end
 
     return state
 end
+
 
 mcattacktest(CIPHER,KL128,FORWARD,[(x,y,z)->mclfcipher(x,y,z,1),
                                    (x,y,z)->mclfcipher(x,y,z,2),
@@ -291,25 +290,43 @@ mcxorattacktest(CIPHER,KL128,FORWARD,[(x,y,z)->mclfcipher(x,y,z,1,true),
                                       (x,y,z)->mclfcipher(x,y,z,3,true),
                                       (x,y,z)->mclfcipher(x,y,z,4,true)])
 
-function mclfinvcipher(label,state,leakstate,t,x=false)
+
+function mcroundattacktest(mode,keyLength,direction,leakfuns)
+    attack = AesMCRoundAttack()
+    attack.mode = mode
+    attack.keyLength = keyLength
+    attack.direction = direction
+
+    attacktester(attack,(a,b,c,d)->aesleak(a,b,c,d,true),leakfuns,mcrand) 
+end
+
+mcroundattacktest(CIPHER,KL128,FORWARD,[(x,y,z)->mclfcipher(x,y,z,1,false,true),
+                                        (x,y,z)->mclfcipher(x,y,z,2,false,true),
+                                        (x,y,z)->mclfcipher(x,y,z,3,false,true),
+                                        (x,y,z)->mclfcipher(x,y,z,4,false,true)])
+
+function mclfinvcipher(label,state,leakstate,t,x=false,roundmode=false)
+    @assert !(x && roundmode)
     # print(label,"\t", bytes2hex(state),"\n")
-    if label == "r1.is_box"
+    if label == "r0.iinput" && roundmode
         leakstate .= state
-        leakstate[[i for i in t:4:16]] .= 0
+    elseif label == "r1.is_box"
+        if roundmode
+            input = copy(leakstate)
+        end
+        leakstate .= state
+        leakstate[setdiff(1:16,t:4:16)] .= 0
         leakstate[:] = InvMixColumns(leakstate)
         if x
             input = similar(state)
             input[:] = state
             input[setdiff(1:4,t),:] .= 0
             leakstate .⊻= input
+        elseif roundmode
+            leakstate .⊻= input
         end
-    elseif label == "r1.ik_sch"
-        leakstate .⊻= InvMixColumns(state)
-    elseif label == "r2.istart"
-        leakstate .⊻= state
+
         leakstate[:] = circshift(leakstate,(0,-(t-1)))
-        # print("prediction:\t",bytes2hex(leakstate),"\n")
-        # leakstate[:] = InvShiftRows(leakstate)
     end
 
     return state
@@ -325,24 +342,33 @@ mcxorattacktest(INVCIPHER,KL128,FORWARD,[(x,y,z)->mclfinvcipher(x,y,z,1,true),
                                          (x,y,z)->mclfinvcipher(x,y,z,3,true),
                                          (x,y,z)->mclfinvcipher(x,y,z,4,true)])
 
+mcroundattacktest(INVCIPHER,KL128,FORWARD,[(x,y,z)->mclfinvcipher(x,y,z,1,false,true),
+                                           (x,y,z)->mclfinvcipher(x,y,z,2,false,true),
+                                           (x,y,z)->mclfinvcipher(x,y,z,3,false,true),
+                                           (x,y,z)->mclfinvcipher(x,y,z,4,false,true)])
 
-function mclfeqinvcipher(label,state,leakstate,t,x=false)
+function mclfeqinvcipher(label,state,leakstate,t,x=false,roundmode=false)
+    @assert !(x && roundmode)
     # print(label,"\t", bytes2hex(state),"\n")
-    if label == "r1.is_row"
+    if label == "r0.iinput" && roundmode
         leakstate .= state
-        leakstate[[i for i in t:4:16]] .= 0
+    elseif label == "r1.is_row"
+        if roundmode
+            input = copy(leakstate)
+        end
+        leakstate .= state
+        leakstate[setdiff(1:16,t:4:16)] .= 0
         leakstate[:] = InvMixColumns(leakstate)
         if x
             input = similar(state)
             input[:] = state
             input[setdiff(1:4,t),:] .= 0
             leakstate .⊻= input
+        elseif roundmode
+            leakstate .⊻= input
         end
-    elseif label == "r1.im_col"
-        leakstate .⊻= state
+
         leakstate[:] = circshift(leakstate,(0,-(t-1)))
-        # print("prediction: ",bytes2hex(leakstate),"\n")
-        # leakstate[:] = InvShiftRows(leakstate)
     end
 
     return state
@@ -358,3 +384,7 @@ mcxorattacktest(EQINVCIPHER,KL128,FORWARD,[(x,y,z)->mclfeqinvcipher(x,y,z,1,true
                                            (x,y,z)->mclfeqinvcipher(x,y,z,3,true),
                                            (x,y,z)->mclfeqinvcipher(x,y,z,4,true)])
 
+mcroundattacktest(EQINVCIPHER,KL128,FORWARD,[(x,y,z)->mclfeqinvcipher(x,y,z,1,false,true),
+                                             (x,y,z)->mclfeqinvcipher(x,y,z,2,false,true),
+                                             (x,y,z)->mclfeqinvcipher(x,y,z,3,false,true),
+                                             (x,y,z)->mclfeqinvcipher(x,y,z,4,false,true)])
