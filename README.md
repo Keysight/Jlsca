@@ -29,11 +29,15 @@ Because it's free, fast and versatile (most of the time)!
 # Who wrote it?
 
 Initially started by me (Cees-Bart Breunesse) and Ilya Kizhvatov (whose [pysca](https://github.com/ikizhvatov/pysca) I shamelessly used as a baseline). Ruben Muijrers contributed the bit compression for whiteboxes used in conditional bitwise sample reduction. Also thanks to Albert Spruyt for ideas and suggestions. Parts of Jlsca's codebase were funded by the [REASSURE project](https://reassure.eu/). 
-<a href="https://reassure.eu/" target="_blank">
-	<img src="https://reassure.eu/wp-content/uploads/2017/10/Plan-de-travail-1-copie-6.png" alt="REASSURE Logo", align="right">
-</a>
 
 This toolbox is not officially supported or maintained by Riscure. If it crashes or you have feature requests, please make contact through Github where this code is hosted, write an issue there, or do a pull request ;-)
+
+<a name="logo"/>
+<div align="center">
+<a href="https://reassure.eu/" target="_blank">
+<img src="hhttps://reassure.eu/wp-content/uploads/2017/10/Plan-de-travail-1-copie-6.png" alt="REASSURE Logo"></img>
+</a>
+</div>
 
 # Installation
 
