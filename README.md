@@ -35,7 +35,7 @@ This toolbox is not officially supported or maintained by Riscure. If it crashes
 <a name="logo"/>
 <div align="center">
 <a href="https://reassure.eu/" target="_blank">
-<img src="hhttps://reassure.eu/wp-content/uploads/2017/10/Plan-de-travail-1-copie-6.png" alt="REASSURE Logo"></img>
+<img src="https://reassure.eu/wp-content/uploads/2017/10/Plan-de-travail-1-copie-6.png" alt="REASSURE Logo"></img>
 </a>
 </div>
 
