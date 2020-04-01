@@ -24,15 +24,20 @@ Then, not really that related to this toolbox, but I've been playing with a Pico
 
 # Why would I want it?
 
-Because it's free!
+Because it's free, fast and versatile (most of the time)!
 
 # Who wrote it?
 
-It's written for fun by me (Cees-Bart Breunesse) and Ilya Kizhvatov (whose [pysca](https://github.com/ikizhvatov/pysca) I shamelessly used as a baseline). Ruben Muijrers contributed the bit compression for whiteboxes used in conditional bitwise sample reduction. This toolbox is not a Riscure product, and Riscure does not support or maintain this code. If it crashes or you have feature requests, Github allows you to contact the authors, or you do a pull request ;-) It's the first code I ever wrote in Julia so if you have comments about how to make it faster or less of a hack (try the parallelization code), by all means contact me.
+Initially started by me (Cees-Bart Breunesse) and Ilya Kizhvatov (whose [pysca](https://github.com/ikizhvatov/pysca) I shamelessly used as a baseline). Ruben Muijrers contributed the bit compression for whiteboxes used in conditional bitwise sample reduction. Also thanks to Albert Spruyt for ideas and suggestions. Parts of Jlsca's codebase were funded by the [REASSURE project](https://reassure.eu/). 
+<a href="https://reassure.eu/" target="_blank">
+	<img src="https://reassure.eu/wp-content/uploads/2017/10/Plan-de-travail-1-copie-6.png" alt="REASSURE Logo", align="right">
+</a>
+
+This toolbox is not officially supported or maintained by Riscure. If it crashes or you have feature requests, please make contact through Github where this code is hosted, write an issue there, or do a pull request ;-)
 
 # Installation
 
-1. Install Julia (1.0.2) is tested, everything prior is *no longer compatible*) and make sure the `julia` executable is in your path (notably for Windows users). Start he Julia REPL by executing `julia`.
+1. Install Julia (1.3.1) is tested, everything prior is *no longer compatible*) and make sure the `julia` executable is in your path (notably for Windows users). Start he Julia REPL by executing `julia`.
 
 2. In the REPL type `using Pkg; Pkg.add(PackageSpec(url="https://github.com/Riscure/Jlsca"))`
 
