@@ -8,6 +8,64 @@ export Sha1InputAttack,Sha1OutputAttack
 
 abstract type Sha1Attack <: Attack{UInt8} end
 
+"""
+The attack is the same as described in Section 3.4 in this [paper](https://link.springer.com/chapter/10.1007/978-3-319-25915-4_19) by Belaid and others.
+
+We're going to take a look at SHA1 HMAC using the input. The key itself cannot be recovered since there is no differential data being mixed with the key. The two SHA1 states themselves are sufficient to create arbitrary HMACs. One can also attack the outer SHA1 using an output attack, but this is not shown here (although [Jlsca](https://github.com/Riscure/Jlsca) implements this attack too). We'll only be looking at the inner SHA1.
+
+To explain this attack, we first define some terms:
+* a0,b0,c0,d0,e0: the 160-bit SHA1 state we are to recover, in 5 32-bit numbers
+* W0 - W3: the attacker controlled and known 32-bit inputs
+* T0-T3: the value of T for rounds 0-3
+* F0-F3: the output value of the F function for rounds 0-3
+* Rot(x,a): rotates x left by a bits
+* Ch(a,b,c) = (a & b) XOR (~a & c)
+
+We then roll out first 4 rounds of the inner SHA1 loop in the terms defined above (constants omitted):
+```
+T0 = Rot(a0, 5) + Ch(b0, c0, d0) + e0 + W0
+F0 = Ch(b0, c0, d0)
+
+T1 = Rot(T0, 5) + Ch(a0, Rot(b0, 30), c0) + d0 + W1
+F1 = Ch(a0, Rot(b0, 30), c0)
+
+T2 = Rot(T1, 5) + Ch(T0, Rot(a0, 30), Rot(b0, 30)) + c0 + W2
+F2 = Ch(T0, Rot(a0, 30), Rot(b0, 30))
+
+T3 = Rot(T2, 5) + Ch(T1, Rot(T0, 30), Rot(a0, 30)) + Rot(b0, 30) + W3
+F3 = Ch(T1, Rot(T0, 30), Rot(a0, 30))
+```
+
+The SHA1 input attack steps are then:
+1. DPA attack on 32-bit modular addition to guess "Rot(a0, 5) + Ch(b0, c0, d0)" and predict "T0" since we know "W0" 
+2. DPA attack on 32-bit modular addition to guess "Ch(a0, Rot(b0, 30), c0) + d0" and predict "T1" since we know "W1" and "Rot(T0, 5)" 
+3. DPA attack on Ch function to guess "Rot(a0, 30)" and predict "F3" since we know "T1" and "Rot(T0, 30)" 
+4. DPA attack on Ch function to guess "Rot(b0, 30)" and predict "F2" since we know "T0" and "Rot(a0, 30)"
+5. DPA attack on 32-bit modular addition to guess "c0" and predict "T2" since we know "Rot(T1, 5) + Ch(T0, Rot(a0, 30), Rot(b0, 30))" and "W2" 
+
+These 5 attacks allow us to recover the secret SHA1 state a0,b0,c0,d0,e0.  DPA attacks 1-5 are recovering 32-bit numbers and in order to enumerate the guesses we need to split the attacks up in smaller (typically 8-bits or less) attack so that the key space can be enumerated. How to split up the attacks is described in this [paper](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.94.7333&rep=rep1&type=pdf) by Lemke, Schramm and Paar. Note that DPA attack n depends on the output of attack n-1 for n > 1. In Jlsca terms we'd call these attack *phases*. For DPA 3 and 4 multiple parts of the secret can be recovered simulteaneously since they're independent. Within a *phase* you can therefore have multiple *targets*. 
+
+In Jlsca, the SHA1 attack is split up in 14 phases and targets as follows:
+
+* Phase 1, target 1: byte 0 of DPA 1
+* Phase 2, target 1: byte 1 of DPA 1
+* Phase 3, target 1: byte 2 of DPA 1
+* Phase 4, target 1: byte 3 of DPA 1
+* Phase 5, target 1: byte 0 of DPA 2
+* Phase 6, target 1: byte 1 of DPA 2
+* Phase 7, target 1: byte 2 of DPA 2
+* Phase 8, target 1: byte 3 of DPA 2
+* Phase 9, targets 1-4, 4 bytes of DPA 3
+* Phase 10, targets 1-4, 4 bytes of DPA 4
+* Phase 11, target 1: byte 0 of DPA 5
+* Phase 12, target 1: byte 1 of DPA 5
+* Phase 13, target 1: byte 2 of DPA 5
+* Phase 14, target 1: byte 3 of DPA 5
+
+Note also that this attack only uses the first 12 bytes of the input! (W0, W1 and W2)
+
+Go see https://github.com/ikizhvatov/jlsca-tutorials/blob/master/hmacsha1pinata.ipynb for an application of this attack on a real target!!!
+"""
 mutable struct Sha1InputAttack <: Sha1Attack
   xor::Bool
   xorForT0::UInt32
