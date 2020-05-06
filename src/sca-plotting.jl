@@ -89,11 +89,17 @@ struct PlotScoresEvolution end
         scores = getScoresEvolution(rankdata, phase, target, leakage)
     end
     cands = size(scores)[1]
-    
+
     if !ismissing(params.knownKey) 
         kb = getCorrectKey(params,phase,target)
+        if combined
+            rankings = getRankingsEvolution(rankdata, phase, target, kb)
+        else
+            rankings = getRankingsEvolution(rankdata, phase, target, leakage, kb)
+        end
+
         color := reshape([x == kb + 1 ? :red : :grey for x in 1:cands],(1,cands))
-        label := reshape([x == kb + 1 ? "correct" : x == kb + 2 ? "incorrect" : "" for x in 1:cands],(1,cands))
+        label := reshape([x == kb + 1 ? "correct ($(rankings[end]))" : x == kb + 2 ? "incorrect" : "" for x in 1:cands],(1,cands))
     else
         if combined
             finalscores = getScores(rankdata, phase, target)
@@ -104,9 +110,23 @@ struct PlotScoresEvolution end
         color := reshape([x in ranked ? :auto : :grey for x in 1:cands],(1,cands))
         label := reshape([x in ranked ? "0x$(string(x-1, base=16))" : "" for x in 1:cands],(1,cands))
     end
-    ylabel := (rankdata.nrLeakages > 1 && combined ? "$(params.leakageCombinator) of scores" : "scores")
+
+    if rankdata.nrLeakages > 1
+        if combined
+            ylabel := "$(params.leakageCombinator) of scores"
+        else
+            if isdefined(params.analysis,:leakages)
+                ylabel := "$(params.analysis.leakages[leakage]) score"
+            else
+                ylabel := "score $leakage"
+            end
+        end
+    else
+        ylabel := "score"
+    end
+
     xlabel := "#traces"
-    title := "score evolution phase $phase, target $target"
+    title := "$(params.analysis) evolution phase $phase, target $target"
     xrows,scores'
 end
 
