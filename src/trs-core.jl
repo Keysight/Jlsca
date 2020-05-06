@@ -89,12 +89,6 @@ end
 
 pass(a::SimpleFunctionPass, x::AbstractVector, idx::Int) = a.fn(x) 
 
-# overloading these to implement an iterator
-# start(trs::Traces) = 1
-# done(trs::Traces, idx) = pipe(trs) ? false : (idx > length(trs))
-# next(trs::Traces, idx) = (trs[idx], idx+1)
-# endof(trs::Traces) = length(trs)
-
 export nrsamples
 
 nrsamples(trs::Traces, post::Bool) = (updateViews(trs);meta(trs).lengths[post ? end : 1])
@@ -410,9 +404,7 @@ function readNoPostProcessTraces(trs::Traces, range::UnitRange)
 
   traceLength = length(range)
 
-  if !pipe(trs)
-    progress = Progress(traceLength-1, 1, "Processing traces .. ")
-  end
+  progress = Progress(traceLength-1, 1, "Processing traces .. ")
 
   for idx in range
     (data, samples) = trs[idx]
@@ -440,9 +432,7 @@ function readNoPostProcessTraces(trs::Traces, range::UnitRange)
     # valid trace, bump read counter
     readCount += 1
 
-    if !pipe(trs)
-      update!(progress, idx)
-    end
+    update!(progress, idx)
   end
 
   meta(trs).tracesReturned += readCount
@@ -510,12 +500,8 @@ function readAndPostProcessTraces(trs2::Traces, globalrange::UnitRange)
   global progress
   traceLength = length(globalrange)
 
-  if !pipe(trs2)
-    progress = Progress(traceLength, 1, "Processing traces $globalrange ..")
-  else
-    error("pipes are not supported anymore")
-  end
-
+  progress = Progress(traceLength, 1, "Processing traces $globalrange ..")
+  
   progressch = RemoteChannel(() -> Channel{Int}(0))
 
   if isa(trs2, DistributedTrace)
@@ -554,6 +540,17 @@ function readAndPostProcessTraces(trs2::Traces, globalrange::UnitRange)
         add(meta(trs2).postProcInstance, trs2, localrange, progressch)
         put!(channels[1],true)
       catch e
+        print(e)
+        print("\n")
+        print("\n")
+        print("\n")
+        print("\n")
+        print("\n")
+                      for (exc, bt) in Base.catch_stack()
+                   showerror(stdout, exc, bt)
+                   println()
+               end
+
         Base.throwto(ct, e)
       finally
         put!(progressch,0)
@@ -574,7 +571,7 @@ function readAndPostProcessTraces(trs2::Traces, globalrange::UnitRange)
       end
   end
 
-  finish!(progress)
+  # finish!(progress)
 
   ret = getPostProcessorResult(trs2)
 

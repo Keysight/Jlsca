@@ -34,7 +34,6 @@ end
 
 import Base.show
 show(io::IO, trs::VirtuaTrace) = print(io, "VirtuaTrace")
-pipe(trs::VirtuaTrace) = false
 length(trs::VirtuaTrace) = trs.ndata == trs.nsamples ? trs.nsamples : error("wrong state")
 nrsamples(trs::VirtuaTrace) = trs.sampleswidth
 sampletype(trs::VirtuaTrace{TD,TS}) where {TD,TS} = Vector{TS}()

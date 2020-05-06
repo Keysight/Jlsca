@@ -70,8 +70,6 @@ mutable struct SplitBinary <: Traces
   end
 end
 
-pipe(trs::SplitBinary) = false
-
 length(trs::SplitBinary) = trs.numberOfTraces
 nrsamples(trs::SplitBinary) = trs.numberOfSamplesPerTrace
 sampletype(trs::SplitBinary) = Vector{trs.sampleType}()

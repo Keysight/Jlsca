@@ -69,8 +69,6 @@ mutable struct DistributedTrace <: Traces
 end
 
 length(trs::DistributedTrace) = @fetch length(trs.trsfn())
-pipe(trs::DistributedTrace) = false
-
 nrsamples(trs::DistributedTrace, post::Bool) = @fetch nrsamples(trs.trsfn(),post)
 nrsamples(trs::DistributedTrace) = @fetch nrsamples(trs.trsfn())
 sampletype(trs::DistributedTrace) = @fetch sampletype(trs.trsfn())

@@ -20,7 +20,7 @@ function testInspectorTrace()
   allSamples = reshape([rand(Int16) for i in 1:(numberOfSamplesPerTrace*numberOfTraces)], (numberOfTraces,  numberOfSamplesPerTrace))
   allData = reshape([rand(UInt8) for i in 1:(dataSpace*numberOfTraces)], (numberOfTraces, dataSpace))
 
-  trs = InspectorTrace(traceFilename, dataSpace, sampleType, numberOfSamplesPerTrace, numberOfTitlebytes)
+  trs = InspectorTrace(traceFilename, dataSpace, sampleType, numberOfSamplesPerTrace, titleSpace=numberOfTitlebytes)
 
   for i in randperm(numberOfTraces)
     trs[i] = (allData[i,:], allSamples[i,:])
@@ -59,7 +59,7 @@ function testInspectorTraceRanges()
   allSamples = reshape([rand(sampleType) for i in 1:(numberOfSamplesPerTrace*numberOfTraces)], (numberOfTraces,  numberOfSamplesPerTrace))
   allData = reshape([rand(UInt8) for i in 1:(dataSpace*numberOfTraces)], (numberOfTraces, dataSpace))
 
-  trs = InspectorTrace(traceFilename, dataSpace, sampleType, numberOfSamplesPerTrace, numberOfTitlebytes)
+  trs = InspectorTrace(traceFilename, dataSpace, sampleType, numberOfSamplesPerTrace; titleSpace=numberOfTitlebytes)
 
   for i in randperm(numberOfTraces)
     trs[i] = (allData[i,:], allSamples[i,:])

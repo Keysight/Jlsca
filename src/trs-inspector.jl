@@ -24,24 +24,33 @@ mutable struct InspectorTrace <: Traces
   writeable::Bool
   lengthPosition::Int
   readrangecheckonce::Bool
+  scaleX::Union{Missing,Float32}
+  offsetX::Union{Missing,Int32}
   meta::MetaData
 
   # to open an existing file
   function InspectorTrace(filename::String)
-    (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, fileDescriptor) = readInspectorTrsHeader(filename)
-    new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, false, lengthPosition, true, MetaData())
+    (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, fileDescriptor, scaleX, offsetX) = readInspectorTrsHeader(filename)
+    new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, false, lengthPosition, true, scaleX, offsetX, MetaData())
   end
 
   # to create a new one
-  function InspectorTrace(filename::String, dataSpace::Int, sampleType::Type, numberOfSamplesPerTrace::Int)
-    return InspectorTrace(filename,dataSpace,sampleType,numberOfSamplesPerTrace,0)
-  end
+  # function InspectorTrace(filename::String, dataSpace::Int, sampleType::Type, numberOfSamplesPerTrace::Int)
+  #   return InspectorTrace(filename,dataSpace,sampleType,numberOfSamplesPerTrace,0)
+  # end
 
-  function InspectorTrace(filename::String, dataSpace::Int, sampleType::Type, numberOfSamplesPerTrace::Int, titleSpace::Int)
+  function InspectorTrace(
+    filename::String, 
+    dataSpace::Int, 
+    sampleType::Type, 
+    numberOfSamplesPerTrace::Int;
+    titleSpace::Int=0,
+    scaleX::Union{Missing,Float32}=missing,
+    offsetX::Union{Missing,Int32}=missing)
     !isfile(filename) || throw(ErrorException(@sprintf("file %s exists!", filename)))
 
-    (titleSpace, traceBlockPosition, lengthPosition, fileDescriptor) = writeInspectorTrsHeader(filename, dataSpace, sampleType, numberOfSamplesPerTrace, titleSpace)
-    new(titleSpace, 0, dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, true, lengthPosition, true, MetaData())
+    (titleSpace, traceBlockPosition, lengthPosition, fileDescriptor) = writeInspectorTrsHeader(filename, dataSpace, sampleType, numberOfSamplesPerTrace, titleSpace, scaleX, offsetX)
+    new(titleSpace, 0, dataSpace, sizeof(sampleType), sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, true, lengthPosition, true, scaleX, offsetX, MetaData())
   end
 end
 
@@ -57,6 +66,8 @@ const TitleSpace = 0x45
 const TitleSpaceLength = 1
 const GlobalTitleSpace = 0x46
 const GlobalTitleSpaceLength = 4
+const OffsetX = 0x48
+const ScaleX = 0x4b
 
 const Description = 0x47
 
@@ -69,9 +80,6 @@ const CodingByte = 0x01
 const CodingShort = 0x02
 const CodingInt = 0x04
 const CodingFloat = 0x14
-
-pipe(trs::InspectorTrace) = isa(trs.fileDescriptor, Base.PipeEndpoint)
-
 
 # hack
 import Base.skip
@@ -116,6 +124,8 @@ function readInspectorTrsHeader(filename)
       numberOfSamplesPerTrace = 0
       traceBlockPosition = 0
       lengthPosition = 0
+      scaleX = missing
+      offsetX = missing
 
       # if verbose
       #   if seekable
@@ -171,9 +181,13 @@ function readInspectorTrsHeader(filename)
             sampleType = UInt8
             sampleSpace = 1
           end
+        elseif tag == ScaleX
+          scaleX = ltoh(read(f,Float32))
+        elseif tag == OffsetX
+          offsetX = ltoh(read(f,Int32))
         else
           # if verbose
-            println("[x] Skipping unknown tag $tag with length $x @ position $mypos")
+            println("[x] Skipping unknown tag 0x$(string(tag,base=16)) with length $x @ position $mypos")
           # end
           read(f, x)
         end
@@ -181,7 +195,7 @@ function readInspectorTrsHeader(filename)
 
       @printf("Opened %s, #traces %s, #samples %d (%s), #data %d%s\n", filename, ismissing(numberOfTraces) ? "unknown" : @sprintf("%d", numberOfTraces), numberOfSamplesPerTrace, sampleType, dataSpace, titleSpace > 0 ? ", #title $titleSpace" : "")
 
-      return (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, f)
+      return (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, f, scaleX, offsetX)
   catch e
       close(f)
       rethrow(e)
@@ -304,6 +318,21 @@ function readSamples(trs::InspectorTrace, idx::Int, r::UnitRange)
   return samples
 end
 
+export getXrange
+
+function getXrange(trs::InspectorTrace)
+  xrange = zeros(Float64,nrsamples(trs))
+  xoffset = trs.offsetX
+  xstep = trs.scaleX
+
+  xrange[1] =  xoffset * xstep + .5 * xstep
+  for i in 2:nrsamples(trs)
+    xrange[i] = xrange[i-1] + xstep
+  end
+
+  return xrange
+end
+
 # write samples for a single trace into an Inspector trace set
 function writeSamples(trs::InspectorTrace, idx, samples::AbstractVector)
   trs.numberOfSamplesPerTrace == length(samples) || throw(ErrorException(@sprintf("wrong samples length %d, expecting %d", length(samples), trs.numberOfSamplesPerTrace)))
@@ -330,7 +359,7 @@ function writeSamples(trs::InspectorTrace, idx, samples::AbstractVector)
   return samples
 end
 
-function writeInspectorTrsHeader(filename::String, dataSpace::Int, sampleType::Type, numberOfSamplesPerTrace::Int, titleSpace::Int)
+function writeInspectorTrsHeader(filename::String, dataSpace::Int, sampleType::Type, numberOfSamplesPerTrace::Int, titleSpace::Int, scaleX::Union{Missing,Float32}, offsetX::Union{Missing,Int32})
 
   sampleCoding = Union
   if sampleType == UInt8 || sampleType == Int8
@@ -375,8 +404,26 @@ function writeInspectorTrsHeader(filename::String, dataSpace::Int, sampleType::T
   write(fd, convert(UInt8, NumberOfSamplesPerTraceLength))
   write(fd, htol(convert(UInt32, numberOfSamplesPerTrace)))
 
+  if !ismissing(scaleX)
+    write(fd, convert(UInt8, ScaleX))
+    write(fd, convert(UInt8, 4))
+    write(fd, htol(scaleX))
+  end
+
+  if !ismissing(offsetX)
+    write(fd, convert(UInt8, OffsetX))
+    write(fd, convert(UInt8, 4))
+    write(fd, htol(offsetX))
+  end
+
+  # hello = codeunits("File created Jlsca!!1!")
+  # write(fd, 0x47 |> UInt8)
+  # write(fd, length(hello) |> UInt8)
+  # write(fd, hello)
+
   write(fd, convert(UInt8, NumberOfTraces))
   write(fd, convert(UInt8, NumberOfTracesLength))
+
   lengthPosition = position(fd)
   write(fd, htol(convert(UInt32, 0)))
 
