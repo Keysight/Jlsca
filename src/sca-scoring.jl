@@ -120,7 +120,10 @@ function add!(this::RankData, other::RankData)
   end
 end
 
-function lazyinit(a::RankData, phase::Int, target::Int, guesses::Int, leakage::Int, nrConsumedRows::Int, nrConsumedCols::Int, nrRows::Int, nrCols::Int)
+function lazyinit(a::RankData, phase::Int, target::Int, C::AbstractArray{Float64,2}, leakage::Int, nrConsumedRows::Int, nrConsumedCols::Int, nrRows::Int, nrCols::Int)
+
+  (samples,guesses) = size(C)
+
   if !(phase in keys(a.nrConsumedRows))
     a.nrConsumedRows[phase] = BitSet()
     a.nrConsumedCols[phase] = zeros(Int, a.intervals)
@@ -129,6 +132,10 @@ function lazyinit(a::RankData, phase::Int, target::Int, guesses::Int, leakage::I
     a.combinedScores[phase] = Dict{Int, Matrix{Float64}}()
     a.scores[phase] = Dict{Int, Dict{Int, Matrix{Float64}}}()
     a.offsets[phase] = Dict{Int, Dict{Int, Matrix{Int}}}()
+    if a.keepraw
+      a.raw = Dict{Int,Dict{Int,Dict{Int,Dict{Int,Matrix{Float64}}}}}()
+      a.raw[phase] = Dict{Int,Dict{Int,Dict{Int,Matrix{Float64}}}}()
+    end
   end
 
   push!(a.nrConsumedRows[phase], nrConsumedRows)
@@ -139,13 +146,19 @@ function lazyinit(a::RankData, phase::Int, target::Int, guesses::Int, leakage::I
     a.offsets[phase][target] = Dict{Int,Matrix{Int}}()
     a.nrRows[phase][target] = zeros(Int, a.intervals)
     a.nrCols[phase][target] = zeros(Int, a.intervals)
+    if a.keepraw
+      a.raw[phase][target] = Dict{Int,Dict{Int,Matrix{Float64}}}()
+    end
   end
   
   if !(leakage in keys(a.scores[phase][target]))
     a.scores[phase][target][leakage] = zeros(Float64, guesses, a.intervals)
     a.offsets[phase][target][leakage] = zeros(Int, guesses,a.intervals)
+    if a.keepraw
+      a.raw[phase][target][leakage] = Dict{Int,Matrix{Float64}}()
+    end
   end
-  
+
   if !(target in keys(a.combinedScores[phase]))
     if a.nrLeakages == 1
       a.combinedScores[phase][target] = first(a.scores[phase][target])[2]
@@ -160,12 +173,15 @@ function lazyinit(a::RankData, phase::Int, target::Int, guesses::Int, leakage::I
     a.nrRows[phase][target][r] = nrRows
   end
 
+  if a.keepraw && r == a.intervals
+    a.raw[phase][target][leakage][r] = C
+  end
+
   return r
 end
 
 function update!(g::AbsoluteGlobalMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrConsumedRows::Int, nrConsumedCols::Int,  nrRows::Int, nrCols::Int, colOffset::Int)
-  (samples,guesses) = size(C)
-  r = lazyinit(a,phase,target,guesses,leakage,nrConsumedRows,nrConsumedCols,nrRows,nrCols)
+  r = lazyinit(a,phase,target,C,leakage,nrConsumedRows,nrConsumedCols,nrRows,nrCols)
   (corrvals, corrvaloffsets) = findmax(abs.(C), dims=1)
 
   ci = CartesianIndices(size(C))
@@ -182,8 +198,7 @@ function update!(g::AbsoluteGlobalMaximization, a::RankData, phase::Int, C::Abst
 end
 
 function update!(g::GlobalMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrConsumedRows::Int, nrConsumedCols::Int,  nrRows::Int, nrCols::Int, colOffset::Int)
-  (samples,guesses) = size(C)
-  r = lazyinit(a,phase,target,guesses,leakage,nrConsumedRows,nrConsumedCols,nrRows,nrCols)
+  r = lazyinit(a,phase,target,C,leakage,nrConsumedRows,nrConsumedCols,nrRows,nrCols)
   (corrvals, corrvaloffsets) = findmax(C, dims=1)
 
   ci = CartesianIndices(size(C))
@@ -198,8 +213,7 @@ function update!(g::GlobalMaximization, a::RankData, phase::Int, C::AbstractArra
 end
 
 function update!(g::NormalizedMaximization, a::RankData, phase::Int, C::AbstractArray{Float64,2}, target::Int, leakage::Int, nrConsumedRows::Int, nrConsumedCols::Int,  nrRows::Int, nrCols::Int, colOffset::Int)
-  (samples,guesses) = size(C)
-  r = lazyinit(a,phase,target,guesses,leakage,nrConsumedRows,nrConsumedCols,nrRows,nrCols)
+  r = lazyinit(a,phase,target,C,leakage,nrConsumedRows,nrConsumedCols,nrRows,nrCols)
  
   (rows,cols) = size(C)
   for row in 1:rows
@@ -426,6 +440,15 @@ end
 function getOffsets(sc::RankData, phase::Int, target::Int)
   r = length(sc.nrConsumedRows[phase])
   return sc.offsets[phase][target][1][:,r]
+end
+
+export getRaw
+
+function getRaw(sc::RankData, phase::Int, target::Int, leakage::Int, intervals::Int=length(sc.nrConsumedRows[phase])
+)
+  sc.keepraw || error("no raw data available")
+  r = length(sc.nrConsumedRows[phase])
+  return sc.raw[phase][target][leakage][r]
 end
 
 function haveAllData(evo::RankData, attack::Attack, phase::Int)

@@ -218,6 +218,7 @@ Once an instance is created, the following fields can be tweaked to change the b
 * `maximization`: specify a `Maximization` strategy, default depends on the analysis.
 * `maxCols`: splits up the work by considering maxCols columns of the observation matrix at a time, before feeding it into a post processor. Results per split are combined transparently. You may need to set this (to not run out of memory) for traces with lots of columns, or if you specify a large amount of leakages (for example Klemsa). 
 * `maxColsPost`: almost the same as `maxCols`, but this splits up work *after* a post processor. This is only different from `maxCols` and only useful when you're using the `CondReduce` postprocessor, since this is currently the only one that would return less columns than you put in.
+* 'keepraw`: caches the output of CPA, LRA or MIA so that you can do fancy stuff yourself with it (see `getRaw` of `RankData`)
 
 # Example
 ```
@@ -250,6 +251,7 @@ mutable struct DpaAttack
   maximization::Union{Missing,Maximization}
   maxCols::Union{Missing,Int}
   maxColsPost::Union{Missing,Int}
+  keepraw::Bool
   # caching stuff below, not configurable, overwritten for each sca run
   targets::Vector{Vector{Target}}
   phasefn::Vector{Union{Missing,Function}}
@@ -259,7 +261,7 @@ mutable struct DpaAttack
   rankData
 
   function DpaAttack(attack::Attack, analysis::Analysis)
-    new(attack,analysis,1,missing,missing,missing,missing,missing,missing, missing, missing, Sum(), missing,missing, missing)
+    new(attack,analysis,1,missing,missing,missing,missing,missing,missing, missing, missing, Sum(), missing,missing, missing, false)
   end
 end
 
@@ -300,8 +302,10 @@ mutable struct RankData
   combinedScores
   intervals
   nrLeakages
+  keepraw
+  raw
 
-  function RankData(nintervals::Int,nleakages=1)
+  function RankData(nintervals::Int; nleakages=1, keepraw=false)
     nrConsumedRows = Dict{Int, BitSet}()
     nrConsumedCols = Dict{Int, Vector{Int}}()
     nrRows = Dict{Int, Dict{Int, Vector{Int}}}()
@@ -309,11 +313,11 @@ mutable struct RankData
     combinedScores = Dict{Int, Dict{Int, Matrix{Float64}}}()
     scores = Dict{Int, Dict{Int, Dict{Int, Matrix{Float64}}}}()
     offsets = Dict{Int, Dict{Int, Dict{Int, Matrix{Int}}}}()
-    return new(nrConsumedRows,nrConsumedCols,nrRows,nrCols,scores,offsets,combinedScores,nintervals,nleakages)
+    return new(nrConsumedRows,nrConsumedCols,nrRows,nrCols,scores,offsets,combinedScores,nintervals,nleakages,keepraw)
   end
 
   function RankData(params::DpaAttack)
-    RankData(params.intervals,numberOfLeakages(params.analysis))
+    RankData(params.intervals; nleakages=numberOfLeakages(params.analysis), keepraw=params.keepraw)
   end
 end
 
