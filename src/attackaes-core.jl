@@ -119,7 +119,11 @@ function correctKeyMaterial(params::AesAttack, knownKey::AbstractVector{UInt8})
 
     return vcat(roundkey1, roundkey2)
   elseif isa(params, AbstractAesMCAttack)
-    return roundkey1[reduce(vcat, [[o for o in i:4:16] for i in 1:4])]
+    if mode == CIPHER
+      return roundkey1 |> x -> reshape(x,4,4) |> ShiftRows |> vec
+    else
+      return roundkey1 |> x -> reshape(x,4,4) |> InvShiftRows |> vec
+    end
   else
     return roundkey1
   end
@@ -134,7 +138,7 @@ function numberOfPhases(params::AesAttack)
 end
 
 function numberOfPhases(params::AbstractAesMCAttack)
-  return PHASE4
+  return 16
 end
 
 # target functions
@@ -377,41 +381,44 @@ function recoverKey(params::AbstractAesMCAttack, phaseInput::AbstractVector{UInt
   mode = params.mode
   direction = params.direction
 
-  reordered = Vector{UInt8}(undef,16)
-  for i in 0:3
-    reordered[i*4+1:i*4+4] = phaseInput[[o for o in i+1:4:16]]
+  if mode == CIPHER
+    return recoverKeyHelper(phaseInput |> x -> reshape(x,4,4) |> InvShiftRows |>vec, mode, direction)
+  else
+    return recoverKeyHelper(phaseInput |> x -> reshape(x,4,4) |> ShiftRows |>vec, mode, direction)
   end
-  return recoverKeyHelper(reordered, mode, direction)
+
 end
 
-numberOfTargets(params::AbstractAesMCAttack, phase::Int) = 4
+numberOfTargets(params::AbstractAesMCAttack, phase::Int) = 1
 
 function getTargets(params::AesMCAttack, phase::Int, phaseInput::AbstractVector{UInt8})
+  targetrow = (phase-1)%4+1
   if (params.direction == FORWARD && params.mode == CIPHER) || (params.direction == BACKWARD && params.mode != CIPHER)
     if params.xor
-      targetfn = McOutXORIn(params.sbox, 0x0, phase)
+      targetfn = McOutXORIn(params.sbox, 0x0, targetrow)
     else
-      targetfn = McOut(params.sbox, 0x0, phase)
+      targetfn = McOut(params.sbox, 0x0, targetrow)
     end
   else
     if params.xor
-      targetfn = InvMcOutXORIn(params.invsbox, 0x0, phase)
+      targetfn = InvMcOutXORIn(params.invsbox, 0x0, targetrow)
     else
-      targetfn = InvMcOut(params.invsbox, 0x0, phase)
+      targetfn = InvMcOut(params.invsbox, 0x0, targetrow)
     end
   end
 
-  return [targetfn for i in 1:4]
+  return [targetfn for i in 1:1]
 end
 
 function getTargets(params::AesMCRoundAttack, phase::Int, phaseInput::AbstractVector{UInt8})
+  targetrow = (phase-1)%4+1
   if (params.direction == FORWARD && params.mode == CIPHER) || (params.direction == BACKWARD && params.mode != CIPHER)
-      targetfn = McRoundOut(params.sbox, 0x0, phase)
+      targetfn = McRoundOut(params.sbox, 0x0, targetrow)
   else
-      targetfn = InvMcRoundOut(params.invsbox, 0x0, phase)
+      targetfn = InvMcRoundOut(params.invsbox, 0x0, targetrow)
   end
 
-  return [targetfn for i in 1:4]
+  return [targetfn for i in 1:1]
 end
 
 numberOfTargets(params::AesAttack, phase::Int) = (params.keyLength == KL192 && phase == PHASE2) ? 8 : 16
@@ -453,7 +460,9 @@ function printParameters(params::Union{AesSboxAttack,AbstractAesMCAttack})
   @printf("mode:         %s\n", string(params.mode))
   @printf("key length:   %s\n", string(params.keyLength))
   @printf("direction:    %s\n", string(params.direction))
-  @printf("xor:          %s\n", string(params.xor))
+  if isdefined(params,:xor)
+    @printf("xor:          %s\n", string(params.xor))
+  end
 end
 
 function msb32_fromarray(x,offset)
@@ -469,54 +478,44 @@ end
 
 
 # filter function for mixcolumns attack so that we don't accept data that's not semi-constant
-function filterConstantInputXOR(offset::Int, data::AbstractVector{UInt8}, constant::UInt8, inv::Bool)
-  for i in 1:16
-    if !(i == offset || i == offset+4 || i == offset+8 || i == offset+12)
-      if data[i] != constant
-        # return nothing (and thus reject the trace)
-        return Vector{UInt8}(undef,0)
-      end
+function filterConstantInputXOR(row::Int, col::Int, data::AbstractVector{UInt8}, constant::UInt8, inv::Bool)
+  if inv
+    srdata = ShiftRows!(data |> copy |> x -> reshape(x,4,4))
+  else
+    srdata = InvShiftRows!(data |> copy |> x -> reshape(x,4,4))
+  end
+
+  for r in 1:4
+    if r != row && srdata[r,col] != constant
+      return Vector{UInt64}(undef,0)
     end
   end
 
-  if inv
-    srdata = InvShiftRows!(data |> copy |> x -> reshape(x,4,4))
-  else
-    srdata = ShiftRows!(data |> copy |> x -> reshape(x,4,4))
-  end
+  ret = zeros(UInt64,1)
 
-  ret = zeros(UInt64,4)
-  ret[1] = msb32_fromarray(srdata,0)
+  ret[1] = msb32_fromarray(data,(col-1)*4)
   ret[1] <<= 8
-  ret[1] |= data[offset] 
-  ret[2] = msb32_fromarray(srdata,4)
-  ret[2] <<= 8
-  ret[2] |= data[offset+4] 
-  ret[3] = msb32_fromarray(srdata,8)
-  ret[3] <<= 8
-  ret[3] |= data[offset+8] 
-  ret[4] = msb32_fromarray(srdata,12)
-  ret[4] <<= 8
-  ret[4] |= data[offset+12] 
+  ret[1] |= srdata[row,col]
 
   return ret
 end
 
 # filter function for mixcolumns attack so that we don't accept data that's not semi-constant
-function filterConstantInput(offset::Int, data::AbstractVector{UInt8}, constant::UInt8)
-  for i in 1:16
-    if !(i == offset || i == offset+4 || i == offset+8 || i == offset+12)
-      if data[i] != constant
-        # return nothing (and thus reject the trace)
+function filterConstantInput(row::Int, col::Int, data::AbstractVector{UInt8}, constant::UInt8, inv::Bool)
+  if inv
+    srdata = Aes.ShiftRows!(data[1:16] |> x -> reshape(x,4,4))
+  else
+    srdata = Aes.InvShiftRows!(data[1:16] |> x -> reshape(x,4,4))
+  end
+
+  for r in 1:4
+    if r != row && srdata[r,col] != constant
         return Vector{UInt8}(undef,0)
-      end
     end
   end
-  ret = zeros(UInt8,4)
-  ret[1] |= data[offset] 
-  ret[2] |= data[offset+4] 
-  ret[3] |= data[offset+8] 
-  ret[4] |= data[offset+12] 
+  ret = zeros(UInt8,1)
+
+  ret[1] = srdata[row,col]
 
   return ret
 end
@@ -526,8 +525,6 @@ function mymerge16(lsbs::AbstractArray{UInt8},msbs::AbstractArray{UInt8})
   l = length(lsbs)
   ret = zeros(UInt16, l)
 
-  # print("input ", bytes2hex(lsbs),"\n")
-  # print("srowed input ", bytes2hex(msbs),"\n")
   for i in 1:l
     ret[i] = (UInt16(msbs[i]) << 8) | lsbs[i]
   end
@@ -580,11 +577,7 @@ function getDataPass(params::AesAttack, phase::Int, phaseInput::AbstractVector{U
     roundfn2 = roundfn
   end
 
-  # if selection != 1:16
-    roundfn3 = x -> roundfn2(x)[selection]
-  # else 
-    # roundfn3 = roundfn2
-  # end
+  roundfn3 = x -> roundfn2(x)[selection]
 
   return roundfn3
 end
@@ -593,42 +586,26 @@ function getDataPass(params::AesMCAttack, phase::Int, phaseInput::AbstractVector
   params.keyLength == KL128 || throw(ErrorException("AesMCAttack only supported for 128 bits keys"))
   params.direction == FORWARD || throw(ErrorException("AesMCAttack only supported in FORWARD direction"))
   
-
-  if phase == PHASE1
-    offset = 1
-  elseif phase == PHASE2
-    offset = 2
-  elseif phase == PHASE3
-    offset = 3
-  elseif phase == PHASE4
-    offset = 4
-  end
+  row = (phase-1)%4+1
+  col = div(phase-1,4)+1
 
   # should make this configurable maybe, but doesn't affect the attack (even if constant doesn't match the one in the traces)
   constant = 0x0
 
   # select only the traces we want
-  return x -> filterConstantInput(offset, x, constant)
+  return x -> filterConstantInput(row,col,x,constant,params.mode == CIPHER)
 end
 
 function getDataPass(params::AesMCRoundAttack, phase::Int, phaseInput::AbstractVector{UInt8})
   params.keyLength == KL128 || throw(ErrorException("AesMCAttack only supported for 128 bits keys"))
   params.direction == FORWARD || throw(ErrorException("AesMCAttack only supported in FORWARD direction"))
   
-
-  if phase == PHASE1
-    offset = 1
-  elseif phase == PHASE2
-    offset = 2
-  elseif phase == PHASE3
-    offset = 3
-  elseif phase == PHASE4
-    offset = 4
-  end
+  row = (phase-1)%4+1
+  col = div(phase-1,4)+1
 
   # should make this configurable maybe, but doesn't affect the attack (even if constant doesn't match the one in the traces)
   constant = 0x0
 
   # select only the traces we want
-  return x -> filterConstantInputXOR(offset, x, constant, params.mode == CIPHER)
+  return x -> filterConstantInputXOR(row,col,x,constant,params.mode == CIPHER)
 end
