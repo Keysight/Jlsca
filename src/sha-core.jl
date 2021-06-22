@@ -4,7 +4,7 @@
 
 using Printf
 
-export sha1,sha256,hmacsha1,hmacsha256,sha1init,update,final,Sha1state,Sha256state
+export sha1,sha256,hmacsha1,hmacsha256,update,final,Sha1state,Sha256state
 export Ch,Maj
 
 Ch(x::UInt32,y::UInt32,z::UInt32) = (x & y) ⊻ (~x & z)
@@ -271,22 +271,27 @@ function calcW(state::Sha256state, Mi)
 end 
 
 function iteration(W,t,a,b,c,d,e,f,g,h,leak::Function=(x,y)->x)
+	leak("a_$t",a)
+	leak("b_$t",b)
+	leak("c_$t",c)
+	leak("d_$t",d)
+	leak("e_$t",e)
+	leak("f_$t",f)
+	leak("g_$t",g)
+	leak("h_$t",h)
+	leak("W_$t",W)
 	T1 = h + ∑1(e) + Ch(e,f,g) + K256[t+1] + W
-	leak("Ch1", (e & f))
-	leak("Ch2", (~e & g))
 	T2 = ∑0(a) + Maj(a,b,c)
-	leak("T1", T1)
-	leak("T2", T2)
+	leak("T1_$t", T1)
+	leak("T2_$t", T2)
 	h = g
 	g = f
 	f = e
 	e = d + T1
-	leak("e", e)
 	d = c
 	c = b
 	b = a
 	a = T1 + T2
-	leak("a", a)
 
 	return (a,b,c,d,e,f,g,h)
 end
