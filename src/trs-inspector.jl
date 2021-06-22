@@ -29,8 +29,11 @@ mutable struct InspectorTrace <: Traces
   meta::MetaData
 
   # to open an existing file
-  function InspectorTrace(filename::String)
+  function InspectorTrace(filename::String; forceNtraces::Union{Missing,Int}=missing)
     (titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, lengthPosition, fileDescriptor, scaleX, offsetX) = readInspectorTrsHeader(filename)
+    if !ismissing(forceNtraces)
+      numberOfTraces = forceNtraces
+    end
     new(titleSpace, numberOfTraces, dataSpace, sampleSpace, sampleType, numberOfSamplesPerTrace, traceBlockPosition, fileDescriptor, filename, traceBlockPosition, false, lengthPosition, true, scaleX, offsetX, MetaData())
   end
 
@@ -321,12 +324,28 @@ end
 export getXrange
 
 function getXrange(trs::InspectorTrace)
-  xrange = zeros(Float64,nrsamples(trs))
+  xrange = zeros(Float64,nrsamples(trs,true))
   xoffset = trs.offsetX
   xstep = trs.scaleX
 
+  pcr = meta(trs).preColRange
+  xoffsetextra = 0
+  if !ismissing(pcr)
+    xoffsetextra = pcr[1]
+  end
+
+  if ismissing(xstep)
+    error("no xstep in this trace set")
+  end
+
+  if ismissing(xoffset)
+    xoffset = 0
+  end
+
+  xoffset += xoffsetextra
+
   xrange[1] =  xoffset * xstep + .5 * xstep
-  for i in 2:nrsamples(trs)
+  for i in 2:length(xrange)
     xrange[i] = xrange[i-1] + xstep
   end
 
