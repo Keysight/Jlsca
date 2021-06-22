@@ -478,15 +478,21 @@ end
 
 
 # filter function for mixcolumns attack so that we don't accept data that's not semi-constant
-function filterConstantInputXOR(row::Int, col::Int, data::AbstractVector{UInt8}, constant::UInt8, inv::Bool)
+function filterConstantInputXOR(row::Int, col::Int, data::AbstractVector{UInt8}, constantcache::Vector{Matrix{UInt8}}, inv::Bool)
   if inv
     srdata = ShiftRows!(data |> copy |> x -> reshape(x,4,4))
   else
     srdata = InvShiftRows!(data |> copy |> x -> reshape(x,4,4))
   end
 
+  if !isassigned(constantcache,1)
+    constantcache[1] = copy(srdata)
+  end
+
+  cc = constantcache[1]
+
   for r in 1:4
-    if r != row && srdata[r,col] != constant
+    if r != row && srdata[r,col] != cc[r,col]
       return Vector{UInt64}(undef,0)
     end
   end
@@ -501,15 +507,21 @@ function filterConstantInputXOR(row::Int, col::Int, data::AbstractVector{UInt8},
 end
 
 # filter function for mixcolumns attack so that we don't accept data that's not semi-constant
-function filterConstantInput(row::Int, col::Int, data::AbstractVector{UInt8}, constant::UInt8, inv::Bool)
+function filterConstantInput(row::Int, col::Int, data::AbstractVector{UInt8}, constantcache::Vector{Matrix{UInt8}}, inv::Bool)
   if inv
     srdata = Aes.ShiftRows!(data[1:16] |> x -> reshape(x,4,4))
   else
     srdata = Aes.InvShiftRows!(data[1:16] |> x -> reshape(x,4,4))
   end
 
+  if !isassigned(constantcache,1)
+    constantcache[1] = copy(srdata)
+  end
+
+  cc = constantcache[1]
+
   for r in 1:4
-    if r != row && srdata[r,col] != constant
+    if r != row && srdata[r,col] != cc[r,col]
         return Vector{UInt8}(undef,0)
     end
   end
@@ -589,11 +601,10 @@ function getDataPass(params::AesMCAttack, phase::Int, phaseInput::AbstractVector
   row = (phase-1)%4+1
   col = div(phase-1,4)+1
 
-  # should make this configurable maybe, but doesn't affect the attack (even if constant doesn't match the one in the traces)
-  constant = 0x0
+  constantcache = Vector{Matrix{UInt8}}(undef,1)
 
   # select only the traces we want
-  return x -> filterConstantInput(row,col,x,constant,params.mode == CIPHER)
+  return x -> filterConstantInput(row,col,x,constantcache,params.mode == CIPHER)
 end
 
 function getDataPass(params::AesMCRoundAttack, phase::Int, phaseInput::AbstractVector{UInt8})
@@ -603,9 +614,8 @@ function getDataPass(params::AesMCRoundAttack, phase::Int, phaseInput::AbstractV
   row = (phase-1)%4+1
   col = div(phase-1,4)+1
 
-  # should make this configurable maybe, but doesn't affect the attack (even if constant doesn't match the one in the traces)
-  constant = 0x0
+  constantcache = Vector{Matrix{UInt8}}(undef,1)
 
   # select only the traces we want
-  return x -> filterConstantInputXOR(row,col,x,constant,params.mode == CIPHER)
+  return x -> filterConstantInputXOR(row,col,x,constantcache,params.mode == CIPHER)
 end
