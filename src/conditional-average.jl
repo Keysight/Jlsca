@@ -8,13 +8,13 @@ export CondAvg
 import Base.get,Base.show
 
 mutable struct CondAvg <: Cond
-  averages::Dict{Int,Dict{Int,Vector{Float64}}}
-  counters::Dict{Int,Dict{Int,Int}}
+  averages::Dict{Int,Dict}
+  counters::Dict{Int,Dict}
   globcounter::Int
 
   function CondAvg()
-    averages = Dict{Int,Dict{Int,Vector{Float64}}}()
-    counters = Dict{Int,Dict{Int,Int}}()
+    averages = Dict{Int,Dict}()
+    counters = Dict{Int,Dict}()
     new(averages, counters, 0)
   end
 end
@@ -22,8 +22,8 @@ end
 show(io::IO, a::CondAvg) = print(io, "Cond avg")
 
 function reset(c::CondAvg)
-  c.averages = Dict{Int,Dict{Int,Vector{Float64}}}()
-  c.counters = Dict{Int,Dict{Int,Int}}()
+  c.averages = Dict{Int,Dict}()
+  c.counters = Dict{Int,Dict}()
   c.globcounter = 0
 end
 
@@ -54,8 +54,8 @@ function add(c::CondAvg, samples::AbstractVector{S}, data::AbstractVector{D}, tr
     val = data[idx]
 
     if !haskey(c.counters, idx)
-     c.counters[idx] = Dict{Int,Int}()
-     c.averages[idx] = Dict{Int,Vector{Float64}}()
+     c.counters[idx] = Dict{D,Int}()
+     c.averages[idx] = Dict{D,Vector{Float64}}()
     end
 
     if !haskey(c.counters[idx], val)
@@ -122,18 +122,7 @@ function get(c::CondAvg)
   #   end
   # end
 
-  maxVal = 0
-  for k in keys(c.counters)
-    maxVal = max(maxVal, findmax(collect(keys(c.counters[k])))[1])
-  end
-
-  if maxVal <= typemax(UInt8)
-    dataType = UInt8
-  elseif maxVal <= typemax(UInt16)
-    dataType = UInt16
-  else
-    throw(ErrorException("Unsupported and not recommended ;)"))
-  end
+  dataType = typeof(first(c.averages).second).parameters[1]
 
   nrPairs = length(keys(c.counters))
   datas = Vector{Vector{dataType}}(undef,nrPairs)
