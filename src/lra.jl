@@ -34,7 +34,7 @@ end
 function lra(data::AbstractArray{In}, samples::AbstractArray, t::Target{In,Out,Guess}, basisFunction::Function, keyChunkValues::Vector{Guess}) where {In,Out,Guess}
     (rs, cs) = size(samples)
 
-    SStot = sum((samples .- mean(samples, dims=1)) .^ 2, dims=1)'
+    SStot = sum((samples .- mean(Float64,samples, dims=1)) .^ 2, dims=1)'
     SSreg = zeros(Float64, (cs,length(keyChunkValues)))
 
     for k in keyChunkValues
