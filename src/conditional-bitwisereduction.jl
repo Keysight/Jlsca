@@ -28,7 +28,7 @@ mutable struct CondReduce <: Cond
   globalDCR::Bool
   trs::Traces
   
-  function CondReduce(globalDCR=false)
+  function CondReduce(globalDCR=true)
     mask = Dict{Int,BitVector}()
     traceIdx = Dict{Int,Dict{Int,Int}}()
     # @printf("Conditional bitwise sample reduction, split %s\n", worksplit)
