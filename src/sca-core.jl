@@ -38,7 +38,7 @@ Inherit this abstract type for your own attacks. Type `Attack` has type paramete
 Implemented attacks in Jlsca:
 `AesSboxAttack`,`AesMCAttack`,`DesSboxAttack`,`DesRoundAttack`,`Sha1InputAttack`, `Sha1OutputAttack`.
 """
-abstract type Attack{Unit <: Unsigned} end
+abstract type Attack{Unit <: Integer} end
 
 export Analysis
 abstract type Analysis end
@@ -71,7 +71,7 @@ mutable struct MyTarget <: Target{UInt8,UInt8,UInt8} end
 target(a::MyTarget, input::UInt8, kb::UInt8) = xor(input,kb)
 ```
 """
-abstract type Target{In <:Integer, Out <: Integer, Guess <: Integer} end
+abstract type Target{In <: Integer, Out <: Integer, Guess <: Integer} end
 
 export Maximization
 """
