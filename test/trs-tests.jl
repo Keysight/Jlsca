@@ -125,6 +125,30 @@ function testSplitBinary()
 end
 
 
+function testThreading()
+  trs = InspectorTrace("../aestraces/aes128_sb_ciph_0fec9ca47fb2f2fd4df14dcb93aa4967.trs")
+
+  @assert Threads.nthreads() > 1
+
+  alldata1 = Vector{Vector}(undef,length(trs))
+
+  @Threads.threads for i in 1:length(trs)
+    alldata1[i] = getData(trs,i)
+  end
+
+  alldata2 = Vector{Vector}(undef,length(trs))
+
+  for i in 1:length(trs)
+    alldata2[i] = getData(trs,i)
+  end
+
+  for i in eachindex(alldata1)
+    @test alldata1[i] == alldata2[i]
+  end
+
+end
+
 testInspectorTrace()
 testInspectorTraceRanges()
 testSplitBinary()
+testThreading()

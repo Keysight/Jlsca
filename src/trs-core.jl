@@ -23,13 +23,14 @@ mutable struct MetaData
   postProcInstance::Union{Missing,PostProcessor}
   colRange::Union{Missing,UnitRange}
   preColRange::Union{Missing,UnitRange}
+  readlock::ReentrantLock
   viewsdirty::Bool
   views::Vector{Union{Missing,UnitRange}}
   lengths::Vector{Int}
   types::Vector{AbstractVector}
 
   function MetaData()
-    new(0, Vector{Pass}(undef,0), Vector{Pass}(undef,0), missing, missing, missing, true)
+    new(0, Vector{Pass}(undef,0), Vector{Pass}(undef,0), missing, missing, missing, ReentrantLock(), true)
   end
 end
 
@@ -204,7 +205,15 @@ end
 Reads the data for a given trace, after running it through all the data passes, if any.
 """
 function getData(trs::Traces, idx)
-  data = readData(trs, idx)
+  local data
+  readlock = meta(trs).readlock
+  lock(readlock)
+
+  try
+    data = readData(trs, idx)
+  finally
+    unlock(readlock)
+  end
 
   # run all the passes over the data
   for p in meta(trs).dataPasses
@@ -215,6 +224,7 @@ function getData(trs::Traces, idx)
   end
 
   return data
+
 end
 
 """
@@ -227,10 +237,16 @@ function getSamples(trs::Traces, idx)
   updateViews(trs)
 
   v = m.views[1]
-  if !ismissing(v)
-    samples = readSamples(trs, idx, v)
-  else
-    samples = readSamples(trs, idx)
+  readlock = meta(trs).readlock
+  lock(readlock)
+  try
+    if !ismissing(v)
+      samples = readSamples(trs, idx, v)
+    else
+      samples = readSamples(trs, idx)
+    end
+  finally
+    unlock(readlock)
   end
 
   # run all the passes over the trace

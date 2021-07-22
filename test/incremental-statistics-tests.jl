@@ -8,12 +8,15 @@ using Jlsca.Sca
 
 # normal usage
 function testnormal(t)
-  x = rand(Float64, (100, 20))
-  y = rand(Float64, (100, 20))
+  x = rand(Float64, (200, 2000))
+  y = rand(Float64, (200, 3000))
 
   meanVarX = IncrementalMeanVariance(size(x)[2])
   meanVarY = IncrementalMeanVariance(size(y)[2])
   covXY = t(meanVarX, meanVarY)
+  # @show covXY.nrTilesX
+  # @show covXY.nrTilesY
+  # @show Threads.nthreads()
 
   for r in 1:size(x)[1]
     add!(covXY, x[r,:], y[r,:])
@@ -28,15 +31,14 @@ function testnormal(t)
 
   @test cov(x,y) ≈ getCov(covXY)
   @test cor(x,y) ≈ getCorr(covXY)
-
 end
 
 
 # combining means
 function testmeanadd()
-  x = rand(Float64, (100, 20))
-  y = rand(Float64, (200, 20))
-  z = rand(Float64, (300, 20))
+  x = rand(Float64, (100, 4000))
+  y = rand(Float64, (200, 4000))
+  z = rand(Float64, (300, 4000))
 
   meanVarX = IncrementalMeanVariance(size(x)[2])
   meanVarY = IncrementalMeanVariance(size(y)[2])
@@ -67,8 +69,8 @@ end
 
 # normal usage, but mean of X computed outside the add!(covXY,..) function
 function testmeanoutside(t)
-  x = rand(Float64, (1000, 20))
-  y = rand(Float64, (1000, 25))
+  x = rand(Float64, (100, 2000))
+  y = rand(Float64, (100, 2500))
 
   meanVarX = IncrementalMeanVariance(size(x)[2])
   meanVarY = IncrementalMeanVariance(size(y)[2])
@@ -95,8 +97,8 @@ end
 
 # # normal usage, but mean of X precomputed outside the add!(covXY,..) function
 function testprecompute(t)
-  x = rand(Float64, (1000, 20))
-  y = rand(Float64, (1000, 25))
+  x = rand(Float64, (100, 2000))
+  y = rand(Float64, (100, 2500))
 
   meanVarX = IncrementalMeanVariance(size(x)[2])
   meanVarY = IncrementalMeanVariance(size(y)[2])
@@ -127,8 +129,8 @@ end
 
 # combining covariances
 function testcombining(t)
-  x = rand(Float64, (500, 200))
-  y = rand(Float64, (500, 205))
+  x = rand(Float64, (500, 2000))
+  y = rand(Float64, (500, 2050))
 
   meanVarX1 = IncrementalMeanVariance(size(x)[2])
   meanVarY1 = IncrementalMeanVariance(size(y)[2])
@@ -183,8 +185,65 @@ function testcombining(t)
   @test getCorr(covXY) ≈ getCorr(covXY1)
 end
 
-testmeanadd()
+function testthreadedadd()
+  x = rand(Float64, (200, 2000))
+  y = rand(Float64, (200, 3000))
 
+  meanVarX = IncrementalMeanVariance(size(x)[2])
+  meanVarY = IncrementalMeanVariance(size(y)[2])
+  covXY = IncrementalCovarianceTiled(meanVarX, meanVarY)
+
+  @Threads.threads for r in 1:size(x)[1]
+    add!(covXY, x[r,:], y[r,:])
+  end
+
+  for c in 1:size(x)[2]
+    @test mean(x[:,c]) ≈ meanVarX.mean[c]
+    @test mean(y[:,c]) ≈ meanVarY.mean[c]
+    @test var(y[:,c]) ≈ getVariance(meanVarY)[c]
+    @test var(x[:,c]) ≈ getVariance(meanVarX)[c]
+  end
+
+  @test cov(x,y) ≈ getCov(covXY)
+  @test cor(x,y) ≈ getCorr(covXY)
+end
+
+
+function testthreadedchanneladd()
+  x = rand(Float64, (200, 2000))
+  y = rand(Float64, (200, 3000))
+  n = size(x)[1]
+
+  meanVarX = IncrementalMeanVariance(size(x)[2])
+  meanVarY = IncrementalMeanVariance(size(y)[2])
+  covXY = IncrementalCovarianceTiled(meanVarX, meanVarY)
+
+  channel = Channel{Tuple{Vector,Vector}}(10)
+
+  @async begin
+    @Threads.threads for r in 1:n
+      put!(channel, (x[r,:], y[r,:]))
+    end
+  end
+
+  for r in 1:n
+    xrow,yrow = take!(channel) 
+    add!(covXY,xrow,yrow)
+  end
+
+  for c in 1:size(x)[2]
+    @test mean(x[:,c]) ≈ meanVarX.mean[c]
+    @test mean(y[:,c]) ≈ meanVarY.mean[c]
+    @test var(y[:,c]) ≈ getVariance(meanVarY)[c]
+    @test var(x[:,c]) ≈ getVariance(meanVarX)[c]
+  end
+
+  @test cov(x,y) ≈ getCov(covXY)
+  @test cor(x,y) ≈ getCorr(covXY)
+end
+
+
+testmeanadd()
 testnormal(IncrementalCovariance)
 testnormal(IncrementalCovarianceTiled)
 testmeanoutside(IncrementalCovariance)
@@ -193,3 +252,5 @@ testprecompute(IncrementalCovariance)
 testprecompute(IncrementalCovarianceTiled)
 testcombining(IncrementalCovariance)
 testcombining(IncrementalCovarianceTiled)
+testthreadedadd()
+testthreadedchanneladd()

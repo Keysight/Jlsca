@@ -203,6 +203,7 @@ mutable struct IncrementalCovarianceTiled
   cacheCount::Int
   cacheMax::Int
   locked::Bool
+  accesslock::ReentrantLock
 
   function IncrementalCovarianceTiled(numberOfX::Int, numberOfY::Int)
     meanVarX = IncrementalMeanVariance(numberOfX)
@@ -246,11 +247,11 @@ mutable struct IncrementalCovarianceTiled
       cachesYn[i] = Vector{Float64}(undef,numberOfY)
     end
 
-    new(numberOfX, numberOfY, tilesizeX, tilesizeY, nrTilesX, nrTilesY, meanVarX, meanVarY, covXY, cachesXn, cachesYn, 0, caches, false)
+    new(numberOfX, numberOfY, tilesizeX, tilesizeY, nrTilesX, nrTilesY, meanVarX, meanVarY, covXY, cachesXn, cachesYn, 0, caches, false, ReentrantLock())
   end
 end
 
-function dothreadwork(stateref::Ref{IncrementalCovarianceTiled}, y::Int)
+function dothreadwork(stateref::Ref{IncrementalCovarianceTiled}, x::Int, y::Int)
   state = stateref[]
   nrTilesX = state.nrTilesX
   tilesizeX = state.tilesizeX
@@ -260,7 +261,7 @@ function dothreadwork(stateref::Ref{IncrementalCovarianceTiled}, y::Int)
 
   minY = (y-1)*tilesizeY+1
   maxY = min(minY+tilesizeY-1, numberOfY)
-  for x in 1:nrTilesX
+  # for x in 1:nrTilesX
     minX = (x-1)*tilesizeX+1
     maxX = min(minX+tilesizeX-1, numberOfX)
 
@@ -270,7 +271,7 @@ function dothreadwork(stateref::Ref{IncrementalCovarianceTiled}, y::Int)
 
       add!(state.covXY[x,y], dataXn, minX, maxX, dataYn, minY, maxY)
     end
-  end
+  # end
   return
 end
 
@@ -281,9 +282,15 @@ function flushcache!(state::IncrementalCovarianceTiled)
 
   stateref::Ref{IncrementalCovarianceTiled} = Ref{IncrementalCovarianceTiled}(state)
 
-  Threads.@threads for y in 1:state.nrTilesY
-    dothreadwork(stateref,y)
+  n = state.nrTilesX * state.nrTilesY
+  Threads.@threads for i in 0:n-1
+      x = i % state.nrTilesX
+      y = div(i,state.nrTilesX)
+      dothreadwork(stateref,x+1,y+1)
   end
+  # Threads.@threads for y in 1:state.nrTilesY
+  #   dothreadwork(stateref,y)
+  # end
 
   state.cacheCount = 0
   return
@@ -296,30 +303,34 @@ function storecache(cache::Vector{Float64}, data, datamean)
 end
 
 function add!(state::IncrementalCovarianceTiled, dataX::AbstractVector, dataY::AbstractVector, updateMeanX::Bool=true, updateMeanY::Bool=true)
-  length(dataX) == state.numberOfX || throw(DomainError("dataX has wrong length"))
-  length(dataY) == state.numberOfY || throw(DomainError("dataY has wrong length"))
+  lock(state.accesslock)
+  try
+    length(dataX) == state.numberOfX || throw(DomainError("dataX has wrong length"))
+    length(dataY) == state.numberOfY || throw(DomainError("dataY has wrong length"))
 
-  state.cacheCount += 1
-  cacheCount = state.cacheCount
-  storecache(state.cacheXn[cacheCount], dataX, state.meanVarX.mean)
-  storecache(state.cacheYn[cacheCount], dataY, state.meanVarY.mean)
+    state.cacheCount += 1
+    cacheCount = state.cacheCount
+    storecache(state.cacheXn[cacheCount], dataX, state.meanVarX.mean)
+    storecache(state.cacheYn[cacheCount], dataY, state.meanVarY.mean)
 
-  if updateMeanX
-    !state.locked || throw(ErrorException("mean and variance are locked so you can't update the mean!"))
-    add!(state.meanVarX, dataX)
+    if updateMeanX
+      !state.locked || throw(ErrorException("mean and variance are locked so you can't update the mean!"))
+      add!(state.meanVarX, dataX)
+    end
+
+    if updateMeanY
+      !state.locked || throw(ErrorException("mean and variance are locked so you can't update the mean!"))
+      add!(state.meanVarY, dataY)
+    end
+
+    if cacheCount < state.cacheMax
+      return
+    end
+
+    flushcache!(state)
+  finally
+    unlock(state.accesslock)
   end
-
-  if updateMeanY
-    !state.locked || throw(ErrorException("mean and variance are locked so you can't update the mean!"))
-    add!(state.meanVarY, dataY)
-  end
-
-  if cacheCount < state.cacheMax
-    return
-  end
-
-  flushcache!(state)
-
 end
 
 function add!(this::IncrementalCovarianceTiled, other::IncrementalCovarianceTiled, updateMeanX::Bool=true, updateMeanY::Bool=true)
