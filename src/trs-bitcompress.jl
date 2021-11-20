@@ -71,7 +71,9 @@ function bitcompress(state::BitCompress, input::AbstractArray)
       end
     end
 
-    state.inverses[y] = 1
+    if y != 0
+      state.inverses[y] = 1
+    end
 
     state.first = false
   else
