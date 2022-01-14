@@ -89,12 +89,16 @@ function test(a::BitArray{2})
     bitcompress(state, a[i,:])
   end
 
+
   duplicates = state.duplicates
   inverses = state.inverses
+
+  mask,lookup = toMaskAndLookup(state)
 
   reporteddupes = Vector{Int}()
   for i in 1:c
     if duplicates[i] != i
+      @test !mask[i]
       push!(reporteddupes, i)
       push!(reporteddupes, duplicates[i])
     end
@@ -104,12 +108,29 @@ function test(a::BitArray{2})
   for i in 1:c
     # if !(duplicates[i] == i && inverses[duplicates[i]] == i)
     if inverses[i] != i
+      @test !mask[i]
       push!(reportedinverses, i)
       push!(reportedinverses, inverses[i])
       # push!(reportedinverses, inverses[duplicates[i]])
     end
   end
 
+  for i in eachindex(mask)
+    if mask[i]
+      @test duplicates[i] == i || inverses[i] == i
+    else
+      @test duplicates[i] != i || inverses[i] != i
+    end
+  end
+
+  for i in keys(lookup)
+    @test mask[i]
+    for j in lookup[i]
+      @test i == j || !mask[j]
+    end
+  end
+
+  @test reduce(union,values(lookup)) |> length == length(mask)
 
   for i in 1:c
     n = getNode(duplicateroot, a[:,i])
@@ -162,5 +183,8 @@ function pretty(a::BitMatrix)
   end
 end
 
-a = createMatrix(15,2000)
-test(a)
+for i in 1:100
+  a = createMatrix(rand(4:10),rand(10:20))
+  # pretty(a)
+  test(a)
+end

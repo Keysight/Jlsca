@@ -2,7 +2,7 @@
 #
 # Author: Ruben Muijrers, Juliafied by Cees-Bart Breunesse
 
-export BitCompress,bitcompress,toMask
+export BitCompress,bitcompress,toMask,toMaskAndLookup
 
 mutable struct BitCompress
   tmp::Vector{Int}
@@ -23,11 +23,26 @@ function reset!(c::BitCompress)
 end
 
 function toMask(state::BitCompress)
-  mask = BitVector(undef,length(state.duplicates))
-  for (i,val) in enumerate(state.duplicates)
-    mask[i] = (val == i) && (state.inverses[val] == i)
-  end
+  mask, lookup = toMaskAndLookup(state)
   return mask
+end
+
+function toMaskAndLookup(state::BitCompress)
+  mask = BitVector(undef,length(state.duplicates))
+  lookup = Dict{Int,BitSet}()
+  for i in eachindex(state.duplicates)
+    dupval = state.duplicates[i]
+    invval = state.inverses[i]
+    
+    mask[i] = (i == dupval) && (i == invval)
+    if mask[i]
+      lookup[i] = BitSet()
+      push!(lookup[i],i)
+    else
+      push!(lookup[min(invval,dupval,state.duplicates[invval],state.inverses[dupval])], i)
+    end
+  end
+  return mask,lookup
 end
 
 function stats(state::BitCompress) 
