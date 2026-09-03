@@ -1,5 +1,5 @@
 # Converter between Inspector trs and Daredevil split binary format, and vice versa.
-#  Assumes that individual bytes in the spit bnary represents a bit; trs file can either store
+#  Assumes that individual bytes in the split binary represents a bit; trs file can either store
 #  bits as bytes, or have bits packed. See test() for examples of use.
 #
 # Tested so far only with UInt8 traces. To run the tests, do
@@ -49,7 +49,7 @@ function trs2splitbin(filename, dataOffset, dataBytes, bitsToBytes::Bool = true)
         s = trs[i][2]
         if bitsToBytes
             # convert bit array to bytes
-            # no matter what the original trs data type is, we interpret it as UInt64 and convet ot a sequence of bits
+            # no matter what the original trs data type is, we interpret it as UInt64 and convert to a sequence of bits
             foo = BitVector()
             foo.chunks = reinterpret(UInt64, s)
             foo.len = numOriginalSamples
@@ -70,11 +70,11 @@ function trs2splitbin(filename, dataOffset, dataBytes, bitsToBytes::Bool = true)
 end
 
 # Convert Daredevil split binary format to Inspector trs. No error checking so far, call at your own risk.
-#  Takes many paramters manually so far, not parsing the filenames because Daredevil itself stores
+#  Takes many parameters manually so far, not parsing the filenames because Daredevil itself stores
 #  parameters in the config file and not in the filename
 # dataFname               - file with data bytes
 # dataSpace               - number of data bytes per trace
-# sampelsFn               - file with samples
+# samplesFn               - file with samples
 # numberOfSamplesPerTrace - number of samples per traces
 # sampleType              - type of a trace sample (UInt8, UInt32 etc.)
 # numTraces               - number of traces
@@ -85,7 +85,7 @@ function splitbin2trs(dataFname, dataSpace, samplesFn, numberOfSamplesPerTrace, 
 
     numberOfSamplesPerTraceTrs = numberOfSamplesPerTrace
     if bytesToBits
-        # check if input samples are in appropirate format for bit packing
+        # check if input samples are in appropriate format for bit packing
         if (sampleType != UInt8) && (numberOfSamplesPerTrace % 8 != 0)
           throw(ErrorException("For bytesToBits packing, sampleType needs to be UInt8 and numberOfSamplesPerTrace needs to be a multiple of 8\n"))
         end

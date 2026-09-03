@@ -4,7 +4,7 @@
 
 export SplitBinary
 
-# split binary has the data and samples in 2 different files, similar to how Daredevil reads its data and samples. Since there is not metadata in these files, the meta data is encoded in and read from the file names.
+# split binary has the data and samples in 2 different files, similar to how Daredevil reads its data and samples. Since there is no metadata in these files, the meta data is encoded in and read from the file names.
 mutable struct SplitBinary <: Traces
   numberOfTraces::Int
   dataSpace::Int

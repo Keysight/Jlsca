@@ -10,9 +10,9 @@
 # instead of averaging we simply remove columns where the samples are different between two traces
 # where the target variable on which we're reducing is the same.
 
-# This is important in a WBC scenario since you typically deal will a small amount of very long
+# This is important in a WBC scenario since you typically deal with a small amount of very long
 # traces. Thus:
-# - conditional averaging reduce the #traces
+# - conditional averaging reduces the #traces
 # - bitwise conditional reduction reduces the #traces and #samples
 #
 # This approach does not work on ciphers that use widening encodings or random masks.

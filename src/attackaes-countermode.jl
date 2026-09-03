@@ -5,11 +5,11 @@ export AesCMForward
 
 """
 Implementation of the DPA attack on AES GCM by Josh 
-Jaffe descibed in:
+Jaffe described in:
 
 https://www.iacr.org/archive/ches2007/47270001/47270001.pdf
 
-(Attack does not implenent the initial counter search yet)
+(Attack does not implement the initial counter search yet)
 """
 struct AesCMForward <: AesCM
   keyLength::AesKeyLength
