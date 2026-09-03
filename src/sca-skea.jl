@@ -5,7 +5,7 @@
 export prepSKEA
 
 """
-Takes the rank data from an SCA attack and converts into in a sorted
+Takes the rank data from an SCA attack and converts into a sorted
 matrix of integer scores, and the key look up matrix, for a given 
 phase. The factor argument is the multiplier for the rank data
 scores. 
